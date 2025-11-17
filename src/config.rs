@@ -243,9 +243,9 @@ pub mod validation {
                 let mut q_value = 1.0;
                 for param in parts {
                     let param = param.trim();
-                    if param.starts_with("q=") {
-                        if let Ok(q) = param[2..].trim().parse::<f64>() {
-                            q_value = q.max(0.0).min(1.0);
+                    if let Some(stripped) = param.strip_prefix("q=") {
+                        if let Ok(q) = stripped.trim().parse::<f64>() {
+                            q_value = q.clamp(0.0, 1.0);
                         }
                     }
                 }
@@ -259,6 +259,44 @@ pub mod validation {
         }
 
         0.0
+    }
+
+    /// Validate X-PAYMENT header format and size
+    ///
+    /// # Arguments
+    /// - `payment_b64`: Base64-encoded payment header value
+    ///
+    /// # Returns
+    /// - `Ok(())` if header is valid
+    /// - `Err` if header format is invalid or too large
+    pub fn validate_payment_header(payment_b64: &str) -> Result<()> {
+        // Maximum header size: 16KB (reasonable limit for Base64-encoded payment data)
+        const MAX_PAYMENT_HEADER_SIZE: usize = 16 * 1024;
+
+        if payment_b64.is_empty() {
+            return Err(X402Error::config("X-PAYMENT header cannot be empty"));
+        }
+
+        if payment_b64.len() > MAX_PAYMENT_HEADER_SIZE {
+            return Err(X402Error::config(format!(
+                "X-PAYMENT header too large: maximum is {} bytes, got {}",
+                MAX_PAYMENT_HEADER_SIZE,
+                payment_b64.len()
+            )));
+        }
+
+        // Validate Base64 characters (basic check)
+        // Base64 alphabet: A-Z, a-z, 0-9, +, /, = (padding)
+        if !payment_b64
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
+        {
+            return Err(X402Error::config(
+                "X-PAYMENT header contains invalid Base64 characters",
+            ));
+        }
+
+        Ok(())
     }
 }
 

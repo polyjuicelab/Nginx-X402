@@ -43,47 +43,75 @@
 //! 4. Implement module registration using the correct macro/API
 //! 5. Test with a real Nginx build
 
+use core::fmt;
 use ngx::{
-    http::{handler::http_request_handler, request::Request, status::Status},
-    string::String as NgxString,
-    Error, Result,
+    core::{NgxStr, Status},
+    ffi::ngx_str_t,
+    http::{HTTPStatus, Request},
 };
 use rust_decimal::Decimal;
+
+/// Configuration parsing error
+#[derive(Debug)]
+pub struct ConfigError(String);
+
+impl fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<&str> for ConfigError {
+    fn from(s: &str) -> Self {
+        ConfigError(s.to_string())
+    }
+}
+
+impl From<String> for ConfigError {
+    fn from(s: String) -> Self {
+        ConfigError(s)
+    }
+}
+
+impl From<rust_x402::X402Error> for ConfigError {
+    fn from(e: rust_x402::X402Error) -> Self {
+        ConfigError(format!("{}", e))
+    }
+}
+
+/// Result type alias for module operations
+pub type Result<T> = core::result::Result<T, ConfigError>;
 use rust_x402::{
+    facilitator::FacilitatorClient,
     template::generate_paywall_html,
-    types::{
-        FacilitatorClient, FacilitatorConfig, PaymentPayload, PaymentRequirements,
-        PaymentRequirementsResponse,
-    },
+    types::{FacilitatorConfig, PaymentPayload, PaymentRequirements, PaymentRequirementsResponse},
 };
 use serde_json;
-use std::collections::HashMap;
 use std::str::FromStr;
-use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::sync::OnceLock;
+use std::time::Duration;
+use std::ffi::c_char;
 
 /// User-facing error messages (safe to expose to clients)
-mod user_errors {
-    pub const PAYMENT_REQUIRED: &str = "Payment required";
+pub mod user_errors {
     pub const PAYMENT_VERIFICATION_FAILED: &str = "Payment verification failed";
     pub const INVALID_PAYMENT: &str = "Invalid payment";
     pub const CONFIGURATION_ERROR: &str = "Configuration error";
-    pub const INTERNAL_ERROR: &str = "Internal server error";
     pub const TIMEOUT: &str = "Request timeout";
 }
 
 /// Module configuration (raw strings from Nginx config)
 #[derive(Clone, Default)]
 pub struct X402Config {
-    pub enabled: ngx::flag_t,
-    pub amount_str: ngx::string::String,
-    pub pay_to_str: ngx::string::String,
-    pub facilitator_url_str: ngx::string::String,
-    pub description_str: ngx::string::String,
-    pub network_str: ngx::string::String,
-    pub resource_str: ngx::string::String,
-    pub timeout_str: ngx::string::String, // Timeout in seconds (e.g., "10")
-    pub facilitator_fallback_str: ngx::string::String, // Fallback mode: "error" or "pass"
+    pub enabled: ngx::ffi::ngx_flag_t,
+    pub amount_str: ngx_str_t,
+    pub pay_to_str: ngx_str_t,
+    pub facilitator_url_str: ngx_str_t,
+    pub description_str: ngx_str_t,
+    pub network_str: ngx_str_t,
+    pub resource_str: ngx_str_t,
+    pub timeout_str: ngx_str_t, // Timeout in seconds (e.g., "10")
+    pub facilitator_fallback_str: ngx_str_t, // Fallback mode: "error" or "pass"
 }
 
 /// Facilitator fallback mode
@@ -121,103 +149,105 @@ impl X402Config {
     /// # Note
     /// Empty strings are converted to `None` rather than causing errors.
     /// This allows the module to work with optional configuration directives.
-    fn parse(&self) -> Result<ParsedX402Config> {
-        let amount = if self.amount_str.is_empty() {
+    pub fn parse(&self) -> Result<ParsedX402Config> {
+        let amount = if self.amount_str.len == 0 {
             None
         } else {
-            let amount_str = self
-                .amount_str
+            let ngx_str = unsafe { NgxStr::from_ngx_str(self.amount_str) };
+            let amount_str = ngx_str
                 .to_str()
-                .ok_or_else(|| Error::from("Invalid amount string encoding"))?;
+                .map_err(|_| ConfigError::from("Invalid amount string encoding"))?;
 
             let amount = Decimal::from_str(amount_str)
-                .map_err(|e| Error::from(format!("Invalid amount format: {}", e)))?;
+                .map_err(|e| ConfigError::from(format!("Invalid amount format: {}", e)))?;
 
             // Validate amount range and format
             crate::config::validation::validate_amount(amount)
-                .map_err(|e| Error::from(e.to_string()))?;
+                .map_err(|e| ConfigError::from(e.to_string()))?;
 
             Some(amount)
         };
 
-        let pay_to = if self.pay_to_str.is_empty() {
+        let pay_to = if self.pay_to_str.len == 0 {
             None
         } else {
-            let pay_to_str = self
-                .pay_to_str
+            let ngx_str = unsafe { NgxStr::from_ngx_str(self.pay_to_str) };
+            let pay_to_str = ngx_str
                 .to_str()
-                .ok_or_else(|| Error::from("Invalid pay_to string encoding"))?;
+                .map_err(|_| ConfigError::from("Invalid pay_to string encoding"))?;
 
             // Validate Ethereum address format
             crate::config::validation::validate_ethereum_address(pay_to_str)
-                .map_err(|e| Error::from(e.to_string()))?;
+                .map_err(|e| ConfigError::from(e.to_string()))?;
 
             Some(pay_to_str.to_string())
         };
 
-        let facilitator_url = if self.facilitator_url_str.is_empty() {
+        let facilitator_url = if self.facilitator_url_str.len == 0 {
             None
         } else {
-            let url_str = self
-                .facilitator_url_str
+            let ngx_str = unsafe { NgxStr::from_ngx_str(self.facilitator_url_str) };
+            let url_str = ngx_str
                 .to_str()
-                .ok_or_else(|| Error::from("Invalid facilitator_url string encoding"))?;
+                .map_err(|_| ConfigError::from("Invalid facilitator_url string encoding"))?;
 
             // Validate URL format
             crate::config::validation::validate_url(url_str)
-                .map_err(|e| Error::from(e.to_string()))?;
+                .map_err(|e| ConfigError::from(e.to_string()))?;
 
             Some(url_str.to_string())
         };
 
-        let description = if self.description_str.is_empty() {
+        let description = if self.description_str.len == 0 {
             None
         } else {
-            self.description_str.to_str().map(|s| s.to_string())
+            let ngx_str = unsafe { NgxStr::from_ngx_str(self.description_str) };
+            ngx_str.to_str().ok().map(|s| s.to_string())
         };
 
-        let network = if self.network_str.is_empty() {
+        let network = if self.network_str.len == 0 {
             None
         } else {
-            let network_str = self
-                .network_str
+            let ngx_str = unsafe { NgxStr::from_ngx_str(self.network_str) };
+            let network_str = ngx_str
                 .to_str()
-                .ok_or_else(|| Error::from("Invalid network string encoding"))?;
+                .map_err(|_| ConfigError::from("Invalid network string encoding"))?;
 
             // Validate network name
             crate::config::validation::validate_network(network_str)
-                .map_err(|e| Error::from(e.to_string()))?;
+                .map_err(|e| ConfigError::from(e.to_string()))?;
 
             Some(network_str.to_string())
         };
 
-        let resource = if self.resource_str.is_empty() {
+        let resource = if self.resource_str.len == 0 {
             None
         } else {
-            self.resource_str.to_str().map(|s| s.to_string())
+            let ngx_str = unsafe { NgxStr::from_ngx_str(self.resource_str) };
+            ngx_str.to_str().ok().map(|s| s.to_string())
         };
 
         // Parse timeout (in seconds)
-        let timeout = if self.timeout_str.is_empty() {
+        let timeout = if self.timeout_str.len == 0 {
             None
         } else {
-            let timeout_str = self
-                .timeout_str
+            let ngx_str = unsafe { NgxStr::from_ngx_str(self.timeout_str) };
+            let timeout_str = ngx_str
                 .to_str()
-                .ok_or_else(|| Error::from("Invalid timeout string encoding"))?;
+                .map_err(|_| ConfigError::from("Invalid timeout string encoding"))?;
 
             let timeout_secs = timeout_str
                 .parse::<u64>()
-                .map_err(|e| Error::from(format!("Invalid timeout format: {}", e)))?;
+                .map_err(|e| ConfigError::from(format!("Invalid timeout format: {}", e)))?;
 
             // Validate timeout range (1 second to 300 seconds / 5 minutes)
             // Note: This timeout is for facilitator service requests only, not for Nginx HTTP requests.
             // Nginx HTTP timeouts (proxy_read_timeout, etc.) are configured separately in nginx.conf.
             if timeout_secs < 1 {
-                return Err(Error::from("Timeout must be at least 1 second"));
+                return Err(ConfigError::from("Timeout must be at least 1 second"));
             }
             if timeout_secs > 300 {
-                return Err(Error::from(
+                return Err(ConfigError::from(
                     "Timeout must be at most 300 seconds (5 minutes)",
                 ));
             }
@@ -226,19 +256,19 @@ impl X402Config {
         };
 
         // Parse facilitator fallback mode
-        let facilitator_fallback = if self.facilitator_fallback_str.is_empty() {
+        let facilitator_fallback = if self.facilitator_fallback_str.len == 0 {
             FacilitatorFallback::Error // Default: return error
         } else {
-            let fallback_str = self
-                .facilitator_fallback_str
+            let ngx_str = unsafe { NgxStr::from_ngx_str(self.facilitator_fallback_str) };
+            let fallback_str = ngx_str
                 .to_str()
-                .ok_or_else(|| Error::from("Invalid facilitator_fallback string encoding"))?;
+                .map_err(|_| ConfigError::from("Invalid facilitator_fallback string encoding"))?;
 
             match fallback_str.to_lowercase().as_str() {
                 "error" | "500" => FacilitatorFallback::Error,
                 "pass" | "bypass" | "through" => FacilitatorFallback::Pass,
                 _ => {
-                    return Err(Error::from(
+                    return Err(ConfigError::from(
                         "Invalid facilitator_fallback value. Must be 'error' or 'pass'",
                     ));
                 }
@@ -260,21 +290,21 @@ impl X402Config {
 }
 
 /// Global tokio runtime for async operations
-static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+pub static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
 /// Global facilitator client pool
 ///
 /// Stores facilitator clients keyed by URL to enable reuse across requests.
 /// Each URL gets its own client instance with connection pooling.
-static FACILITATOR_CLIENTS: OnceLock<
+pub static FACILITATOR_CLIENTS: OnceLock<
     std::sync::Mutex<std::collections::HashMap<String, FacilitatorClient>>,
 > = OnceLock::new();
 
 /// Default timeout for facilitator requests (10 seconds)
-const DEFAULT_FACILITATOR_TIMEOUT: Duration = Duration::from_secs(10);
+pub const DEFAULT_FACILITATOR_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Maximum size for X-PAYMENT header (64KB to prevent DoS)
-const MAX_PAYMENT_HEADER_SIZE: usize = 64 * 1024;
+pub const MAX_PAYMENT_HEADER_SIZE: usize = 64 * 1024;
 
 // Note: Rate limiting and concurrency control are handled by Nginx itself:
 // - Rate limiting: Use Nginx's `limit_req` and `limit_conn` modules
@@ -296,7 +326,7 @@ const MAX_PAYMENT_HEADER_SIZE: usize = 64 * 1024;
 /// In a real Nginx environment, this will write to Nginx's error log.
 /// During testing, this may be a no-op or use Rust's logging framework.
 #[inline]
-fn log_message(r: Option<&Request>, level: &str, message: &str) {
+pub fn log_message(r: Option<&Request>, level: &str, message: &str) {
     // Try to use ngx-rust's logging if available
     // The exact API depends on ngx-rust 0.5's implementation
     // For now, we use a simple approach that can be enhanced later
@@ -315,25 +345,25 @@ fn log_message(r: Option<&Request>, level: &str, message: &str) {
 
 /// Log an error message
 #[inline]
-fn log_error(r: Option<&Request>, message: &str) {
+pub fn log_error(r: Option<&Request>, message: &str) {
     log_message(r, "error", message);
 }
 
 /// Log a warning message
 #[inline]
-fn log_warn(r: Option<&Request>, message: &str) {
+pub fn log_warn(r: Option<&Request>, message: &str) {
     log_message(r, "warn", message);
 }
 
 /// Log an info message
 #[inline]
-fn log_info(r: Option<&Request>, message: &str) {
+pub fn log_info(r: Option<&Request>, message: &str) {
     log_message(r, "info", message);
 }
 
 /// Log a debug message
 #[inline]
-fn log_debug(r: Option<&Request>, message: &str) {
+pub fn log_debug(r: Option<&Request>, message: &str) {
     log_message(r, "debug", message);
 }
 
@@ -345,11 +375,14 @@ fn log_debug(r: Option<&Request>, message: &str) {
 ///
 /// # Errors
 /// - Returns error if runtime cannot be created (e.g., system resource exhaustion)
-fn get_runtime() -> Result<&'static tokio::runtime::Runtime> {
-    RUNTIME.get_or_try_init(|| {
+pub fn get_runtime() -> Result<&'static tokio::runtime::Runtime> {
+    RUNTIME.get_or_init(|| {
         tokio::runtime::Runtime::new()
-            .map_err(|e| Error::from(format!("Failed to create tokio runtime: {}", e)))
-    })
+            .unwrap_or_else(|e| panic!("Failed to create tokio runtime: {}", e))
+    });
+    RUNTIME
+        .get()
+        .ok_or_else(|| ConfigError::from("Runtime not initialized"))
 }
 
 /// Get header value from request
@@ -361,18 +394,20 @@ fn get_runtime() -> Result<&'static tokio::runtime::Runtime> {
 /// # Returns
 /// - `Some(String)` if header exists and can be read
 /// - `None` if header doesn't exist or cannot be read
-fn get_header_value(r: &Request, name: &str) -> Option<String> {
+pub fn get_header_value(r: &Request, name: &str) -> Option<String> {
     if name.trim().is_empty() {
         return None;
     }
 
-    let headers = r.headers_in()?;
-    let header_name = NgxString::from_str(name).ok()?;
-
-    headers
-        .get(&header_name)
-        .and_then(|h| h.value().to_str().ok())
-        .map(|s| s.to_string())
+    // Iterate through headers_in to find the header
+    for (key, value) in r.headers_in_iterator() {
+        if let Ok(key_str) = key.to_str() {
+            if key_str.eq_ignore_ascii_case(name) {
+                return value.to_str().ok().map(|s| s.to_string());
+            }
+        }
+    }
+    None
 }
 
 /// Check if request is from a browser
@@ -396,7 +431,7 @@ fn get_header_value(r: &Request, name: &str) -> Option<String> {
 /// # Returns
 /// - `true` if request appears to be from a browser
 /// - `false` if request appears to be from an API client
-fn is_browser_request(r: &Request) -> bool {
+pub fn is_browser_request(r: &Request) -> bool {
     let user_agent = get_header_value(r, "User-Agent");
     let accept = get_header_value(r, "Accept");
     let content_type = get_header_value(r, "Content-Type");
@@ -480,16 +515,14 @@ fn is_browser_request(r: &Request) -> bool {
     // Browser UA is strong indicator, but not sufficient alone
     // Content-Type and Upgrade are strong indicators
     // Accept header already handled above
-    has_browser_ua
-        && (is_browser_content_type
-            || has_upgrade
-            || accept.is_none()
-            || crate::config::validation::parse_accept_priority(
-                accept.as_deref().unwrap_or(""),
-                "text/html",
-            ) > 0.0)
-        || is_browser_content_type
-        || (has_upgrade && has_browser_ua)
+    is_browser_content_type
+        || (has_browser_ua
+            && (has_upgrade
+                || accept.is_none()
+                || crate::config::validation::parse_accept_priority(
+                    accept.as_deref().unwrap_or(""),
+                    "text/html",
+                ) > 0.0))
 }
 
 /// Get or create a facilitator client for the given URL
@@ -504,19 +537,19 @@ fn is_browser_request(r: &Request) -> bool {
 /// # Returns
 /// - `Ok(FacilitatorClient)` if client can be obtained or created
 /// - `Err` if client creation fails
-fn get_facilitator_client(
+pub fn get_facilitator_client(
     facilitator_url: &str,
     timeout: Option<Duration>,
 ) -> Result<FacilitatorClient> {
     if facilitator_url.is_empty() {
-        return Err(Error::from("Facilitator URL is empty"));
+        return Err(ConfigError::from("Facilitator URL is empty"));
     }
 
     let clients =
         FACILITATOR_CLIENTS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
 
     let mut clients_guard = clients.lock().map_err(|e| {
-        Error::from(format!(
+        ConfigError::from(format!(
             "Failed to acquire facilitator client pool lock: {}",
             e
         ))
@@ -532,7 +565,7 @@ fn get_facilitator_client(
     let facilitator_config = FacilitatorConfig::new(facilitator_url).with_timeout(timeout);
 
     let client = FacilitatorClient::new(facilitator_config)
-        .map_err(|e| Error::from(format!("Failed to create facilitator client: {}", e)))?;
+        .map_err(|e| ConfigError::from(format!("Failed to create facilitator client: {}", e)))?;
 
     // Store client in pool
     clients_guard.insert(facilitator_url.to_string(), client.clone());
@@ -563,7 +596,7 @@ fn get_facilitator_client(
 /// worker_connections configuration. This function does not need to manage
 /// concurrent requests as Nginx already limits the number of simultaneous
 /// connections per worker.
-async fn verify_payment(
+pub async fn verify_payment(
     payment_b64: &str,
     requirements: &PaymentRequirements,
     facilitator_url: &str,
@@ -572,11 +605,11 @@ async fn verify_payment(
     // Validate inputs
     if payment_b64.is_empty() {
         // Internal error: empty payload should not reach this point
-        return Err(Error::from(user_errors::INVALID_PAYMENT));
+        return Err(ConfigError::from(user_errors::INVALID_PAYMENT));
     }
     if facilitator_url.is_empty() {
         // Internal error: empty facilitator URL indicates configuration issue
-        return Err(Error::from(user_errors::CONFIGURATION_ERROR));
+        return Err(ConfigError::from(user_errors::CONFIGURATION_ERROR));
     }
 
     // Parse payment payload - use generic error for users
@@ -584,7 +617,7 @@ async fn verify_payment(
         // Log internal error details
         log_error(None, &format!("Failed to parse payment payload: {}", e));
         // User gets generic error
-        Error::from(user_errors::INVALID_PAYMENT)
+        ConfigError::from(user_errors::INVALID_PAYMENT)
     })?;
 
     // Get or create facilitator client from pool
@@ -592,7 +625,7 @@ async fn verify_payment(
         // Internal error: client creation failure
         log_error(None, &format!("Failed to create facilitator client: {}", e));
         // User gets generic error
-        Error::from(user_errors::CONFIGURATION_ERROR)
+        ConfigError::from(user_errors::CONFIGURATION_ERROR)
     })?;
 
     // Perform verification with timeout
@@ -610,15 +643,15 @@ async fn verify_payment(
                     verification_timeout
                 ),
             );
-            Error::from(user_errors::TIMEOUT)
+            ConfigError::from(user_errors::TIMEOUT)
         })?
         .map_err(|e| {
             // Verification failure - log internal details, user gets generic error
             log_error(None, &format!("Payment verification failed: {}", e));
-            Error::from(user_errors::PAYMENT_VERIFICATION_FAILED)
+            ConfigError::from(user_errors::PAYMENT_VERIFICATION_FAILED)
         })?;
 
-    Ok(verify_result.valid)
+    Ok(verify_result.is_valid)
 }
 
 /// Create payment requirements from config
@@ -636,25 +669,25 @@ async fn verify_payment(
 /// - Returns error if pay_to address is not configured
 /// - Returns error if network is not supported
 /// - Returns error if USDC info cannot be set
-fn create_requirements(config: &ParsedX402Config, resource: &str) -> Result<PaymentRequirements> {
+pub fn create_requirements(config: &ParsedX402Config, resource: &str) -> Result<PaymentRequirements> {
     use rust_x402::types::networks;
 
     // Validate required fields
     let amount = config
         .amount
-        .ok_or_else(|| Error::from("Amount not configured"))?;
+        .ok_or_else(|| ConfigError::from("Amount not configured"))?;
 
     if amount < Decimal::ZERO {
-        return Err(Error::from("Amount cannot be negative"));
+        return Err(ConfigError::from("Amount cannot be negative"));
     }
 
     let pay_to = config
         .pay_to
         .as_ref()
-        .ok_or_else(|| Error::from("Pay-to address not configured"))?;
+        .ok_or_else(|| ConfigError::from("Pay-to address not configured"))?;
 
     if pay_to.trim().is_empty() {
-        return Err(Error::from("Pay-to address cannot be empty"));
+        return Err(ConfigError::from("Pay-to address cannot be empty"));
     }
 
     // Determine network - use configured network or default to mainnet
@@ -666,16 +699,16 @@ fn create_requirements(config: &ParsedX402Config, resource: &str) -> Result<Paym
 
     // Get USDC address for the network
     let usdc_address = networks::get_usdc_address(network)
-        .ok_or_else(|| Error::from(format!("Network not supported: {}", network)))?;
+        .ok_or_else(|| ConfigError::from(format!("Network not supported: {}", network)))?;
 
     // Use configured resource or fall back to provided resource
     // Validate and sanitize the resource path to prevent path traversal attacks
     let resource = if let Some(ref resource_url) = config.resource {
         crate::config::validation::validate_resource_path(resource_url)
-            .map_err(|e| Error::from(e.to_string()))?
+            .map_err(|e| ConfigError::from(e.to_string()))?
     } else {
         crate::config::validation::validate_resource_path(resource)
-            .map_err(|e| Error::from(e.to_string()))?
+            .map_err(|e| ConfigError::from(e.to_string()))?
     };
 
     // Convert amount to max_amount_required (in smallest unit, e.g., wei for USDC)
@@ -737,13 +770,14 @@ fn create_requirements(config: &ParsedX402Config, resource: &str) -> Result<Paym
 /// - Returns error if content type cannot be set
 /// - Returns error if body cannot be sent
 /// - Returns error if JSON serialization fails
-fn send_402_response(
+pub fn send_402_response(
     r: &mut Request,
     requirements: &[PaymentRequirements],
     config: &ParsedX402Config,
     error_msg: Option<&str>,
 ) -> Result<()> {
-    r.set_status(402)?;
+    // Set status code 402 (Payment Required)
+    r.set_status(HTTPStatus::from_u16(402).map_err(|_| ConfigError::from("Invalid status code"))?);
 
     let is_browser = is_browser_request(r);
 
@@ -751,26 +785,84 @@ fn send_402_response(
         // Send HTML paywall
         // Use error_msg if provided, otherwise use config description, otherwise use empty string
         let error_message = error_msg
-            .or_else(|| config.description.as_deref())
+            .or(config.description.as_deref())
             .unwrap_or("");
         let html = generate_paywall_html(error_message, requirements, None);
 
-        r.headers_out_mut()
-            .set_content_type("text/html; charset=utf-8")?;
-        r.send_body(html.as_bytes())?;
+        // Set Content-Type header
+        r.add_header_out("Content-Type", "text/html; charset=utf-8")
+            .ok_or_else(|| ConfigError::from("Failed to set Content-Type header"))?;
+
+        // Send body using buffer and chain
+        send_response_body(r, html.as_bytes())?;
     } else {
         // Send JSON response
         // Use error_msg if provided, otherwise use config description, otherwise use empty string
         let error_message = error_msg
-            .or_else(|| config.description.as_deref())
+            .or(config.description.as_deref())
             .unwrap_or("");
         let response = PaymentRequirementsResponse::new(error_message, requirements.to_vec());
         let json = serde_json::to_string(&response)
-            .map_err(|_| Error::from("Failed to serialize response"))?;
+            .map_err(|_| ConfigError::from("Failed to serialize response"))?;
 
-        r.headers_out_mut()
-            .set_content_type("application/json; charset=utf-8")?;
-        r.send_body(json.as_bytes())?;
+        // Set Content-Type header
+        r.add_header_out("Content-Type", "application/json; charset=utf-8")
+            .ok_or_else(|| ConfigError::from("Failed to set Content-Type header"))?;
+
+        // Send body using buffer and chain
+        send_response_body(r, json.as_bytes())?;
+    }
+
+    Ok(())
+}
+
+/// Send response body using ngx buffer and chain
+pub fn send_response_body(r: &mut Request, body: &[u8]) -> Result<()> {
+    use ngx::ffi::{ngx_alloc_chain_link, ngx_create_temp_buf};
+
+    let pool = r.pool();
+    let body_len = body.len();
+
+    // Create temporary buffer
+    let buf = unsafe { ngx_create_temp_buf(pool.as_ptr(), body_len) };
+    if buf.is_null() {
+        return Err(ConfigError::from("Failed to allocate buffer"));
+    }
+
+    // Copy body data to buffer
+    unsafe {
+        let buf_slice = core::slice::from_raw_parts_mut((*buf).pos, body_len);
+        buf_slice.copy_from_slice(body);
+        (*buf).last = (*buf).pos.add(body_len);
+        (*buf).set_last_buf(1);
+        (*buf).set_last_in_chain(1);
+    }
+
+    // Allocate chain link
+    let chain = unsafe { ngx_alloc_chain_link(pool.as_ptr()) };
+    if chain.is_null() {
+        return Err(ConfigError::from("Failed to allocate chain link"));
+    }
+
+    unsafe {
+        (*chain).buf = buf;
+        (*chain).next = core::ptr::null_mut();
+    }
+
+    // Set content length
+    r.set_content_length_n(body_len);
+
+    // Send header
+    let status = r.send_header();
+    if !status.is_ok() {
+        return Err(ConfigError::from("Failed to send header"));
+    }
+
+    // Send body
+    let chain_mut = unsafe { &mut *chain };
+    let status = r.output_filter(chain_mut);
+    if !status.is_ok() {
+        return Err(ConfigError::from("Failed to send body"));
     }
 
     Ok(())
@@ -795,12 +887,17 @@ fn send_402_response(
 /// - `Ok(())` if 402 response was sent (payment invalid or missing)
 /// - `Err` if an error occurs during processing
 ///
+/// Core payment verification handler implementation
+///
+/// This function contains the main business logic for payment verification.
+/// It is called by `x402_ngx_handler_impl` after configuration parsing.
+///
 /// # Errors
 /// - Returns error if payment requirements cannot be created
 /// - Returns error if facilitator URL is not configured
 /// - Returns error if payment verification fails
 /// - Returns error if 402 response cannot be sent
-fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<()> {
+pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<()> {
     if !config.enabled {
         return Ok(()); // Module disabled, pass through
     }
@@ -808,7 +905,7 @@ fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<()> {
     let resource = config
         .resource
         .as_deref()
-        .or_else(|| r.uri().to_str().ok())
+        .or_else(|| r.path().to_str().ok())
         .unwrap_or("/");
 
     log_debug(
@@ -836,15 +933,15 @@ fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<()> {
         );
 
         // Validate payment header format and size
-        validate_payment_header(&payment_b64).map_err(|e| {
+        crate::config::validation::validate_payment_header(&payment_b64).map_err(|e| {
             log_warn(Some(r), &format!("Invalid payment header format: {}", e));
-            e
+            ConfigError::from(e)
         })?;
 
         // Verify payment
         let facilitator_url = config.facilitator_url.as_deref().ok_or_else(|| {
             log_error(Some(r), "Facilitator URL not configured");
-            Error::from("Facilitator URL not configured")
+            ConfigError::from("Facilitator URL not configured")
         })?;
 
         // Block on async verification
@@ -864,10 +961,15 @@ fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<()> {
                 match config.facilitator_fallback {
                     FacilitatorFallback::Error => {
                         // Return 500 error
-                        r.set_status(500)?;
-                        r.headers_out_mut()
-                            .set_content_type("text/plain; charset=utf-8")?;
-                        r.send_body(b"Internal server error")?;
+                        r.set_status(
+                            HTTPStatus::from_u16(500)
+                                .map_err(|_| ConfigError::from("Invalid status code"))?,
+                        );
+                        r.add_header_out("Content-Type", "text/plain; charset=utf-8")
+                            .ok_or_else(|| {
+                                ConfigError::from("Failed to set Content-Type header")
+                            })?;
+                        send_response_body(r, b"Internal server error")?;
                         return Ok(());
                     }
                     FacilitatorFallback::Pass => {
@@ -882,7 +984,7 @@ fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<()> {
         if is_valid {
             // Payment valid, allow request to proceed
             log_info(Some(r), "Payment verification successful, allowing request");
-            return Ok(());
+            Ok(())
         } else {
             // Payment invalid - send user-facing error message
             log_warn(Some(r), "Payment verification failed, sending 402 response");
@@ -892,13 +994,13 @@ fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<()> {
                 config,
                 Some(user_errors::PAYMENT_VERIFICATION_FAILED),
             )?;
-            return Ok(());
+            Ok(())
         }
     } else {
         // No payment header, send 402
         log_debug(Some(r), "No X-PAYMENT header found, sending 402 response");
         send_402_response(r, &requirements_vec, config, None)?;
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -934,18 +1036,39 @@ fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<()> {
 ///
 /// This implementation attempts to get module configuration from the request.
 /// The exact API depends on ngx-rust 0.5's actual implementation.
-fn x402_ngx_handler(req: &mut Request) -> Result<()> {
+///
+/// This function is called by the `http_request_handler!` macro-generated `x402_ngx_handler`.
+pub fn x402_ngx_handler_impl(req: &mut Request) -> Status {
     // Get module configuration from request
     // The actual API may be one of:
     // - req.get_loc_conf::<X402Module, X402Config>()
     // - req.loc_conf::<X402Config>()
     // - Or similar method
 
-    let conf = get_module_config(req)?;
-    let parsed_config = conf.parse()?;
+    let conf = match get_module_config(req) {
+        Ok(c) => c,
+        Err(e) => {
+            log_error(Some(req), &format!("Failed to get module config: {}", e));
+            return Status::NGX_ERROR;
+        }
+    };
+
+    let parsed_config = match conf.parse() {
+        Ok(c) => c,
+        Err(e) => {
+            log_error(Some(req), &format!("Failed to parse config: {}", e));
+            return Status::NGX_ERROR;
+        }
+    };
 
     // Call the core handler
-    x402_handler_impl(req, &parsed_config)
+    match x402_handler_impl(req, &parsed_config) {
+        Ok(()) => Status::NGX_OK,
+        Err(e) => {
+            log_error(Some(req), &format!("Handler error: {}", e));
+            Status::NGX_ERROR
+        }
+    }
 }
 
 /// Get module configuration from request
@@ -971,63 +1094,48 @@ fn x402_ngx_handler(req: &mut Request) -> Result<()> {
 /// - loc_conf pointer is checked for null
 /// - Configuration pointer is checked for null
 /// - Context index is validated to be within bounds (implicitly by ngx-rust)
-fn get_module_config(req: &Request) -> Result<X402Config> {
+pub fn get_module_config(req: &Request) -> Result<X402Config> {
     // The ngx-rust module! macro should provide a way to access configuration
     // The exact method depends on ngx-rust 0.5's API
 
-    // Try to use ngx-rust's provided method (if available):
-    // This is the preferred approach as it's type-safe and memory-safe
-    if let Ok(conf) = req.get_loc_conf::<X402Module, X402Config>() {
-        return Ok(conf.clone());
-    }
-
-    // Fallback: Use unsafe access via module context index
-    // This path is only used if the safe API is not available.
+    // TODO: Implement proper configuration access using ngx-rust API
+    // The exact API depends on ngx-rust 0.5's implementation.
+    // For now, we use unsafe access via module context index.
     //
     // Safety: We validate all pointers before dereferencing:
     // 1. Request pointer must be non-null (guaranteed by Request type)
     // 2. loc_conf array must be non-null (checked)
     // 3. Configuration pointer at ctx_index must be non-null (checked)
-    // 4. Context index is provided by ngx-rust and should be valid
+    // 4. Context index should be provided by module registration
+    // Access loc_conf using ngx-rust 0.5 API
+    // Request is repr(transparent) and contains ngx_http_request_t
+    // We can access it via AsRef trait
     unsafe {
-        let r = req.as_ptr();
+        let r = req.as_ref();
 
-        // Validate request pointer
-        if r.is_null() {
-            return Err(Error::from("Invalid request pointer: null"));
-        }
-
-        // Validate that we can read the request structure
-        // This is a basic sanity check - if the pointer is invalid, this will fail
-        let _ = std::ptr::read_volatile(&(*r).method);
-
-        // Get the module's context index (provided by ngx-rust module! macro)
-        let ctx_index = X402Module::ctx_index();
+        // Get the module's context index
+        let ctx_index = ngx_http_x402_module.ctx_index;
 
         // Validate context index is reasonable (should be < 256 for typical Nginx setups)
         if ctx_index >= 256 {
-            return Err(Error::from(format!(
+            return Err(ConfigError::from(format!(
                 "Invalid context index: {} (too large)",
                 ctx_index
             )));
         }
 
         // Access loc_conf array at the module's context index
-        // Safety: We check that loc_conf is non-null before dereferencing
-        let loc_conf_raw = (*r).loc_conf;
+        // Safety: loc_conf is guaranteed to be valid for HTTP requests
+        let loc_conf_raw = r.loc_conf;
         if loc_conf_raw.is_null() {
-            return Err(Error::from("Invalid loc_conf pointer: null"));
+            return Err(ConfigError::from("Invalid loc_conf pointer: null"));
         }
-
-        // Cast to the expected type
-        // Safety: Nginx guarantees loc_conf is an array of void pointers
-        let loc_conf = loc_conf_raw as *mut *mut std::ffi::c_void;
 
         // Validate the configuration pointer at our context index
         // Safety: We use checked pointer arithmetic
-        let conf_ptr_raw = loc_conf.add(ctx_index);
+        let conf_ptr_raw = loc_conf_raw.add(ctx_index);
         if conf_ptr_raw.is_null() {
-            return Err(Error::from(format!(
+            return Err(ConfigError::from(format!(
                 "Invalid configuration pointer at index {}: null",
                 ctx_index
             )));
@@ -1037,7 +1145,7 @@ fn get_module_config(req: &Request) -> Result<X402Config> {
         // Safety: We've validated that conf_ptr_raw is non-null
         let conf_ptr_void = *conf_ptr_raw;
         if conf_ptr_void.is_null() {
-            return Err(Error::from(format!(
+            return Err(ConfigError::from(format!(
                 "Configuration pointer at index {} is null",
                 ctx_index
             )));
@@ -1087,82 +1195,53 @@ fn get_module_config(req: &Request) -> Result<X402Config> {
 // For testing purposes, the core logic (x402_handler_impl, create_requirements, etc.)
 // is fully testable without requiring Nginx source code or the full module registration.
 
-ngx::http::module! {
-    name: X402Module,
-    commands: [
-        // x402 on|off - Enable/disable x402 payment verification
-        ngx::conf::Command {
-            name: ngx::string!("x402"),
-            ty: ngx::conf::CommandType::Flag,
-            set: ngx::conf::set_flag_slot,
-            conf: ngx::conf::CommandConf::LocConf(ngx::conf::offset_of!(X402Config, enabled)),
-            post: None,
-        },
-        // x402_amount <amount> - Payment amount (e.g., "0.0001")
-        ngx::conf::Command {
-            name: ngx::string!("x402_amount"),
-            ty: ngx::conf::CommandType::Take1,
-            set: ngx::conf::set_str_slot,
-            conf: ngx::conf::CommandConf::LocConf(ngx::conf::offset_of!(X402Config, amount_str)),
-            post: None,
-        },
-        // x402_pay_to <address> - Recipient wallet address
-        ngx::conf::Command {
-            name: ngx::string!("x402_pay_to"),
-            ty: ngx::conf::CommandType::Take1,
-            set: ngx::conf::set_str_slot,
-            conf: ngx::conf::CommandConf::LocConf(ngx::conf::offset_of!(X402Config, pay_to_str)),
-            post: None,
-        },
-        // x402_facilitator_url <url> - Facilitator service URL
-        ngx::conf::Command {
-            name: ngx::string!("x402_facilitator_url"),
-            ty: ngx::conf::CommandType::Take1,
-            set: ngx::conf::set_str_slot,
-            conf: ngx::conf::CommandConf::LocConf(ngx::conf::offset_of!(X402Config, facilitator_url_str)),
-            post: None,
-        },
-        // x402_description <text> - Payment description
-        ngx::conf::Command {
-            name: ngx::string!("x402_description"),
-            ty: ngx::conf::CommandType::Take1,
-            set: ngx::conf::set_str_slot,
-            conf: ngx::conf::CommandConf::LocConf(ngx::conf::offset_of!(X402Config, description_str)),
-            post: None,
-        },
-        // x402_network <network> - Network identifier (e.g., "base-sepolia")
-        ngx::conf::Command {
-            name: ngx::string!("x402_network"),
-            ty: ngx::conf::CommandType::Take1,
-            set: ngx::conf::set_str_slot,
-            conf: ngx::conf::CommandConf::LocConf(ngx::conf::offset_of!(X402Config, network_str)),
-            post: None,
-        },
-        // x402_resource <path> - Resource path override
-        ngx::conf::Command {
-            name: ngx::string!("x402_resource"),
-            ty: ngx::conf::CommandType::Take1,
-            set: ngx::conf::set_str_slot,
-            conf: ngx::conf::CommandConf::LocConf(ngx::conf::offset_of!(X402Config, resource_str)),
-            post: None,
-        },
-        // x402_timeout <seconds> - Timeout for facilitator requests (1-300 seconds, default: 10)
-        ngx::conf::Command {
-            name: ngx::string!("x402_timeout"),
-            ty: ngx::conf::CommandType::Take1,
-            set: ngx::conf::set_str_slot,
-            conf: ngx::conf::CommandConf::LocConf(ngx::conf::offset_of!(X402Config, timeout_str)),
-            post: None,
-        },
-        // x402_facilitator_fallback <mode> - Fallback behavior when facilitator fails ("error" or "pass", default: "error")
-        ngx::conf::Command {
-            name: ngx::string!("x402_facilitator_fallback"),
-            ty: ngx::conf::CommandType::Take1,
-            set: ngx::conf::set_str_slot,
-            conf: ngx::conf::CommandConf::LocConf(ngx::conf::offset_of!(X402Config, facilitator_fallback_str)),
-            post: None,
-        },
-    ],
-    init: None,
-    handler: Some(x402_ngx_handler),
-}
+// TODO: Module registration needs to be implemented using HttpModule trait
+// The ngx::http::module! macro does not exist in ngx-rust 0.5
+//
+// For now, we provide a placeholder module structure.
+// The actual module registration should be implemented following ngx-rust examples:
+// 1. Implement HttpModule trait for X402Module
+// 2. Define module commands using ngx_command_t structures
+// 3. Register handler in postconfiguration
+//
+// This is a complex task that requires:
+// - Understanding ngx-rust's HttpModule trait API
+// - Creating proper ngx_command_t structures for each directive
+// - Implementing proper configuration parsing callbacks
+// - Registering the handler in the appropriate phase
+//
+// The core logic (x402_handler_impl, create_requirements, etc.) is fully functional
+// and testable without the full module registration.
+
+// Placeholder module structure - needs proper implementation
+#[no_mangle]
+pub static mut ngx_http_x402_module: ngx::ffi::ngx_module_t = ngx::ffi::ngx_module_t {
+    ctx_index: 0,
+    index: 0,
+    spare0: 0,
+    spare1: 0,
+    version: 1,
+    signature: c"NGX_MODULE_SIGNATURE".as_ptr() as *const c_char,
+    name: c"ngx_http_x402_module".as_ptr() as *mut c_char,
+    ctx: core::ptr::null_mut(),
+    commands: core::ptr::null_mut(),
+    type_: 0,
+    init_master: None,
+    init_module: None,
+    init_process: None,
+    init_thread: None,
+    exit_thread: None,
+    exit_process: None,
+    exit_master: None,
+    spare_hook0: 0,
+    spare_hook1: 0,
+    spare_hook2: 0,
+    spare_hook3: 0,
+    spare_hook4: 0,
+    spare_hook5: 0,
+    spare_hook6: 0,
+    spare_hook7: 0,
+};
+
+// Export the handler using ngx-rust's macro
+ngx::http_request_handler!(x402_ngx_handler, x402_ngx_handler_impl);
