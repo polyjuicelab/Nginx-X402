@@ -85,16 +85,25 @@ When using the `vendored` feature, Nginx source compilation requires PCRE librar
   sudo apt-get install libpcre3-dev
   ```
 
-- **`NGX_CONFIGURE_ARGS`**: Specify PCRE path directly (if pkg-config doesn't work)
+- **`NGX_CONFIGURE_ARGS`**: Specify PCRE path directly
   ```bash
-  # macOS with Homebrew
-  export NGX_CONFIGURE_ARGS="--with-pcre=$(brew --prefix pcre)"
+  # Option 1: Use PCRE source code (recommended)
+  # Download PCRE source and extract it, then:
+  export NGX_CONFIGURE_ARGS="--with-pcre=/path/to/pcre-8.45"
   
-  # Or specify PCRE source directory if you downloaded it manually
-  export NGX_CONFIGURE_ARGS="--with-pcre=/path/to/pcre-source"
+  # Option 2: Use pre-built PCRE library (macOS with Homebrew)
+  # Note: This requires PCRE source code, not just the library
+  # You may need to download PCRE source separately:
+  # wget https://sourceforge.net/projects/pcre/files/pcre/8.45/pcre-8.45.tar.gz
+  # tar -xzf pcre-8.45.tar.gz
+  export NGX_CONFIGURE_ARGS="--with-pcre=/path/to/pcre-8.45"
+  
+  # Option 3: Disable HTTP rewrite module (not recommended)
+  export NGX_CONFIGURE_ARGS="--without-http_rewrite_module"
   ```
-  - This tells Nginx configure script where to find PCRE
-  - Only needed if automatic detection fails
+  - Nginx's `--with-pcre` requires PCRE **source code**, not just the compiled library
+  - Homebrew installs only the compiled library, so you need to download PCRE source separately
+  - Download PCRE from: https://sourceforge.net/projects/pcre/files/pcre/
 
 ### Example: Complete Setup
 
@@ -131,15 +140,23 @@ cargo build --release
 
 **Using vendored feature:**
 ```bash
-# Install PCRE (required for Nginx compilation)
+# Install PCRE library (for linking)
 # macOS:
 brew install pcre
-export PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig:$PKG_CONFIG_PATH
 
 # Linux:
 sudo apt-get install libpcre3-dev
 
-# Build (PCRE will be found automatically)
+# Download PCRE source code (required by Nginx configure)
+# Nginx's --with-pcre requires PCRE source, not just the library
+cd /tmp
+wget https://sourceforge.net/projects/pcre/files/pcre/8.45/pcre-8.45.tar.gz
+tar -xzf pcre-8.45.tar.gz
+
+# Set NGX_CONFIGURE_ARGS to point to PCRE source
+export NGX_CONFIGURE_ARGS="--with-pcre=/tmp/pcre-8.45"
+
+# Build
 cargo build --release --features vendored
 ```
 
