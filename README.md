@@ -63,13 +63,35 @@ Uses the official [ngx-rust](https://github.com/nginx/ngx-rust) crate to impleme
   - On Linux, install `libclang-dev` package: `sudo apt-get install libclang-dev`
   - On macOS, install via Homebrew: `brew install llvm`
 
+### Optional (for PCRE when using vendored feature)
+
+When using the `vendored` feature, Nginx source compilation requires PCRE library. If you encounter PCRE-related errors:
+
+- **`PKG_CONFIG_PATH`**: Help pkg-config find PCRE (macOS with Homebrew)
+  ```bash
+  # macOS with Homebrew
+  export PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig:$PKG_CONFIG_PATH
+  
+  # Or for Intel Mac
+  export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH
+  ```
+
+- **Install PCRE** (if not already installed):
+  ```bash
+  # macOS
+  brew install pcre
+  
+  # Linux
+  sudo apt-get install libpcre3-dev
+  ```
+
 ### Example: Complete Setup
 
 **Linux:**
 ```bash
 # Install system dependencies
 sudo apt-get update
-sudo apt-get install -y libclang-dev
+sudo apt-get install -y libclang-dev libpcre3-dev
 
 # Set Nginx source (if not using vendored)
 export NGINX_SOURCE_DIR=/path/to/nginx-1.29.1
@@ -81,10 +103,13 @@ cargo build --release
 **macOS:**
 ```bash
 # Install system dependencies
-brew install llvm
+brew install llvm pcre
 
 # Set libclang path (if needed)
 export LIBCLANG_PATH=$(brew --prefix llvm)/lib
+
+# Set PKG_CONFIG_PATH for PCRE (if using vendored feature)
+export PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig:$PKG_CONFIG_PATH
 
 # Set Nginx source (if not using vendored)
 export NGINX_SOURCE_DIR=/path/to/nginx-1.29.1
@@ -93,9 +118,17 @@ export NGINX_SOURCE_DIR=/path/to/nginx-1.29.1
 cargo build --release
 ```
 
-**Using vendored feature (no environment variables needed):**
+**Using vendored feature:**
 ```bash
-# No environment variables needed!
+# Install PCRE (required for Nginx compilation)
+# macOS:
+brew install pcre
+export PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig:$PKG_CONFIG_PATH
+
+# Linux:
+sudo apt-get install libpcre3-dev
+
+# Build (PCRE will be found automatically)
 cargo build --release --features vendored
 ```
 
