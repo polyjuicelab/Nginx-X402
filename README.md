@@ -29,6 +29,76 @@ Uses the official [ngx-rust](https://github.com/nginx/ngx-rust) crate to impleme
   - No manual Nginx source needed, but may not match production version
 - libclang (for bindgen)
 
+## Environment Variables
+
+### Required (when not using `vendored` feature)
+
+- **`NGINX_SOURCE_DIR`**: Path to Nginx source code directory
+  ```bash
+  export NGINX_SOURCE_DIR=/path/to/nginx-1.29.1
+  ```
+  - Use the same Nginx version as your production environment
+  - Required if `vendored` feature is not enabled
+
+- **`NGINX_BUILD_DIR`** (optional): Path to Nginx build directory
+  ```bash
+  export NGINX_BUILD_DIR=/path/to/nginx-build
+  ```
+  - Alternative to `NGINX_SOURCE_DIR` if you have a pre-built Nginx
+
+### Optional (for libclang)
+
+- **`LIBCLANG_PATH`**: Path to libclang library (macOS only, usually not needed)
+  ```bash
+  # macOS with Homebrew
+  export LIBCLANG_PATH=$(brew --prefix llvm)/lib
+  
+  # macOS with Xcode
+  export LIBCLANG_PATH=$(xcode-select --print-path)/Toolchains/XcodeDefault.xctoolchain/usr/lib
+  
+  # Linux (usually not needed, system libclang is used)
+  export LIBCLANG_PATH=/usr/lib/llvm-*/lib
+  ```
+  - Only needed if bindgen cannot find libclang automatically
+  - On Linux, install `libclang-dev` package: `sudo apt-get install libclang-dev`
+  - On macOS, install via Homebrew: `brew install llvm`
+
+### Example: Complete Setup
+
+**Linux:**
+```bash
+# Install system dependencies
+sudo apt-get update
+sudo apt-get install -y libclang-dev
+
+# Set Nginx source (if not using vendored)
+export NGINX_SOURCE_DIR=/path/to/nginx-1.29.1
+
+# Build
+cargo build --release
+```
+
+**macOS:**
+```bash
+# Install system dependencies
+brew install llvm
+
+# Set libclang path (if needed)
+export LIBCLANG_PATH=$(brew --prefix llvm)/lib
+
+# Set Nginx source (if not using vendored)
+export NGINX_SOURCE_DIR=/path/to/nginx-1.29.1
+
+# Build
+cargo build --release
+```
+
+**Using vendored feature (no environment variables needed):**
+```bash
+# No environment variables needed!
+cargo build --release --features vendored
+```
+
 ## Building
 
 ### Method A: With Nginx Source (Recommended for Production)
