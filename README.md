@@ -85,6 +85,17 @@ When using the `vendored` feature, Nginx source compilation requires PCRE librar
   sudo apt-get install libpcre3-dev
   ```
 
+- **`NGX_CONFIGURE_ARGS`**: Specify PCRE path directly (if pkg-config doesn't work)
+  ```bash
+  # macOS with Homebrew
+  export NGX_CONFIGURE_ARGS="--with-pcre=$(brew --prefix pcre)"
+  
+  # Or specify PCRE source directory if you downloaded it manually
+  export NGX_CONFIGURE_ARGS="--with-pcre=/path/to/pcre-source"
+  ```
+  - This tells Nginx configure script where to find PCRE
+  - Only needed if automatic detection fails
+
 ### Example: Complete Setup
 
 **Linux:**
