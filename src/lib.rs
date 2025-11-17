@@ -38,4 +38,3 @@ pub mod ffi;
 // Re-export commonly used types
 pub use config::NginxX402Config;
 pub use ffi::*;
-

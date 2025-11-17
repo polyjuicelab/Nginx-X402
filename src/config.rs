@@ -1,8 +1,8 @@
 //! Configuration types for Nginx x402 module
 
+use rust_decimal::Decimal;
 use rust_x402::types::PaymentRequirements;
 use rust_x402::{Result, X402Error};
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::ffi::CStr;
 use std::str::FromStr;
@@ -60,11 +60,12 @@ impl NginxX402Config {
             rust_x402::types::networks::BASE_MAINNET
         };
 
-        let usdc_address = rust_x402::types::networks::get_usdc_address(network).ok_or_else(|| {
-            X402Error::NetworkNotSupported {
-                network: network.to_string(),
-            }
-        })?;
+        let usdc_address =
+            rust_x402::types::networks::get_usdc_address(network).ok_or_else(|| {
+                X402Error::NetworkNotSupported {
+                    network: network.to_string(),
+                }
+            })?;
 
         let resource = if let Some(ref resource_url) = self.resource {
             resource_url.clone()
@@ -163,4 +164,3 @@ mod tests {
         assert_eq!(requirements.network, "base-sepolia");
     }
 }
-

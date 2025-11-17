@@ -5,7 +5,7 @@
 
 mod tests {
     use nginx_x402::ffi::*;
-    use rust_x402::types::{PaymentPayload, PaymentRequirements};
+    use rust_x402::types::PaymentRequirements;
     use std::ffi::CString;
     use std::os::raw::c_char;
 
@@ -25,11 +25,6 @@ mod tests {
                 accept: String::new(),
                 request_uri: String::new(),
             }
-        }
-
-        fn with_payment_header(mut self, payment: &str) -> Self {
-            self.payment_header = Some(payment.to_string());
-            self
         }
 
         fn with_user_agent(mut self, ua: &str) -> Self {
@@ -244,4 +239,3 @@ mod tests {
         assert_eq!(requirements.resource, "/api/protected");
     }
 }
-

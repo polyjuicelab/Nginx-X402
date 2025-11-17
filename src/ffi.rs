@@ -62,6 +62,16 @@ pub unsafe extern "C" fn x402_free_string(ptr: *mut c_char) {
 /// - `2` on payment verification failure
 /// - `3` on facilitator error
 /// - `5` on internal error
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers.
+/// The caller must ensure:
+/// - `payment_b64` points to a valid null-terminated C string (or is null)
+/// - `requirements_json` points to a valid null-terminated C string
+/// - `facilitator_url` points to a valid null-terminated C string (or is null)
+/// - `result` points to a buffer of at least `*result_len` bytes
+/// - `result_len` points to a valid `usize` value
 #[no_mangle]
 pub unsafe extern "C" fn x402_verify_payment(
     payment_b64: *const c_char,
@@ -166,6 +176,18 @@ pub unsafe extern "C" fn x402_verify_payment(
 /// - `1` on invalid input
 /// - `4` on buffer too small
 /// - `5` on internal error
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers.
+/// The caller must ensure:
+/// - `amount` points to a valid null-terminated C string
+/// - `pay_to` points to a valid null-terminated C string
+/// - `network` points to a valid null-terminated C string (or is null)
+/// - `resource` points to a valid null-terminated C string (or is null)
+/// - `description` points to a valid null-terminated C string (or is null)
+/// - `result` points to a buffer of at least `*result_len` bytes
+/// - `result_len` points to a valid `usize` value
 #[no_mangle]
 pub unsafe extern "C" fn x402_create_requirements(
     amount: *const c_char,
@@ -261,6 +283,15 @@ pub unsafe extern "C" fn x402_create_requirements(
 /// - `1` on invalid input
 /// - `4` on buffer too small
 /// - `5` on internal error
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers.
+/// The caller must ensure:
+/// - `requirements_json` points to a valid null-terminated C string
+/// - `error_msg` points to a valid null-terminated C string (or is null)
+/// - `result` points to a buffer of at least `*result_len` bytes
+/// - `result_len` points to a valid `usize` value
 #[no_mangle]
 pub unsafe extern "C" fn x402_generate_paywall_html(
     requirements_json: *const c_char,
@@ -285,10 +316,9 @@ pub unsafe extern "C" fn x402_generate_paywall_html(
     let error = if error_msg.is_null() {
         "Payment required"
     } else {
-        match CStr::from_ptr(error_msg).to_str() {
-            Ok(s) => s,
-            Err(_) => "Payment required",
-        }
+        CStr::from_ptr(error_msg)
+            .to_str()
+            .unwrap_or("Payment required")
     };
 
     let html = generate_paywall_html(error, &requirements, None);
@@ -321,6 +351,15 @@ pub unsafe extern "C" fn x402_generate_paywall_html(
 /// - `1` on invalid input
 /// - `4` on buffer too small
 /// - `5` on internal error
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers.
+/// The caller must ensure:
+/// - `requirements_json` points to a valid null-terminated C string
+/// - `error_msg` points to a valid null-terminated C string (or is null)
+/// - `result` points to a buffer of at least `*result_len` bytes
+/// - `result_len` points to a valid `usize` value
 #[no_mangle]
 pub unsafe extern "C" fn x402_generate_json_response(
     requirements_json: *const c_char,
@@ -345,10 +384,9 @@ pub unsafe extern "C" fn x402_generate_json_response(
     let error = if error_msg.is_null() {
         "X-PAYMENT header is required"
     } else {
-        match CStr::from_ptr(error_msg).to_str() {
-            Ok(s) => s,
-            Err(_) => "X-PAYMENT header is required",
-        }
+        CStr::from_ptr(error_msg)
+            .to_str()
+            .unwrap_or("X-PAYMENT header is required")
     };
 
     let response = PaymentRequirementsResponse::new(error, requirements);
@@ -381,6 +419,13 @@ pub unsafe extern "C" fn x402_generate_json_response(
 /// # Returns
 /// - `1` if browser request
 /// - `0` if API request
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences raw pointers.
+/// The caller must ensure:
+/// - `user_agent` points to a valid null-terminated C string (or is null)
+/// - `accept` points to a valid null-terminated C string (or is null)
 #[no_mangle]
 pub unsafe extern "C" fn x402_is_browser_request(
     user_agent: *const c_char,
@@ -467,4 +512,3 @@ mod tests {
         assert!(result_str.contains("base-sepolia"));
     }
 }
-
