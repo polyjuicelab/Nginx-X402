@@ -1,7 +1,21 @@
+# Rust build artifacts
 /target
-Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# Cargo lock file (keep for binary projects)
+# Cargo.lock
+
+# Editor files
 *.swp
 *.swo
 *~
 .DS_Store
+.idea/
+.vscode/
+
+# Nginx build artifacts
+*.so
+*.dylib
+*.dll
 

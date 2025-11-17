@@ -21,15 +21,11 @@ serde_json = "1.0"
 rust_decimal = "1.36"
 serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "1.0", features = ["rt", "rt-multi-thread"] }
+ngx = "0.5"
 
 [features]
 default = []
-ngx-rust = ["dep:ngx"]
-ngx-rust-vendored = ["ngx-rust", "ngx/vendored"]
-
-[dependencies.ngx]
-version = "0.5"
-optional = true
+vendored = ["ngx/vendored"]
 
 [dev-dependencies]
 rust-x402 = "0.2.2"

@@ -9,12 +9,13 @@
 //! The module can be compiled as a dynamic library and loaded directly by Nginx.
 
 pub mod config;
-
-#[cfg(feature = "ngx-rust")]
 pub mod ngx_module;
 
-#[cfg(feature = "ngx-rust")]
-pub use ngx_module::{ParsedX402Config, X402Config};
+// Re-export validation functions for testing
+pub use config::validation;
+
+// Re-export ngx_module types and functions
+pub use ngx_module::{validate_payment_header, ParsedX402Config, X402Config};
 
 // Re-export commonly used types
 pub use config::NginxX402Config;
