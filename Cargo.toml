@@ -1,0 +1,27 @@
+[package]
+name = "nginx-x402"
+version = "0.1.0"
+edition = "2021"
+description = "Nginx FFI module for x402 HTTP micropayment protocol"
+authors = ["Ryan Kung <ryan@example.com>"]
+license = "AGPL-3.0"
+repository = "https://github.com/RyanKung/nginx-x402"
+homepage = "https://x402.org"
+keywords = ["nginx", "payment", "micropayment", "x402", "ffi"]
+categories = ["api-bindings", "web-programming"]
+readme = "README.md"
+
+[lib]
+name = "nginx_x402"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+rust-x402 = { path = "../rust-x402", version = "0.2.2" }
+serde_json = "1.0"
+rust_decimal = "1.36"
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "1.0", features = ["rt", "rt-multi-thread"] }
+
+[dev-dependencies]
+rust-x402 = { path = "../rust-x402", version = "0.2.2", features = ["nginx"] }
+
