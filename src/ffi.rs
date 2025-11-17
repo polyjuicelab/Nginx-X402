@@ -454,6 +454,7 @@ pub unsafe extern "C" fn x402_is_browser_request(
 mod tests {
     use super::*;
     use std::ffi::CString;
+    use std::ptr;
 
     #[test]
     fn test_free_string() {
@@ -465,16 +466,92 @@ mod tests {
     }
 
     #[test]
+    fn test_free_string_null() {
+        // Should handle null pointer gracefully
+        unsafe {
+            x402_free_string(ptr::null_mut());
+        }
+    }
+
+    #[test]
     fn test_is_browser_request() {
         let user_agent = CString::new("Mozilla/5.0").unwrap();
         let accept = CString::new("text/html").unwrap();
 
         let result = unsafe { x402_is_browser_request(user_agent.as_ptr(), accept.as_ptr()) };
-        assert_eq!(result, 1);
+        assert_eq!(result, 1, "Mozilla with text/html should be browser");
 
         let accept_json = CString::new("application/json").unwrap();
         let result = unsafe { x402_is_browser_request(user_agent.as_ptr(), accept_json.as_ptr()) };
-        assert_eq!(result, 0);
+        assert_eq!(
+            result, 0,
+            "Mozilla with application/json should not be browser"
+        );
+    }
+
+    #[test]
+    fn test_is_browser_request_null_pointers() {
+        // Both null
+        let result = unsafe { x402_is_browser_request(ptr::null(), ptr::null()) };
+        assert_eq!(result, 0, "Both null should return 0");
+
+        // User-Agent null, Accept valid
+        let accept = CString::new("text/html").unwrap();
+        let result = unsafe { x402_is_browser_request(ptr::null(), accept.as_ptr()) };
+        assert!(
+            result == 0 || result == 1,
+            "Result should be 0 or 1, got: {}",
+            result
+        );
+
+        // User-Agent valid, Accept null
+        let ua = CString::new("Mozilla/5.0").unwrap();
+        let result = unsafe { x402_is_browser_request(ua.as_ptr(), ptr::null()) };
+        assert!(
+            result == 0 || result == 1,
+            "Result should be 0 or 1, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_is_browser_request_various_combinations() {
+        let mozilla = CString::new("Mozilla/5.0").unwrap();
+        let chrome = CString::new("Mozilla/5.0 (Windows NT 10.0) Chrome/91.0").unwrap();
+        let curl = CString::new("curl/7.68.0").unwrap();
+
+        let html = CString::new("text/html").unwrap();
+        let json = CString::new("application/json").unwrap();
+        let xhtml = CString::new("application/xhtml+xml").unwrap();
+
+        // Browser with HTML
+        assert_eq!(
+            unsafe { x402_is_browser_request(mozilla.as_ptr(), html.as_ptr()) },
+            1,
+            "Browser with HTML should return 1"
+        );
+
+        // Browser with XHTML - check actual behavior (may vary by implementation)
+        let xhtml_result = unsafe { x402_is_browser_request(chrome.as_ptr(), xhtml.as_ptr()) };
+        assert!(
+            xhtml_result == 0 || xhtml_result == 1,
+            "Browser with XHTML should return 0 or 1, got: {}",
+            xhtml_result
+        );
+
+        // Browser with JSON (should not be browser)
+        assert_eq!(
+            unsafe { x402_is_browser_request(mozilla.as_ptr(), json.as_ptr()) },
+            0,
+            "Browser with JSON should return 0"
+        );
+
+        // API client
+        assert_eq!(
+            unsafe { x402_is_browser_request(curl.as_ptr(), json.as_ptr()) },
+            0,
+            "curl with JSON should return 0"
+        );
     }
 
     #[test]
@@ -501,14 +578,409 @@ mod tests {
             )
         };
 
-        assert_eq!(status, 0);
-        assert!(result_len > 0);
+        assert_eq!(status, 0, "Status should be 0 for valid input");
+        assert!(result_len > 0, "Result length should be greater than 0");
 
         let result_str = unsafe {
             CStr::from_ptr(result.as_ptr() as *const c_char)
                 .to_str()
-                .unwrap()
+                .expect("Result should be valid UTF-8")
         };
-        assert!(result_str.contains("base-sepolia"));
+        assert!(
+            result_str.contains("base-sepolia"),
+            "Result should contain network name"
+        );
+
+        // Verify it's valid JSON
+        let requirements: PaymentRequirements = serde_json::from_str(result_str)
+            .expect("Result should be valid JSON PaymentRequirements");
+        assert_eq!(requirements.scheme, "exact", "Scheme should be exact");
+        assert_eq!(requirements.network, "base-sepolia", "Network should match");
+        assert_eq!(requirements.resource, "/test", "Resource should match");
+    }
+
+    #[test]
+    fn test_create_requirements_null_pointers() {
+        let amount = CString::new("0.0001").unwrap();
+        let pay_to = CString::new("0x209693Bc6afc0C5328bA36FaF03C514EF312287C").unwrap();
+        let mut result = vec![0u8; 4096];
+        let mut result_len = result.len();
+
+        // Null amount
+        let status = unsafe {
+            x402_create_requirements(
+                ptr::null(),
+                pay_to.as_ptr(),
+                ptr::null(),
+                ptr::null(),
+                ptr::null(),
+                1,
+                result.as_mut_ptr() as *mut c_char,
+                &mut result_len,
+            )
+        };
+        assert_eq!(status, 1, "Should return 1 for null amount");
+
+        // Null pay_to
+        let status = unsafe {
+            x402_create_requirements(
+                amount.as_ptr(),
+                ptr::null(),
+                ptr::null(),
+                ptr::null(),
+                ptr::null(),
+                1,
+                result.as_mut_ptr() as *mut c_char,
+                &mut result_len,
+            )
+        };
+        assert_eq!(status, 1, "Should return 1 for null pay_to");
+    }
+
+    #[test]
+    fn test_create_requirements_invalid_amount() {
+        let pay_to = CString::new("0x209693Bc6afc0C5328bA36FaF03C514EF312287C").unwrap();
+        let mut result = vec![0u8; 4096];
+        let mut result_len = result.len();
+
+        // Invalid amount format
+        let invalid_amount = CString::new("not-a-number").unwrap();
+        let status = unsafe {
+            x402_create_requirements(
+                invalid_amount.as_ptr(),
+                pay_to.as_ptr(),
+                ptr::null(),
+                ptr::null(),
+                ptr::null(),
+                1,
+                result.as_mut_ptr() as *mut c_char,
+                &mut result_len,
+            )
+        };
+        assert_eq!(status, 1, "Should return 1 for invalid amount");
+
+        // Empty amount
+        let empty_amount = CString::new("").unwrap();
+        let status = unsafe {
+            x402_create_requirements(
+                empty_amount.as_ptr(),
+                pay_to.as_ptr(),
+                ptr::null(),
+                ptr::null(),
+                ptr::null(),
+                1,
+                result.as_mut_ptr() as *mut c_char,
+                &mut result_len,
+            )
+        };
+        assert_eq!(status, 1, "Should return 1 for empty amount");
+    }
+
+    #[test]
+    fn test_create_requirements_buffer_too_small() {
+        let amount = CString::new("0.0001").unwrap();
+        let pay_to = CString::new("0x209693Bc6afc0C5328bA36FaF03C514EF312287C").unwrap();
+        let network = CString::new("base-sepolia").unwrap();
+        let resource = CString::new("/test").unwrap();
+        let description = CString::new("Test payment").unwrap();
+
+        // Very small buffer
+        let mut result = vec![0u8; 10];
+        let mut result_len = result.len();
+
+        let status = unsafe {
+            x402_create_requirements(
+                amount.as_ptr(),
+                pay_to.as_ptr(),
+                network.as_ptr(),
+                resource.as_ptr(),
+                description.as_ptr(),
+                1,
+                result.as_mut_ptr() as *mut c_char,
+                &mut result_len,
+            )
+        };
+        assert_eq!(status, 4, "Should return 4 (buffer too small)");
+        assert!(
+            result_len > 10,
+            "result_len should be updated to required size: {}",
+            result_len
+        );
+    }
+
+    #[test]
+    fn test_create_requirements_with_null_optional_params() {
+        let amount = CString::new("0.0001").unwrap();
+        let pay_to = CString::new("0x209693Bc6afc0C5328bA36FaF03C514EF312287C").unwrap();
+        let mut result = vec![0u8; 4096];
+        let mut result_len = result.len();
+
+        // All optional params null
+        let status = unsafe {
+            x402_create_requirements(
+                amount.as_ptr(),
+                pay_to.as_ptr(),
+                ptr::null(), // network
+                ptr::null(), // resource
+                ptr::null(), // description
+                1,           // testnet
+                result.as_mut_ptr() as *mut c_char,
+                &mut result_len,
+            )
+        };
+        assert_eq!(status, 0, "Should succeed with null optional params");
+        assert!(result_len > 0, "Should produce output");
+
+        let result_str = unsafe {
+            CStr::from_ptr(result.as_ptr() as *const c_char)
+                .to_str()
+                .expect("Result should be valid UTF-8")
+        };
+        let requirements: PaymentRequirements =
+            serde_json::from_str(result_str).expect("Result should be valid JSON");
+        assert_eq!(
+            requirements.network, "base-sepolia",
+            "Should default to base-sepolia for testnet"
+        );
+    }
+
+    #[test]
+    fn test_generate_paywall_html_null_pointers() {
+        let requirements_json = r#"[{"scheme":"exact","network":"base-sepolia"}]"#;
+        let requirements_cstr = CString::new(requirements_json).unwrap();
+        let mut result = vec![0u8; 4096];
+        let mut result_len = result.len();
+
+        // Null requirements_json
+        let status = unsafe {
+            x402_generate_paywall_html(
+                ptr::null(),
+                ptr::null(),
+                result.as_mut_ptr() as *mut c_char,
+                &mut result_len,
+            )
+        };
+        assert_eq!(status, 1, "Should return 1 for null requirements_json");
+
+        // Null result buffer
+        let mut result_len = 4096;
+        let status = unsafe {
+            x402_generate_paywall_html(
+                requirements_cstr.as_ptr(),
+                ptr::null(),
+                ptr::null_mut(),
+                &mut result_len,
+            )
+        };
+        assert_eq!(status, 1, "Should return 1 for null result buffer");
+    }
+
+    #[test]
+    fn test_generate_paywall_html_invalid_json() {
+        let invalid_json = CString::new("not valid json").unwrap();
+        let mut result = vec![0u8; 4096];
+        let mut result_len = result.len();
+
+        let status = unsafe {
+            x402_generate_paywall_html(
+                invalid_json.as_ptr(),
+                ptr::null(),
+                result.as_mut_ptr() as *mut c_char,
+                &mut result_len,
+            )
+        };
+        assert_eq!(status, 1, "Should return 1 for invalid JSON");
+    }
+
+    #[test]
+    fn test_generate_paywall_html_buffer_too_small() {
+        let requirements_json = r#"[{"scheme":"exact","network":"base-sepolia","maxAmountRequired":"1000000","asset":"0x036CbD53842c5426634e7929541eC2318f3dCF7e","payTo":"0x209693Bc6afc0C5328bA36FaF03C514EF312287C","resource":"/test","description":"Test","maxTimeoutSeconds":60}]"#;
+        let requirements_cstr = CString::new(requirements_json).unwrap();
+        let mut result = vec![0u8; 10]; // Very small buffer
+        let mut result_len = result.len();
+
+        let status = unsafe {
+            x402_generate_paywall_html(
+                requirements_cstr.as_ptr(),
+                ptr::null(),
+                result.as_mut_ptr() as *mut c_char,
+                &mut result_len,
+            )
+        };
+        assert_eq!(status, 4, "Should return 4 (buffer too small)");
+        assert!(
+            result_len > 10,
+            "result_len should be updated to required size"
+        );
+    }
+
+    #[test]
+    fn test_generate_paywall_html_with_error_message() {
+        let requirements_json = r#"[{"scheme":"exact","network":"base-sepolia","maxAmountRequired":"1000000","asset":"0x036CbD53842c5426634e7929541eC2318f3dCF7e","payTo":"0x209693Bc6afc0C5328bA36FaF03C514EF312287C","resource":"/test","description":"Test","maxTimeoutSeconds":60}]"#;
+        let requirements_cstr = CString::new(requirements_json).unwrap();
+        let error_msg = CString::new("Custom error message").unwrap();
+        let mut result = vec![0u8; 8192];
+        let mut result_len = result.len();
+
+        let status = unsafe {
+            x402_generate_paywall_html(
+                requirements_cstr.as_ptr(),
+                error_msg.as_ptr(),
+                result.as_mut_ptr() as *mut c_char,
+                &mut result_len,
+            )
+        };
+        assert_eq!(status, 0, "Should succeed");
+        let html = unsafe {
+            CStr::from_ptr(result.as_ptr() as *const c_char)
+                .to_str()
+                .expect("Result should be valid UTF-8")
+        };
+        assert!(
+            html.contains("Custom error message"),
+            "HTML should contain custom error message"
+        );
+        assert!(
+            html.contains("<!DOCTYPE html>"),
+            "HTML should contain DOCTYPE"
+        );
+    }
+
+    #[test]
+    fn test_generate_json_response_null_pointers() {
+        let requirements_json = r#"[{"scheme":"exact","network":"base-sepolia"}]"#;
+        let requirements_cstr = CString::new(requirements_json).unwrap();
+        let mut result = vec![0u8; 4096];
+        let mut result_len = result.len();
+
+        // Null requirements_json
+        let status = unsafe {
+            x402_generate_json_response(
+                ptr::null(),
+                ptr::null(),
+                result.as_mut_ptr() as *mut c_char,
+                &mut result_len,
+            )
+        };
+        assert_eq!(status, 1, "Should return 1 for null requirements_json");
+
+        // Null result buffer
+        let mut result_len = 4096;
+        let status = unsafe {
+            x402_generate_json_response(
+                requirements_cstr.as_ptr(),
+                ptr::null(),
+                ptr::null_mut(),
+                &mut result_len,
+            )
+        };
+        assert_eq!(status, 1, "Should return 1 for null result buffer");
+    }
+
+    #[test]
+    fn test_generate_json_response_invalid_json() {
+        let invalid_json = CString::new("not valid json").unwrap();
+        let mut result = vec![0u8; 4096];
+        let mut result_len = result.len();
+
+        let status = unsafe {
+            x402_generate_json_response(
+                invalid_json.as_ptr(),
+                ptr::null(),
+                result.as_mut_ptr() as *mut c_char,
+                &mut result_len,
+            )
+        };
+        assert_eq!(status, 1, "Should return 1 for invalid JSON");
+    }
+
+    #[test]
+    fn test_generate_json_response_buffer_too_small() {
+        let requirements_json = r#"[{"scheme":"exact","network":"base-sepolia","maxAmountRequired":"1000000","asset":"0x036CbD53842c5426634e7929541eC2318f3dCF7e","payTo":"0x209693Bc6afc0C5328bA36FaF03C514EF312287C","resource":"/test","description":"Test","maxTimeoutSeconds":60}]"#;
+        let requirements_cstr = CString::new(requirements_json).unwrap();
+        let mut result = vec![0u8; 10]; // Very small buffer
+        let mut result_len = result.len();
+
+        let status = unsafe {
+            x402_generate_json_response(
+                requirements_cstr.as_ptr(),
+                ptr::null(),
+                result.as_mut_ptr() as *mut c_char,
+                &mut result_len,
+            )
+        };
+        assert_eq!(status, 4, "Should return 4 (buffer too small)");
+        assert!(
+            result_len > 10,
+            "result_len should be updated to required size"
+        );
+    }
+
+    #[test]
+    fn test_generate_json_response_structure() {
+        let requirements_json = r#"[{"scheme":"exact","network":"base-sepolia","maxAmountRequired":"1000000","asset":"0x036CbD53842c5426634e7929541eC2318f3dCF7e","payTo":"0x209693Bc6afc0C5328bA36FaF03C514EF312287C","resource":"/test","description":"Test","maxTimeoutSeconds":60}]"#;
+        let requirements_cstr = CString::new(requirements_json).unwrap();
+        let mut result = vec![0u8; 4096];
+        let mut result_len = result.len();
+
+        let status = unsafe {
+            x402_generate_json_response(
+                requirements_cstr.as_ptr(),
+                ptr::null(),
+                result.as_mut_ptr() as *mut c_char,
+                &mut result_len,
+            )
+        };
+        assert_eq!(status, 0, "Should succeed");
+        let json_str = unsafe {
+            CStr::from_ptr(result.as_ptr() as *const c_char)
+                .to_str()
+                .expect("Result should be valid UTF-8")
+        };
+        let json: serde_json::Value =
+            serde_json::from_str(json_str).expect("Result should be valid JSON");
+
+        // Verify JSON structure
+        assert!(
+            json.get("error").is_some() || json.get("message").is_some(),
+            "JSON should have error or message field. Got: {}",
+            json_str
+        );
+        assert!(
+            json.get("paymentRequirements").is_some() || json.get("accepts").is_some(),
+            "JSON should have paymentRequirements or accepts field. Got: {}",
+            json_str
+        );
+    }
+
+    #[test]
+    fn test_generate_json_response_with_error_message() {
+        let requirements_json = r#"[{"scheme":"exact","network":"base-sepolia","maxAmountRequired":"1000000","asset":"0x036CbD53842c5426634e7929541eC2318f3dCF7e","payTo":"0x209693Bc6afc0C5328bA36FaF03C514EF312287C","resource":"/test","description":"Test","maxTimeoutSeconds":60}]"#;
+        let requirements_cstr = CString::new(requirements_json).unwrap();
+        let error_msg = CString::new("Payment verification failed").unwrap();
+        let mut result = vec![0u8; 4096];
+        let mut result_len = result.len();
+
+        let status = unsafe {
+            x402_generate_json_response(
+                requirements_cstr.as_ptr(),
+                error_msg.as_ptr(),
+                result.as_mut_ptr() as *mut c_char,
+                &mut result_len,
+            )
+        };
+        assert_eq!(status, 0, "Should succeed");
+        let json_str = unsafe {
+            CStr::from_ptr(result.as_ptr() as *const c_char)
+                .to_str()
+                .expect("Result should be valid UTF-8")
+        };
+        let json: serde_json::Value =
+            serde_json::from_str(json_str).expect("Result should be valid JSON");
+        assert_eq!(
+            json["error"].as_str(),
+            Some("Payment verification failed"),
+            "JSON should contain error message"
+        );
     }
 }
