@@ -1691,6 +1691,8 @@ dependencies = [
 [[package]]
 name = "rust-x402"
 version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d4eab0acfbd3f59649ec3b13f25b6ce9b1af6bb88ffefda52e66f0d1ae60741"
 dependencies = [
  "async-trait",
  "axum",
