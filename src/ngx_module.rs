@@ -87,10 +87,10 @@ use rust_x402::{
     types::{FacilitatorConfig, PaymentPayload, PaymentRequirements, PaymentRequirementsResponse},
 };
 use serde_json;
+use std::ffi::c_char;
 use std::str::FromStr;
 use std::sync::OnceLock;
 use std::time::Duration;
-use std::ffi::c_char;
 
 /// User-facing error messages (safe to expose to clients)
 pub mod user_errors {
@@ -669,7 +669,10 @@ pub async fn verify_payment(
 /// - Returns error if pay_to address is not configured
 /// - Returns error if network is not supported
 /// - Returns error if USDC info cannot be set
-pub fn create_requirements(config: &ParsedX402Config, resource: &str) -> Result<PaymentRequirements> {
+pub fn create_requirements(
+    config: &ParsedX402Config,
+    resource: &str,
+) -> Result<PaymentRequirements> {
     use rust_x402::types::networks;
 
     // Validate required fields
@@ -784,9 +787,7 @@ pub fn send_402_response(
     if is_browser {
         // Send HTML paywall
         // Use error_msg if provided, otherwise use config description, otherwise use empty string
-        let error_message = error_msg
-            .or(config.description.as_deref())
-            .unwrap_or("");
+        let error_message = error_msg.or(config.description.as_deref()).unwrap_or("");
         let html = generate_paywall_html(error_message, requirements, None);
 
         // Set Content-Type header
@@ -798,9 +799,7 @@ pub fn send_402_response(
     } else {
         // Send JSON response
         // Use error_msg if provided, otherwise use config description, otherwise use empty string
-        let error_message = error_msg
-            .or(config.description.as_deref())
-            .unwrap_or("");
+        let error_message = error_msg.or(config.description.as_deref()).unwrap_or("");
         let response = PaymentRequirementsResponse::new(error_message, requirements.to_vec());
         let json = serde_json::to_string(&response)
             .map_err(|_| ConfigError::from("Failed to serialize response"))?;
