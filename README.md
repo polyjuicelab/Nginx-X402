@@ -1,82 +1,119 @@
 # nginx-x402
 
-Nginx FFI module for x402 HTTP micropayment protocol.
+Pure Rust implementation of Nginx module for x402 HTTP micropayment protocol.
 
 ## Overview
 
-This project provides C-compatible FFI bindings that allow Nginx to verify x402 payments and return 402 Payment Required responses. The module is designed to be used with Nginx C modules.
+This project provides a **pure Rust** Nginx module that can be loaded directly by Nginx. The module implements the x402 payment verification protocol using the official [ngx-rust](https://github.com/nginx/ngx-rust) crate.
 
 ## Architecture
 
-The Nginx integration uses a hybrid approach:
-- **FFI Module** (`src/ffi.rs`) - C-compatible functions for payment operations
-- **Nginx C Module** - C module that calls FFI functions (to be implemented)
+Uses the official [ngx-rust](https://github.com/nginx/ngx-rust) crate to implement the module entirely in Rust. **No C wrapper needed!**
+
+- ✅ 100% Rust implementation
+- ✅ Type-safe Nginx API bindings
+- ✅ Official Nginx support
+- ⚠️ Requires Nginx source code for building
 
 ## Prerequisites
 
-- Rust toolchain (latest stable)
-- Nginx development headers (for C module integration)
-- `rust-x402` library (dependency)
+- Rust toolchain (latest stable, 1.81.0+)
+- `rust-x402` library (from crates.io)
+- **Option A (Recommended)**: Nginx source code (same version as production)
+  - Set `NGINX_SOURCE_DIR` or `NGINX_BUILD_DIR` environment variable
+- **Option B (Convenient)**: Use `vendored` feature to auto-download Nginx source
+  - No manual Nginx source needed, but may not match production version
+- libclang (for bindgen)
 
 ## Building
 
+### Method A: With Nginx Source (Recommended for Production)
+
 ```bash
-# Build the library
-cargo build --release
+# Set Nginx source directory (use same version as production)
+export NGINX_SOURCE_DIR=/path/to/nginx-1.29.1
+
+# Build with ngx-rust feature
+cargo build --release --features ngx-rust
+
+# The module will be at:
+# target/aarch64-apple-darwin/release/libnginx_x402.dylib (macOS)
+# target/x86_64-unknown-linux-gnu/release/libnginx_x402.so (Linux)
 ```
 
-The library will be built as:
-- `libnginx_x402.so` (Linux)
-- `libnginx_x402.dylib` (macOS)
+### Method B: Auto-download Nginx Source (Convenient for Development)
 
-## Usage
+```bash
+# No Nginx source needed! ngx-rust will download it automatically
+cargo build --release --features ngx-rust-vendored
+```
 
-### From Nginx C Module
+**Note**: The `vendored` feature downloads a default Nginx version. For production, use Method A with the exact Nginx version you'll deploy.
 
-```c
-#include "nginx/x402_ffi.h"
+### Load Module in Nginx
 
-// Verify payment
-char result[4096];
-size_t result_len = sizeof(result);
-int status = x402_verify_payment(
-    payment_b64, requirements_json, facilitator_url,
-    result, &result_len
-);
+Add to your `nginx.conf`:
 
-if (status == 0) {
-    // Payment is valid, proceed with request
-} else if (status == 2) {
-    // Payment verification failed, return 402
+```nginx
+load_module /path/to/libnginx_x402.so;
+
+http {
+    server {
+        location /protected {
+            x402 on;
+            x402_amount 0.0001;
+            x402_pay_to 0x209693Bc6afc0C5328bA36FaF03C514EF312287C;
+            x402_facilitator_url https://x402.org/facilitator;
+        }
+    }
 }
 ```
 
-## FFI Functions
+## Configuration Directives
 
-See `nginx/x402_ffi.h` for complete function documentation.
-
-### Main Functions
-
-- `x402_verify_payment` - Verify a payment payload
-- `x402_create_requirements` - Create payment requirements JSON
-- `x402_generate_paywall_html` - Generate HTML paywall page
-- `x402_generate_json_response` - Generate JSON 402 response
-- `x402_is_browser_request` - Detect browser vs API client
-- `x402_free_string` - Free allocated strings
-
-## Configuration
-
-See `nginx/example.conf` for Nginx configuration examples.
+- `x402 on|off` - Enable/disable x402 payment verification
+- `x402_amount <amount>` - Payment amount (e.g., "0.0001")
+- `x402_pay_to <address>` - Recipient wallet address
+- `x402_facilitator_url <url>` - Facilitator service URL
+- `x402_testnet on|off` - Use testnet (default: on)
+- `x402_description <text>` - Payment description
+- `x402_network <network>` - Network identifier (e.g., "base-sepolia")
+- `x402_resource <path>` - Resource path (default: request URI)
 
 ## Testing
 
-Run all tests:
+### Rust Tests
 
 ```bash
+# Run all tests
 cargo test
+
+# Run ngx-rust module tests
+cargo test --test ngx_module_tests
 ```
+
+The core payment verification logic is fully testable without requiring Nginx source code. See `tests/ngx_module_tests.rs` for examples.
+
+### Test::Nginx Tests
+
+```bash
+# Build the library first
+cargo build --release --features ngx-rust
+
+# Run Test::Nginx tests (requires Nginx source)
+./go.sh t/*.t
+```
+
+## How It Works
+
+### Pure Rust (ngx-rust) Approach
+
+1. **Request arrives** → Nginx calls Rust handler directly
+2. **Rust handler** → Gets module configuration, verifies payment
+3. **Payment verified** → Sends 402 response or allows request to proceed
+
+**Status**: Core logic complete ✅, module registration framework ready ⚠️ (needs ngx-rust 0.5 API verification)
 
 ## License
 
 AGPL-3.0
-

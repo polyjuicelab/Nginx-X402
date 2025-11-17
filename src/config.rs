@@ -4,7 +4,6 @@ use rust_decimal::Decimal;
 use rust_x402::types::PaymentRequirements;
 use rust_x402::{Result, X402Error};
 use serde::{Deserialize, Serialize};
-use std::ffi::CStr;
 use std::str::FromStr;
 
 /// Configuration for Nginx x402 module
@@ -96,53 +95,11 @@ impl NginxX402Config {
 
         Ok(requirements)
     }
-
-    /// Create from C strings (for FFI)
-    ///
-    /// # Safety
-    ///
-    /// This function is unsafe because it dereferences raw pointers.
-    /// The caller must ensure that all pointers are valid and point to
-    /// null-terminated C strings.
-    pub unsafe fn from_c_strings(
-        amount: *const std::ffi::c_char,
-        pay_to: *const std::ffi::c_char,
-        facilitator_url: *const std::ffi::c_char,
-        testnet: bool,
-    ) -> Result<Self> {
-        let amount_str = CStr::from_ptr(amount)
-            .to_str()
-            .map_err(|_| X402Error::config("Invalid amount string"))?;
-        let amount_decimal = Decimal::from_str(amount_str)
-            .map_err(|e| X402Error::config(format!("Invalid amount: {}", e)))?;
-
-        let pay_to_str = CStr::from_ptr(pay_to)
-            .to_str()
-            .map_err(|_| X402Error::config("Invalid pay_to string"))?;
-
-        let facilitator_url_str = if facilitator_url.is_null() {
-            "https://x402.org/facilitator".to_string()
-        } else {
-            CStr::from_ptr(facilitator_url)
-                .to_str()
-                .map_err(|_| X402Error::config("Invalid facilitator_url string"))?
-                .to_string()
-        };
-
-        Ok(Self {
-            amount: amount_decimal,
-            pay_to: pay_to_str.to_string(),
-            facilitator_url: facilitator_url_str,
-            testnet,
-            ..Default::default()
-        })
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::ffi::CString;
 
     #[test]
     fn test_config_creation() {
@@ -315,75 +272,6 @@ mod tests {
             requirements.pay_to, "0x209693bc6afc0c5328ba36faf03c514ef312287c",
             "Pay-to address should be lowercase"
         );
-    }
-
-    #[test]
-    fn test_from_c_strings_valid() {
-        let amount = CString::new("0.0001").unwrap();
-        let pay_to = CString::new("0x209693Bc6afc0C5328bA36FaF03C514EF312287C").unwrap();
-        let facilitator = CString::new("https://custom-facilitator.com").unwrap();
-
-        let config = unsafe {
-            NginxX402Config::from_c_strings(
-                amount.as_ptr(),
-                pay_to.as_ptr(),
-                facilitator.as_ptr(),
-                true,
-            )
-        }
-        .expect("Should create config from valid C strings");
-
-        assert_eq!(
-            config.amount,
-            Decimal::from_str("0.0001").unwrap(),
-            "Amount should match"
-        );
-        assert_eq!(
-            config.pay_to, "0x209693Bc6afc0C5328bA36FaF03C514EF312287C",
-            "Pay-to should match"
-        );
-        assert_eq!(
-            config.facilitator_url, "https://custom-facilitator.com",
-            "Facilitator URL should match"
-        );
-        assert!(config.testnet, "Testnet should be true");
-    }
-
-    #[test]
-    fn test_from_c_strings_null_facilitator() {
-        let amount = CString::new("0.0001").unwrap();
-        let pay_to = CString::new("0x209693Bc6afc0C5328bA36FaF03C514EF312287C").unwrap();
-
-        let config = unsafe {
-            NginxX402Config::from_c_strings(
-                amount.as_ptr(),
-                pay_to.as_ptr(),
-                std::ptr::null(),
-                true,
-            )
-        }
-        .expect("Should create config with null facilitator URL");
-
-        assert_eq!(
-            config.facilitator_url, "https://x402.org/facilitator",
-            "Should use default facilitator URL"
-        );
-    }
-
-    #[test]
-    fn test_from_c_strings_invalid_amount() {
-        let invalid_amount = CString::new("not-a-number").unwrap();
-        let pay_to = CString::new("0x209693Bc6afc0C5328bA36FaF03C514EF312287C").unwrap();
-
-        let result = unsafe {
-            NginxX402Config::from_c_strings(
-                invalid_amount.as_ptr(),
-                pay_to.as_ptr(),
-                std::ptr::null(),
-                true,
-            )
-        };
-        assert!(result.is_err(), "Should return error for invalid amount");
     }
 
     #[test]
