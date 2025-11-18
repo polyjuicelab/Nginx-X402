@@ -59,7 +59,7 @@ override_dh_auto_install:
 	else \
 		find target -name "libnginx_x402.so" -type f | head -1 | xargs -I {} cp {} debian/nginx-x402/usr/lib/nginx/modules/libnginx_x402.so || \
 		find target -name "libnginx_x402.dylib" -type f | head -1 | xargs -I {} cp {} debian/nginx-x402/usr/lib/nginx/modules/libnginx_x402.so || \
-		cp target/release/libnginx_x402.so debian/nginx-x402/usr/lib/nginx/modules/ || \
+	cp target/release/libnginx_x402.so debian/nginx-x402/usr/lib/nginx/modules/ || \
 		cp target/*/release/libnginx_x402.so debian/nginx-x402/usr/lib/nginx/modules/ || true; \
 	fi
 	# Copy documentation

@@ -71,11 +71,14 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<(
         );
         e
     })?;
-    let requirements_vec = vec![requirements.clone()];
+    // Create slice reference for send_402_response (supports multiple requirements)
+    let requirements_slice = std::slice::from_ref(&requirements);
 
     // Record payment amount metric (convert from smallest units to decimal units)
     if let Ok(amount_decimal) = requirements.amount_in_decimal_units(6) {
-        if let Ok(amount_f64) = amount_decimal.to_string().parse::<f64>() {
+        // Convert Decimal to f64 for metrics
+        // Use to_f64_retain() to preserve precision, or fallback to to_f64()
+        if let Some(amount_f64) = amount_decimal.to_f64() {
             metrics.record_payment_amount(amount_f64);
         }
     }
@@ -159,7 +162,7 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<(
             metrics.record_402_response();
             send_402_response(
                 r,
-                &requirements_vec,
+                requirements_slice,
                 config,
                 Some(user_errors::PAYMENT_VERIFICATION_FAILED),
             )?;
@@ -169,7 +172,7 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<(
         // No payment header, send 402
         log_debug(Some(r), "No X-PAYMENT header found, sending 402 response");
         metrics.record_402_response();
-        send_402_response(r, &requirements_vec, config, None)?;
+        send_402_response(r, requirements_slice, config, None)?;
         Ok(())
     }
 }
@@ -242,7 +245,13 @@ pub fn x402_metrics_handler_impl(req: &mut Request) -> Status {
     }
 
     // Set status to 200 OK
-    req.set_status(HTTPStatus::from_u16(200).unwrap());
+    // HTTP 200 is always valid, but handle error case gracefully
+    if let Ok(status) = HTTPStatus::from_u16(200) {
+        req.set_status(status);
+    } else {
+        log_error(Some(req), "Failed to set status code 200 for metrics");
+        return Status::NGX_ERROR;
+    }
 
     // Send metrics response
     match send_response_body(req, metrics_text.as_bytes()) {

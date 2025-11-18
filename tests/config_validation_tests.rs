@@ -101,7 +101,8 @@ mod tests {
         let error = result.err().map(|e| e.to_string()).unwrap_or_default();
         // Validation checks length first, then prefix
         assert!(
-            error.contains("must start with 0x") || error.contains("Invalid Ethereum address length"),
+            error.contains("must start with 0x")
+                || error.contains("Invalid Ethereum address length"),
             "Error should mention 0x prefix or length issue, got: {}",
             error
         );

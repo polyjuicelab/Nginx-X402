@@ -101,9 +101,20 @@ impl X402Metrics {
     }
 
     /// Get the global metrics instance
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if metrics initialization fails. This is intentional
+    /// because metrics are essential for monitoring and the module cannot function
+    /// properly without them. In practice, Prometheus metrics initialization rarely fails
+    /// unless there's a serious system issue (e.g., memory exhaustion).
     pub fn get() -> &'static Self {
         static METRICS: OnceLock<X402Metrics> = OnceLock::new();
-        METRICS.get_or_init(|| X402Metrics::new().expect("Failed to initialize Prometheus metrics"))
+        METRICS.get_or_init(|| {
+            X402Metrics::new().expect(
+                "Failed to initialize Prometheus metrics - this indicates a serious system issue",
+            )
+        })
     }
 
     /// Record a request being processed
