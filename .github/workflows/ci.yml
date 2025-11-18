@@ -289,20 +289,13 @@ jobs:
           if [ "${{ matrix.arch }}" != "x86_64" ]; then
             if [ "${{ matrix.arch }}" = "aarch64" ]; then
               # Enable multiarch support for arm64
-              sudo dpkg --add-architecture arm64 || true
-              sudo apt-get update || true
-              # Install cross-compilation toolchain
+              sudo dpkg --add-architecture arm64
+              sudo apt-get update
+              # Install cross-compilation toolchain using crossbuild-essential (like debian build)
               sudo apt-get install -y \
-                gcc-aarch64-linux-gnu \
-                g++-aarch64-linux-gnu \
-                libc6-dev-arm64-cross \
+                crossbuild-essential-arm64 \
                 libssl-dev:arm64 \
                 pkg-config-aarch64-linux-gnu || true
-              # Try crossbuild-essential if individual packages fail
-              if ! command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
-                echo "Trying crossbuild-essential-arm64..."
-                sudo apt-get install -y crossbuild-essential-arm64 || true
-              fi
               # Verify installation
               if ! command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
                 echo "Error: Failed to install aarch64-linux-gnu-gcc"
@@ -314,20 +307,13 @@ jobs:
               echo "Successfully installed: $(which aarch64-linux-gnu-gcc)"
             elif [ "${{ matrix.arch }}" = "armv7hl" ]; then
               # Enable multiarch support for armhf
-              sudo dpkg --add-architecture armhf || true
-              sudo apt-get update || true
-              # Install cross-compilation toolchain
+              sudo dpkg --add-architecture armhf
+              sudo apt-get update
+              # Install cross-compilation toolchain using crossbuild-essential (like debian build)
               sudo apt-get install -y \
-                gcc-arm-linux-gnueabihf \
-                g++-arm-linux-gnueabihf \
-                libc6-dev-armhf-cross \
+                crossbuild-essential-armhf \
                 libssl-dev:armhf \
                 pkg-config-arm-linux-gnueabihf || true
-              # Try crossbuild-essential if individual packages fail
-              if ! command -v arm-linux-gnueabihf-gcc >/dev/null 2>&1; then
-                echo "Trying crossbuild-essential-armhf..."
-                sudo apt-get install -y crossbuild-essential-armhf || true
-              fi
               # Verify installation
               if ! command -v arm-linux-gnueabihf-gcc >/dev/null 2>&1; then
                 echo "Error: Failed to install arm-linux-gnueabihf-gcc"
