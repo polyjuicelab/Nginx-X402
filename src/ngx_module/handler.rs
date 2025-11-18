@@ -4,6 +4,7 @@ use crate::config::validate_payment_header;
 use crate::ngx_module::config::{FacilitatorFallback, ParsedX402Config};
 use crate::ngx_module::error::{user_errors, ConfigError, Result};
 use crate::ngx_module::logging::{log_debug, log_error, log_info, log_warn};
+use crate::ngx_module::metrics::X402Metrics;
 use crate::ngx_module::module::get_module_config;
 use crate::ngx_module::request::get_header_value;
 use crate::ngx_module::requirements::create_requirements;
@@ -11,6 +12,7 @@ use crate::ngx_module::response::{send_402_response, send_response_body};
 use crate::ngx_module::runtime::{get_runtime, verify_payment};
 use ngx::core::Status;
 use ngx::http::{HTTPStatus, Request};
+use std::time::Instant;
 
 /// Request handler - core payment verification logic
 ///
@@ -42,6 +44,10 @@ use ngx::http::{HTTPStatus, Request};
 /// - Returns error if payment verification fails
 /// - Returns error if 402 response cannot be sent
 pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<()> {
+    // Record request metric
+    let metrics = X402Metrics::get();
+    metrics.record_request();
+
     if !config.enabled {
         return Ok(()); // Module disabled, pass through
     }
@@ -67,6 +73,13 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<(
     })?;
     let requirements_vec = vec![requirements.clone()];
 
+    // Record payment amount metric (convert from smallest units to decimal units)
+    if let Ok(amount_decimal) = requirements.amount_in_decimal_units(6) {
+        if let Ok(amount_f64) = amount_decimal.to_string().parse::<f64>() {
+            metrics.record_payment_amount(amount_f64);
+        }
+    }
+
     // Check for X-PAYMENT header
     let payment_header = get_header_value(r, "X-PAYMENT");
 
@@ -75,6 +88,9 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<(
             Some(r),
             "X-PAYMENT header found, validating and verifying payment",
         );
+
+        // Record verification attempt
+        metrics.record_verification_attempt();
 
         // Validate payment header format and size
         validate_payment_header(&payment_b64).map_err(|e| {
@@ -92,9 +108,14 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<(
         // Use configured timeout or default
         let timeout = config.timeout;
         let runtime = get_runtime()?;
+        let verification_start = Instant::now();
         let verification_result = runtime.block_on(async {
             verify_payment(&payment_b64, &requirements, facilitator_url, timeout).await
         });
+        let verification_duration = verification_start.elapsed().as_secs_f64();
+
+        // Record verification duration
+        metrics.record_verification_duration(verification_duration);
 
         // Handle verification result with fallback logic
         let is_valid = match verification_result {
@@ -102,6 +123,7 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<(
             Err(e) => {
                 // Facilitator verification failed (network error, timeout, etc.)
                 log_error(Some(r), &format!("Facilitator verification error: {}", e));
+                metrics.record_facilitator_error();
                 match config.facilitator_fallback {
                     FacilitatorFallback::Error => {
                         // Return 500 error
@@ -128,10 +150,13 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<(
         if is_valid {
             // Payment valid, allow request to proceed
             log_info(Some(r), "Payment verification successful, allowing request");
+            metrics.record_verification_success();
             Ok(())
         } else {
             // Payment invalid - send user-facing error message
             log_warn(Some(r), "Payment verification failed, sending 402 response");
+            metrics.record_verification_failed();
+            metrics.record_402_response();
             send_402_response(
                 r,
                 &requirements_vec,
@@ -143,6 +168,7 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<(
     } else {
         // No payment header, send 402
         log_debug(Some(r), "No X-PAYMENT header found, sending 402 response");
+        metrics.record_402_response();
         send_402_response(r, &requirements_vec, config, None)?;
         Ok(())
     }
@@ -182,6 +208,50 @@ pub fn x402_ngx_handler_impl(req: &mut Request) -> Status {
         Ok(()) => Status::NGX_OK,
         Err(e) => {
             log_error(Some(req), &format!("Handler error: {}", e));
+            Status::NGX_ERROR
+        }
+    }
+}
+
+/// Metrics handler for exposing Prometheus metrics
+///
+/// This handler exposes Prometheus metrics via a `/metrics` endpoint.
+/// It should be registered as a separate handler for a dedicated location.
+///
+/// # Usage
+///
+/// In Nginx configuration:
+/// ```nginx
+/// location /metrics {
+///     x402_metrics on;
+/// }
+/// ```
+pub fn x402_metrics_handler_impl(req: &mut Request) -> Status {
+    use crate::ngx_module::metrics::collect_metrics;
+
+    // Collect metrics in Prometheus text format
+    let metrics_text = collect_metrics();
+
+    // Set response headers
+    if req
+        .add_header_out("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+        .is_none()
+    {
+        log_error(Some(req), "Failed to set Content-Type header for metrics");
+        return Status::NGX_ERROR;
+    }
+
+    // Set status to 200 OK
+    req.set_status(HTTPStatus::from_u16(200).unwrap());
+
+    // Send metrics response
+    match send_response_body(req, metrics_text.as_bytes()) {
+        Ok(()) => Status::NGX_OK,
+        Err(e) => {
+            log_error(
+                Some(req),
+                &format!("Failed to send metrics response: {}", e),
+            );
             Status::NGX_ERROR
         }
     }

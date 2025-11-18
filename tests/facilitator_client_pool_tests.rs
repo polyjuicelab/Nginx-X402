@@ -5,8 +5,6 @@
 //! - fix-3: FacilitatorClient connection pool
 
 mod tests {
-    use nginx_x402::ngx_module::get_facilitator_client;
-    use std::time::Duration;
 
     // Note: These tests may need Nginx source or vendored feature
 

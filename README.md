@@ -293,6 +293,84 @@ http {
 - `x402_resource <path>` - Resource path (default: request URI)
 - `x402_timeout <seconds>` - Timeout for facilitator service requests in seconds (1-300, default: 10). Note: This is for facilitator API calls only, not for Nginx HTTP request timeouts (use `proxy_read_timeout` etc. in nginx.conf for those).
 - `x402_facilitator_fallback <mode>` - Fallback behavior when facilitator fails: `error` (return 500, default) or `pass` (pass through as if middleware doesn't exist)
+- `x402_metrics on|off` - Enable/disable Prometheus metrics endpoint (for `/metrics` location)
+
+## Monitoring with Prometheus and Grafana
+
+The module exposes Prometheus metrics for monitoring payment verification performance and health.
+
+### Available Metrics
+
+- `x402_requests_total` - Total number of requests processed by x402 module
+- `x402_payment_verifications_total` - Total number of payment verifications attempted
+- `x402_payment_verifications_success_total` - Total number of successful payment verifications
+- `x402_payment_verifications_failed_total` - Total number of failed payment verifications
+- `x402_responses_402_total` - Total number of 402 Payment Required responses sent
+- `x402_facilitator_errors_total` - Total number of facilitator service errors
+- `x402_verification_duration_seconds` - Payment verification duration histogram (in seconds)
+- `x402_payment_amount` - Payment amount histogram (in USDC)
+
+### Configuration
+
+Add a `/metrics` location to your Nginx configuration:
+
+```nginx
+http {
+    server {
+        # Prometheus metrics endpoint
+        location /metrics {
+            x402_metrics on;
+            access_log off;  # Optional: disable access logging
+        }
+
+        # Protected API endpoint
+        location /api/protected {
+            x402 on;
+            x402_amount 0.0001;
+            x402_pay_to 0x209693Bc6afc0C5328bA36FaF03C514EF312287C;
+            x402_facilitator_url https://x402.org/facilitator;
+        }
+    }
+}
+```
+
+### Prometheus Configuration
+
+Add the following to your `prometheus.yml`:
+
+```yaml
+scrape_configs:
+  - job_name: 'nginx-x402'
+    static_configs:
+      - targets: ['your-nginx-server:80']
+    metrics_path: '/metrics'
+```
+
+### Grafana Dashboard
+
+You can create Grafana dashboards to visualize:
+
+- Request rate and payment verification success rate
+- Payment verification latency (p50, p95, p99)
+- Error rates (facilitator errors, failed verifications)
+- Payment amount distribution
+- 402 response rate
+
+Example queries:
+
+```promql
+# Request rate
+rate(x402_requests_total[5m])
+
+# Success rate
+rate(x402_payment_verifications_success_total[5m]) / rate(x402_payment_verifications_total[5m])
+
+# Verification latency (p95)
+histogram_quantile(0.95, rate(x402_verification_duration_seconds_bucket[5m]))
+
+# Error rate
+rate(x402_facilitator_errors_total[5m])
+```
 
 ## Testing
 
@@ -321,6 +399,7 @@ The test suite includes:
 - **Client Pool Tests** (`facilitator_client_pool_tests.rs`) - Connection pooling
 - **Validation Unit Tests** (`validation_unit_tests.rs`) - Input validation functions
 - **Logging Tests** (`logging_tests.rs`) - Logging functionality
+- **Metrics Tests** (`metrics_tests.rs`) - Prometheus metrics collection and export
 
 All tests can run without requiring Nginx source code or a running Nginx instance.
 
