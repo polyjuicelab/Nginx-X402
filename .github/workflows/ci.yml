@@ -233,3 +233,110 @@ jobs:
             nginx-x402_${{ matrix.deb_arch }}.deb
           if-no-files-found: error
 
+  build-rpm:
+    name: Build RPM Package (${{ matrix.arch }})
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64, armv7hl]
+        include:
+          - arch: x86_64
+            rust_target: x86_64-unknown-linux-gnu
+          - arch: aarch64
+            rust_target: aarch64-unknown-linux-gnu
+          - arch: armv7hl
+            rust_target: armv7-unknown-linux-gnueabihf
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cross-compilation toolchain
+        if: matrix.arch != 'x86_64'
+        run: |
+          rustup target add ${{ matrix.rust_target }}
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            rpm \
+            cargo \
+            rustc \
+            libssl-dev \
+            pkg-config \
+            libclang-dev \
+            build-essential
+
+      - name: Setup cross-compilation environment
+        if: matrix.arch != 'x86_64'
+        run: |
+          # Setup cargo config for cross-compilation
+          mkdir -p ~/.cargo
+          cat >> ~/.cargo/config.toml <<EOF
+          [target.${{ matrix.rust_target }}]
+          linker = "${{ matrix.rust_target }}-gcc"
+          EOF
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-rpm-${{ matrix.arch }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-rpm-${{ matrix.arch }}-
+
+      - name: Create source tarball
+        run: |
+          mkdir -p ~/rpmbuild/SOURCES
+          VERSION=$(grep '^version' Cargo.toml | cut -d'"' -f2)
+          tar -czf ~/rpmbuild/SOURCES/nginx-x402-${VERSION}.tar.gz \
+            --exclude='.git' \
+            --exclude='target' \
+            --exclude='*.deb' \
+            --exclude='*.rpm' \
+            --exclude='.github' \
+            --transform "s,^,nginx-x402-${VERSION}/," \
+            .
+
+      - name: Build RPM package
+        env:
+          NGX_CONFIGURE_ARGS: "--without-http_rewrite_module"
+          RUST_TARGET: ${{ matrix.rust_target }}
+        run: |
+          # Set libclang path
+          if [ -d /usr/lib64/llvm/lib ]; then
+            export LIBCLANG_PATH=/usr/lib64/llvm/lib
+          elif [ -d /usr/lib/llvm/lib ]; then
+            export LIBCLANG_PATH=/usr/lib/llvm/lib
+          fi
+          # Build RPM
+          rpmbuild -ba rpm/nginx-x402.spec --target ${{ matrix.arch }}
+
+      - name: Copy RPM package to workspace
+        run: |
+          echo "Looking for RPM package with architecture: ${{ matrix.arch }}"
+          RPM_FILE=$(find ~/rpmbuild/RPMS -name "nginx-x402-*.${{ matrix.arch }}.rpm" 2>/dev/null | head -1)
+          if [ -z "$RPM_FILE" ]; then
+            echo "Error: Could not find RPM package for architecture ${{ matrix.arch }}"
+            find ~/rpmbuild/RPMS -name "*.rpm" 2>/dev/null || echo "No RPM files found"
+            exit 1
+          fi
+          echo "Found RPM package: $RPM_FILE"
+          cp "$RPM_FILE" "./nginx-x402_${{ matrix.arch }}.rpm"
+          echo "Copied RPM package: $(basename "$RPM_FILE")"
+
+      - name: Upload RPM package
+        uses: actions/upload-artifact@v4
+        with:
+          name: nginx-x402-rpm-${{ matrix.arch }}
+          path: |
+            nginx-x402_${{ matrix.arch }}.rpm
+          if-no-files-found: error
+
