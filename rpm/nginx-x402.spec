@@ -8,6 +8,8 @@ Summary:        Pure Rust Nginx module for x402 HTTP micropayment protocol
 License:        AGPL-3.0
 URL:            https://github.com/polyjuicelab/Nginx-X402
 Source0:        %{name}-%{version}.tar.gz
+# BuildArch defaults to host architecture
+# For cross-compilation, we'll handle architecture in the build process
 BuildArch:      %{_arch}
 
 BuildRequires:  cargo
@@ -44,12 +46,30 @@ elif [ -d /usr/lib/llvm/lib ]; then
     export LIBCLANG_PATH=/usr/lib/llvm/lib
 fi
 
-# Build for target architecture
-# Support cross-compilation via RUST_TARGET environment variable
-if [ -n "$RUST_TARGET" ] && [ "$RUST_TARGET" != "x86_64-unknown-linux-gnu" ]; then
+# Determine target architecture from RUST_TARGET or use default
+# Map Rust target triple to RPM architecture name
+if [ -n "$RUST_TARGET" ]; then
+    case "$RUST_TARGET" in
+        x86_64-unknown-linux-gnu)
+            TARGET_ARCH="x86_64"
+            ;;
+        aarch64-unknown-linux-gnu)
+            TARGET_ARCH="aarch64"
+            ;;
+        armv7-unknown-linux-gnueabihf)
+            TARGET_ARCH="armv7hl"
+            ;;
+        *)
+            TARGET_ARCH="x86_64"
+            ;;
+    esac
+    # Override BuildArch for cross-compilation
+    # Note: This is a workaround - rpmbuild doesn't support --target for cross-compilation
+    # We build the binary first, then rpmbuild will package it
     rustup target add $RUST_TARGET || true
     cargo build --release --target $RUST_TARGET
 else
+    TARGET_ARCH="x86_64"
     cargo build --release
 fi
 
