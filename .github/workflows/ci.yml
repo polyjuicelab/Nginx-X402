@@ -312,19 +312,21 @@ jobs:
           [target.aarch64-unknown-linux-gnu]
           linker = "aarch64-linux-gnu-gcc"
           EOF
-            # Setup pkg-config for cross-compilation
-            export PKG_CONFIG_ALLOW_CROSS=1
-            export PKG_CONFIG_PATH_aarch64_unknown_linux_gnu=/usr/lib/aarch64-linux-gnu/pkgconfig
-            export PKG_CONFIG_aarch64_unknown_linux_gnu=aarch64-linux-gnu-pkg-config || export PKG_CONFIG=pkg-config
+            # Verify cross-compiler is installed
+            if ! command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
+              echo "Error: aarch64-linux-gnu-gcc not found"
+              exit 1
+            fi
           elif [ "${{ matrix.arch }}" = "armv7hl" ]; then
             cat >> ~/.cargo/config.toml <<EOF
           [target.armv7-unknown-linux-gnueabihf]
           linker = "arm-linux-gnueabihf-gcc"
           EOF
-            # Setup pkg-config for cross-compilation
-            export PKG_CONFIG_ALLOW_CROSS=1
-            export PKG_CONFIG_PATH_armv7_unknown_linux_gnueabihf=/usr/lib/arm-linux-gnueabihf/pkgconfig
-            export PKG_CONFIG_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-pkg-config || export PKG_CONFIG=pkg-config
+            # Verify cross-compiler is installed
+            if ! command -v arm-linux-gnueabihf-gcc >/dev/null 2>&1; then
+              echo "Error: arm-linux-gnueabihf-gcc not found"
+              exit 1
+            fi
           fi
 
       - name: Cache cargo registry
@@ -367,12 +369,20 @@ jobs:
           fi
           # Setup cross-compilation environment variables
           if [ "${{ matrix.arch }}" = "aarch64" ]; then
+            # Set CC for C compilation (required by ring crate)
+            export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
+            export CC=aarch64-linux-gnu-gcc
+            # Setup pkg-config for cross-compilation
             export PKG_CONFIG_ALLOW_CROSS=1
             export PKG_CONFIG_PATH_aarch64_unknown_linux_gnu=/usr/lib/aarch64-linux-gnu/pkgconfig
             if command -v aarch64-linux-gnu-pkg-config >/dev/null 2>&1; then
               export PKG_CONFIG_aarch64_unknown_linux_gnu=aarch64-linux-gnu-pkg-config
             fi
           elif [ "${{ matrix.arch }}" = "armv7hl" ]; then
+            # Set CC for C compilation (required by ring crate)
+            export CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc
+            export CC=arm-linux-gnueabihf-gcc
+            # Setup pkg-config for cross-compilation
             export PKG_CONFIG_ALLOW_CROSS=1
             export PKG_CONFIG_PATH_armv7_unknown_linux_gnueabihf=/usr/lib/arm-linux-gnueabihf/pkgconfig
             if command -v arm-linux-gnueabihf-pkg-config >/dev/null 2>&1; then
