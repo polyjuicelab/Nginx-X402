@@ -46,26 +46,45 @@ Uses the official [ngx-rust](https://github.com/nginx/ngx-rust) crate to impleme
   ```
   - Alternative to `NGINX_SOURCE_DIR` if you have a pre-built Nginx
 
-### Optional (for libclang)
+### Required (for macOS with vendored feature)
 
-- **`LIBCLANG_PATH`**: Path to libclang library (macOS only, usually not needed)
+- **`SDKROOT`**: macOS SDK path (required for finding system headers like `sys/types.h`)
   ```bash
-  # macOS with Homebrew
-  export LIBCLANG_PATH=$(brew --prefix llvm)/lib
+  export SDKROOT=$(xcrun --show-sdk-path)
+  ```
+  - Required on macOS when using `vendored` feature
+  - Ensures system headers are found during Nginx source compilation
+
+- **`LIBCLANG_PATH`**: Path to libclang library (required for bindgen on macOS)
+  ```bash
+  # macOS with Xcode (recommended)
+  export LIBCLANG_PATH="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib"
   
-  # macOS with Xcode
-  export LIBCLANG_PATH=$(xcode-select --print-path)/Toolchains/XcodeDefault.xctoolchain/usr/lib
+  # macOS with Homebrew (alternative)
+  export LIBCLANG_PATH=$(brew --prefix llvm)/lib
   
   # Linux (usually not needed, system libclang is used)
   export LIBCLANG_PATH=/usr/lib/llvm-*/lib
   ```
-  - Only needed if bindgen cannot find libclang automatically
+  - Required on macOS for bindgen to generate Rust FFI bindings
   - On Linux, install `libclang-dev` package: `sudo apt-get install libclang-dev`
-  - On macOS, install via Homebrew: `brew install llvm`
+  - Ensure Xcode Command Line Tools are installed: `xcode-select --install`
 
-### Optional (for PCRE when using vendored feature)
+### Required (for vendored feature - disable rewrite module)
 
-When using the `vendored` feature, Nginx source compilation requires PCRE library. If you encounter PCRE-related errors:
+When using the `vendored` feature, the simplest approach is to disable the HTTP rewrite module (which requires PCRE). Since the x402 plugin does not use rewrite functionality, this is safe and recommended:
+
+- **`NGX_CONFIGURE_ARGS`**: Disable HTTP rewrite module (recommended for plugin builds)
+  ```bash
+  export NGX_CONFIGURE_ARGS="--without-http_rewrite_module"
+  ```
+  - **Recommended**: Simplest approach, no PCRE dependency needed
+  - Safe because the x402 plugin does not use HTTP rewrite functionality
+  - Avoids the need to download PCRE source code
+
+### Optional (for vendored feature - if you need rewrite module)
+
+If you need the HTTP rewrite module for other purposes:
 
 - **`PKG_CONFIG_PATH`**: Help pkg-config find PCRE (macOS with Homebrew)
   ```bash
@@ -85,21 +104,16 @@ When using the `vendored` feature, Nginx source compilation requires PCRE librar
   sudo apt-get install libpcre3-dev
   ```
 
-- **`NGX_CONFIGURE_ARGS`**: Specify PCRE path directly
+- **`NGX_CONFIGURE_ARGS`**: Specify PCRE source code path
   ```bash
-  # Option 1: Use PCRE source code (recommended)
-  # Download PCRE source and extract it, then:
-  export NGX_CONFIGURE_ARGS="--with-pcre=/path/to/pcre-8.45"
+  # Download PCRE source code (required by Nginx configure)
+  # Nginx's --with-pcre requires PCRE source, not just the compiled library
+  cd /tmp
+  wget https://sourceforge.net/projects/pcre/files/pcre/8.45/pcre-8.45.tar.gz
+  tar -xzf pcre-8.45.tar.gz
   
-  # Option 2: Use pre-built PCRE library (macOS with Homebrew)
-  # Note: This requires PCRE source code, not just the library
-  # You may need to download PCRE source separately:
-  # wget https://sourceforge.net/projects/pcre/files/pcre/8.45/pcre-8.45.tar.gz
-  # tar -xzf pcre-8.45.tar.gz
-  export NGX_CONFIGURE_ARGS="--with-pcre=/path/to/pcre-8.45"
-  
-  # Option 3: Disable HTTP rewrite module (not recommended)
-  export NGX_CONFIGURE_ARGS="--without-http_rewrite_module"
+  # Set NGX_CONFIGURE_ARGS to point to PCRE source
+  export NGX_CONFIGURE_ARGS="--with-pcre=/tmp/pcre-8.45"
   ```
   - Nginx's `--with-pcre` requires PCRE **source code**, not just the compiled library
   - Homebrew installs only the compiled library, so you need to download PCRE source separately
@@ -122,25 +136,53 @@ cargo build --release
 
 **macOS:**
 ```bash
-# Install system dependencies
-brew install llvm pcre
-
-# Set libclang path (if needed)
-export LIBCLANG_PATH=$(brew --prefix llvm)/lib
-
-# Set PKG_CONFIG_PATH for PCRE (if using vendored feature)
-export PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig:$PKG_CONFIG_PATH
+# Ensure Xcode Command Line Tools are installed
+xcode-select --install
 
 # Set Nginx source (if not using vendored)
 export NGINX_SOURCE_DIR=/path/to/nginx-1.29.1
+
+# Set libclang path (if using vendored feature)
+export LIBCLANG_PATH="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib"
+
+# Set SDK path (if using vendored feature)
+export SDKROOT=$(xcrun --show-sdk-path)
 
 # Build
 cargo build --release
 ```
 
-**Using vendored feature:**
+**Using vendored feature (recommended for plugin builds):**
+
+**macOS:**
 ```bash
-# Install PCRE library (for linking)
+# Ensure Xcode Command Line Tools are installed
+xcode-select --install
+
+# Set required environment variables
+export NGX_CONFIGURE_ARGS="--without-http_rewrite_module"
+export SDKROOT=$(xcrun --show-sdk-path)
+export LIBCLANG_PATH="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib"
+
+# Build
+cargo build --release --features vendored
+```
+
+**Linux:**
+```bash
+# Install system dependencies
+sudo apt-get install -y libclang-dev
+
+# Disable rewrite module (simplest, no PCRE needed)
+export NGX_CONFIGURE_ARGS="--without-http_rewrite_module"
+
+# Build
+cargo build --release --features vendored
+```
+
+**Alternative (if you need rewrite module):**
+```bash
+# Install PCRE library
 # macOS:
 brew install pcre
 
@@ -178,8 +220,23 @@ cargo build --release
 
 ### Method B: Auto-download Nginx Source (Convenient for Development)
 
+**macOS:**
 ```bash
-# No Nginx source needed! ngx-rust will download it automatically
+# Set required environment variables
+export NGX_CONFIGURE_ARGS="--without-http_rewrite_module"
+export SDKROOT=$(xcrun --show-sdk-path)
+export LIBCLANG_PATH="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib"
+
+# Build (ngx-rust will download Nginx source automatically)
+cargo build --release --features vendored
+```
+
+**Linux:**
+```bash
+# Disable rewrite module (simplest, no PCRE needed)
+export NGX_CONFIGURE_ARGS="--without-http_rewrite_module"
+
+# Build (ngx-rust will download Nginx source automatically)
 cargo build --release --features vendored
 ```
 
@@ -255,6 +312,57 @@ All tests can run without requiring Nginx source code or a running Nginx instanc
 3. **Payment verified** → Sends 402 response or allows request to proceed
 
 **Status**: Core logic complete ✅, module registration framework ready ⚠️ (needs ngx-rust 0.5 API verification)
+
+## Building Debian Package
+
+To build a Debian package (`.deb` file) for distribution:
+
+### Prerequisites
+
+```bash
+# Install build dependencies
+sudo apt-get install -y \
+    debhelper \
+    cargo \
+    rustc \
+    libssl-dev \
+    pkg-config \
+    libclang-dev \
+    build-essential
+```
+
+### Build the Package
+
+```bash
+# Build the deb package
+dpkg-buildpackage -b -us -uc
+
+# The resulting .deb file will be in the parent directory:
+# ../nginx-x402_0.1.1-1_amd64.deb
+```
+
+### Install the Package
+
+```bash
+# Install the built package
+sudo dpkg -i ../nginx-x402_0.1.1-1_amd64.deb
+
+# If there are dependency issues, fix them with:
+sudo apt-get install -f
+
+# Enable the module in Nginx
+sudo ln -s /etc/nginx/modules-available/x402.conf /etc/nginx/modules-enabled/x402.conf
+
+# Or manually add to nginx.conf:
+# load_module /usr/lib/nginx/modules/libnginx_x402.so;
+```
+
+### Package Contents
+
+The deb package installs:
+- `/usr/lib/nginx/modules/libnginx_x402.so` - The Nginx module
+- `/etc/nginx/modules-available/x402.conf` - Module load configuration
+- `/usr/share/doc/nginx-x402/` - Documentation and example configuration
 
 ## CI/CD
 

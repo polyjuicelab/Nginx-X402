@@ -1,0 +1,39 @@
+#!/usr/bin/make -f
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+export DEB_CARGO_PACKAGE = nginx-x402
+export DEB_CARGO_BUILD_PROFILE = release
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	# Set required environment variables for vendored feature
+	export NGX_CONFIGURE_ARGS="--without-http_rewrite_module"
+	# Set libclang path if available (Linux)
+	if [ -d /usr/lib/llvm-*/lib ]; then \
+		export LIBCLANG_PATH=$$(ls -d /usr/lib/llvm-*/lib | head -1); \
+	fi
+	# Build the module
+	cargo build --release --features vendored
+
+override_dh_auto_install:
+	# Install files manually
+	mkdir -p debian/nginx-x402/usr/lib/nginx/modules
+	mkdir -p debian/nginx-x402/usr/share/doc/nginx-x402
+	mkdir -p debian/nginx-x402/etc/nginx/modules-available
+	# Copy the built module (find the correct architecture-specific path)
+	find target -name "libnginx_x402.so" -type f | head -1 | xargs -I {} cp {} debian/nginx-x402/usr/lib/nginx/modules/libnginx_x402.so || \
+	find target -name "libnginx_x402.dylib" -type f | head -1 | xargs -I {} cp {} debian/nginx-x402/usr/lib/nginx/modules/libnginx_x402.so || \
+	cp target/release/libnginx_x402.so debian/nginx-x402/usr/lib/nginx/modules/ || \
+	cp target/*/release/libnginx_x402.so debian/nginx-x402/usr/lib/nginx/modules/ || true
+	# Copy documentation
+	cp README.md debian/nginx-x402/usr/share/doc/nginx-x402/
+	cp LICENSE debian/nginx-x402/usr/share/doc/nginx-x402/
+	cp nginx/example.conf debian/nginx-x402/usr/share/doc/nginx-x402/example.conf
+	# Create module configuration snippet
+	echo "load_module /usr/lib/nginx/modules/libnginx_x402.so;" > debian/nginx-x402/etc/nginx/modules-available/x402.conf
+
+override_dh_auto_test:
+	# Run tests
+	cargo test --features vendored || true

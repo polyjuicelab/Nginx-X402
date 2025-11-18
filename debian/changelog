@@ -1,0 +1,6 @@
+nginx-x402 (0.1.1-1) unstable; urgency=medium
+
+  * Initial release
+  * Pure Rust Nginx module for x402 HTTP micropayment protocol
+
+ -- Ryan Kung <ryan@polyjuice.io>  Mon, 18 Nov 2025 00:00:00 +0000

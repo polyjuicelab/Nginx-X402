@@ -1,0 +1,32 @@
+Source: nginx-x402
+Section: web
+Priority: optional
+Maintainer: Ryan Kung <ryan@polyjuice.io>
+Build-Depends: debhelper-compat (= 12),
+               cargo,
+               rustc,
+               libssl-dev,
+               pkg-config,
+               libclang-dev,
+               nginx-dev | libnginx-mod-dev
+Standards-Version: 4.5.0
+Homepage: https://x402.org
+Vcs-Git: https://github.com/RyanKung/nginx-x402.git
+Vcs-Browser: https://github.com/RyanKung/nginx-x402
+
+Package: nginx-x402
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, nginx (>= 1.18.0)
+Description: Pure Rust Nginx module for x402 HTTP micropayment protocol
+ This package provides a pure Rust implementation of an Nginx module
+ that implements the x402 HTTP micropayment protocol.
+ .
+ The module can be loaded dynamically by Nginx and provides payment
+ verification functionality for HTTP requests.
+ .
+ Features:
+  - Pure Rust implementation using ngx-rust
+  - Type-safe Nginx API bindings
+  - Payment verification and 402 response handling
+  - Configurable facilitator service integration
+
