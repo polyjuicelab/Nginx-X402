@@ -122,3 +122,51 @@ jobs:
             target/*/release/libnginx_x402.*
           if-no-files-found: ignore
 
+  build-deb:
+    name: Build Debian Package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            debhelper \
+            cargo \
+            rustc \
+            libssl-dev \
+            pkg-config \
+            libclang-dev \
+            build-essential
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build Debian package
+        env:
+          NGX_CONFIGURE_ARGS: "--without-http_rewrite_module"
+        run: |
+          dpkg-buildpackage -b -us -uc
+
+      - name: Upload deb package
+        uses: actions/upload-artifact@v4
+        with:
+          name: nginx-x402-deb
+          path: |
+            ../nginx-x402_*.deb
+          if-no-files-found: error
+

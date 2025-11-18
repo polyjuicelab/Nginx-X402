@@ -117,7 +117,7 @@ If you need the HTTP rewrite module for other purposes:
   ```
   - Nginx's `--with-pcre` requires PCRE **source code**, not just the compiled library
   - Homebrew installs only the compiled library, so you need to download PCRE source separately
-  - Download PCRE from: https://sourceforge.net/projects/pcre/files/pcre/
+  - Download PCRE from: <https://sourceforge.net/projects/pcre/files/pcre/>
 
 ### Example: Complete Setup
 
@@ -313,14 +313,68 @@ All tests can run without requiring Nginx source code or a running Nginx instanc
 
 **Status**: Core logic complete ✅, module registration framework ready ⚠️ (needs ngx-rust 0.5 API verification)
 
-## Building Debian Package
+## Installing on Debian/Ubuntu
 
-To build a Debian package (`.deb` file) for distribution:
+### Method 1: Install from GitHub Release (Recommended)
 
-### Prerequisites
+Download the pre-built `.deb` package from [GitHub Releases](https://github.com/RyanKung/nginx-x402/releases):
+
+**Option A: Download latest version automatically**
+
+```bash
+# Download the latest release (automatically gets the newest version)
+wget https://github.com/RyanKung/nginx-x402/releases/download/latest/nginx-x402_latest_amd64.deb -O nginx-x402_latest_amd64.deb
+
+# Install the package
+sudo dpkg -i nginx-x402_latest_amd64.deb
+```
+
+**Option B: Download specific version**
+
+```bash
+# Download a specific version (replace VERSION and COMMIT with actual values)
+wget https://github.com/RyanKung/nginx-x402/releases/download/v<VERSION>-<COMMIT>/nginx-x402_<VERSION>-1_amd64.deb
+
+# Install the package
+sudo dpkg -i nginx-x402_<VERSION>-1_amd64.deb
+```
+
+**Option C: Use GitHub API to get latest release**
+
+```bash
+# Get latest release download URL automatically
+LATEST_URL=$(curl -s https://api.github.com/repos/RyanKung/nginx-x402/releases/latest | grep "browser_download_url.*\.deb" | cut -d '"' -f 4 | head -1)
+wget "$LATEST_URL" -O nginx-x402_latest_amd64.deb
+
+# Install the package
+sudo dpkg -i nginx-x402_latest_amd64.deb
+```
+
+After installation (for all options above):
+
+```bash
+# If there are dependency issues, fix them with:
+sudo apt-get install -f
+
+# Enable the module in Nginx
+sudo ln -s /etc/nginx/modules-available/x402.conf /etc/nginx/modules-enabled/x402.conf
+
+# Test Nginx configuration
+sudo nginx -t
+
+# Reload Nginx to load the module
+sudo systemctl reload nginx
+```
+
+### Method 2: Build from Source
+
+To build a Debian package (`.deb` file) from source:
+
+#### Prerequisites
 
 ```bash
 # Install build dependencies
+sudo apt-get update
 sudo apt-get install -y \
     debhelper \
     cargo \
@@ -331,21 +385,25 @@ sudo apt-get install -y \
     build-essential
 ```
 
-### Build the Package
+#### Build the Package
 
 ```bash
+# Clone the repository
+git clone https://github.com/RyanKung/nginx-x402.git
+cd nginx-x402
+
 # Build the deb package
 dpkg-buildpackage -b -us -uc
 
 # The resulting .deb file will be in the parent directory:
-# ../nginx-x402_0.1.1-1_amd64.deb
+# ../nginx-x402_<VERSION>-1_amd64.deb
 ```
 
-### Install the Package
+#### Install the Built Package
 
 ```bash
 # Install the built package
-sudo dpkg -i ../nginx-x402_0.1.1-1_amd64.deb
+sudo dpkg -i ../nginx-x402_<VERSION>-1_amd64.deb
 
 # If there are dependency issues, fix them with:
 sudo apt-get install -f
@@ -353,16 +411,51 @@ sudo apt-get install -f
 # Enable the module in Nginx
 sudo ln -s /etc/nginx/modules-available/x402.conf /etc/nginx/modules-enabled/x402.conf
 
-# Or manually add to nginx.conf:
-# load_module /usr/lib/nginx/modules/libnginx_x402.so;
+# Test Nginx configuration
+sudo nginx -t
+
+# Reload Nginx to load the module
+sudo systemctl reload nginx
 ```
 
 ### Package Contents
 
 The deb package installs:
 - `/usr/lib/nginx/modules/libnginx_x402.so` - The Nginx module
-- `/etc/nginx/modules-available/x402.conf` - Module load configuration
+- `/etc/nginx/modules-available/x402.conf` - Module load configuration snippet
 - `/usr/share/doc/nginx-x402/` - Documentation and example configuration
+
+### Configuration
+
+After installation, add the module configuration to your `nginx.conf`:
+
+```nginx
+# Load the module (already done if you used the symlink above)
+load_module /usr/lib/nginx/modules/libnginx_x402.so;
+
+http {
+    server {
+        location /protected {
+            x402 on;
+            x402_amount 0.0001;
+            x402_pay_to 0x209693Bc6afc0C5328bA36FaF03C514EF312287C;
+            x402_facilitator_url https://x402.org/facilitator;
+        }
+    }
+}
+```
+
+### Verification
+
+Verify the module is loaded:
+
+```bash
+# Check if module is loaded
+nginx -V 2>&1 | grep -i x402
+
+# Or check Nginx error log for module loading messages
+sudo tail -f /var/log/nginx/error.log
+```
 
 ## CI/CD
 

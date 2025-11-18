@@ -79,6 +79,37 @@ jobs:
             });
             
             console.log(`Created release ${releaseName} with tag ${tagName}`);
+            
+            // Create or update 'latest' tag to point to this release
+            try {
+              // Delete existing 'latest' tag if it exists
+              try {
+                await github.rest.git.deleteRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: 'tags/latest'
+                });
+                console.log('Deleted existing latest tag');
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+                // Tag doesn't exist, that's fine
+              }
+              
+              // Create new 'latest' tag pointing to the same commit
+              await github.rest.git.createRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: 'refs/tags/latest',
+                sha: context.sha
+              });
+              console.log('Created latest tag');
+            } catch (error) {
+              console.warn(`Failed to create latest tag: ${error.message}`);
+              // Don't fail the workflow if latest tag creation fails
+            }
+            
             core.setOutput('created', 'true');
             core.setOutput('tag', tagName);
 
@@ -144,6 +175,82 @@ jobs:
           tag_name: ${{ needs.create-release.outputs.tag }}
           files: ${{ steps.artifact.outputs.path }}
           name: ${{ steps.artifact.outputs.name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-deb:
+    name: Build Debian Package
+    needs: create-release
+    if: needs.create-release.outputs.created == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            debhelper \
+            cargo \
+            rustc \
+            libssl-dev \
+            pkg-config \
+            libclang-dev \
+            build-essential
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build Debian package
+        env:
+          NGX_CONFIGURE_ARGS: "--without-http_rewrite_module"
+        run: |
+          dpkg-buildpackage -b -us -uc
+
+      - name: Get deb package filename
+        id: deb_file
+        run: |
+          DEB_FILE=$(ls ../nginx-x402_*.deb | head -1)
+          DEB_BASENAME=$(basename "$DEB_FILE")
+          echo "file=$DEB_FILE" >> $GITHUB_OUTPUT
+          echo "basename=$DEB_BASENAME" >> $GITHUB_OUTPUT
+          echo "Found deb package: $DEB_BASENAME"
+
+      - name: Upload deb package to release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.create-release.outputs.tag }}
+          files: ${{ steps.deb_file.outputs.file }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create latest deb package symlink
+        run: |
+          DEB_FILE="${{ steps.deb_file.outputs.file }}"
+          DEB_BASENAME="${{ steps.deb_file.outputs.basename }}"
+          # Copy the deb file with latest name for easy download
+          cp "$DEB_FILE" "../nginx-x402_latest_amd64.deb"
+          echo "Created latest symlink: nginx-x402_latest_amd64.deb"
+
+      - name: Upload latest deb package
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: latest
+          files: ../nginx-x402_latest_amd64.deb
+          overwrite: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
