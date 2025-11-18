@@ -291,14 +291,38 @@ jobs:
               sudo apt-get install -y \
                 gcc-aarch64-linux-gnu \
                 g++-aarch64-linux-gnu \
+                libc6-dev-arm64-cross \
                 libssl-dev:arm64 \
                 pkg-config-aarch64-linux-gnu || true
+              # Verify installation
+              if ! command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
+                echo "Error: Failed to install aarch64-linux-gnu-gcc"
+                echo "Trying alternative package names..."
+                sudo apt-get install -y crossbuild-essential-arm64 || true
+                if ! command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
+                  echo "Available gcc packages:"
+                  apt-cache search gcc-aarch64 || true
+                  exit 1
+                fi
+              fi
             elif [ "${{ matrix.arch }}" = "armv7hl" ]; then
               sudo apt-get install -y \
                 gcc-arm-linux-gnueabihf \
                 g++-arm-linux-gnueabihf \
+                libc6-dev-armhf-cross \
                 libssl-dev:armhf \
                 pkg-config-arm-linux-gnueabihf || true
+              # Verify installation
+              if ! command -v arm-linux-gnueabihf-gcc >/dev/null 2>&1; then
+                echo "Error: Failed to install arm-linux-gnueabihf-gcc"
+                echo "Trying alternative package names..."
+                sudo apt-get install -y crossbuild-essential-armhf || true
+                if ! command -v arm-linux-gnueabihf-gcc >/dev/null 2>&1; then
+                  echo "Available gcc packages:"
+                  apt-cache search gcc-arm || true
+                  exit 1
+                fi
+              fi
             fi
           fi
 
