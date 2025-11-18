@@ -290,13 +290,21 @@ jobs:
             if [ "${{ matrix.arch }}" = "aarch64" ]; then
               # Enable multiarch support for arm64
               sudo dpkg --add-architecture arm64
-              # Update package lists - ignore errors from security.ubuntu.com (may not have arm64 packages)
-              sudo apt-get update || true
+              # Update package lists - use Acquire::Check-Valid-Until=false to ignore stale index errors
+              # This allows apt to continue even if some repositories fail
+              sudo apt-get update -o Acquire::Check-Valid-Until=false || true
               # Install cross-compilation toolchain using crossbuild-essential (like debian build)
-              sudo apt-get install -y \
-                crossbuild-essential-arm64 \
-                libssl-dev:arm64 \
-                pkg-config-aarch64-linux-gnu || true
+              # Try installing crossbuild-essential first, which should pull in the compiler
+              sudo apt-get install -y crossbuild-essential-arm64 || {
+                echo "Warning: crossbuild-essential-arm64 installation failed, trying individual packages..."
+                sudo apt-get install -y \
+                  gcc-aarch64-linux-gnu \
+                  g++-aarch64-linux-gnu \
+                  libc6-dev-arm64-cross || true
+              }
+              # Install additional packages (may fail if multiarch packages aren't available)
+              sudo apt-get install -y libssl-dev:arm64 || echo "Warning: libssl-dev:arm64 not available"
+              sudo apt-get install -y pkg-config-aarch64-linux-gnu || echo "Warning: pkg-config-aarch64-linux-gnu not available"
               # Verify installation
               if ! command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
                 echo "Error: Failed to install aarch64-linux-gnu-gcc"
@@ -309,13 +317,21 @@ jobs:
             elif [ "${{ matrix.arch }}" = "armv7hl" ]; then
               # Enable multiarch support for armhf
               sudo dpkg --add-architecture armhf
-              # Update package lists - ignore errors from security.ubuntu.com (may not have armhf packages)
-              sudo apt-get update || true
+              # Update package lists - use Acquire::Check-Valid-Until=false to ignore stale index errors
+              # This allows apt to continue even if some repositories fail
+              sudo apt-get update -o Acquire::Check-Valid-Until=false || true
               # Install cross-compilation toolchain using crossbuild-essential (like debian build)
-              sudo apt-get install -y \
-                crossbuild-essential-armhf \
-                libssl-dev:armhf \
-                pkg-config-arm-linux-gnueabihf || true
+              # Try installing crossbuild-essential first, which should pull in the compiler
+              sudo apt-get install -y crossbuild-essential-armhf || {
+                echo "Warning: crossbuild-essential-armhf installation failed, trying individual packages..."
+                sudo apt-get install -y \
+                  gcc-arm-linux-gnueabihf \
+                  g++-arm-linux-gnueabihf \
+                  libc6-dev-armhf-cross || true
+              }
+              # Install additional packages (may fail if multiarch packages aren't available)
+              sudo apt-get install -y libssl-dev:armhf || echo "Warning: libssl-dev:armhf not available"
+              sudo apt-get install -y pkg-config-arm-linux-gnueabihf || echo "Warning: pkg-config-arm-linux-gnueabihf not available"
               # Verify installation
               if ! command -v arm-linux-gnueabihf-gcc >/dev/null 2>&1; then
                 echo "Error: Failed to install arm-linux-gnueabihf-gcc"
