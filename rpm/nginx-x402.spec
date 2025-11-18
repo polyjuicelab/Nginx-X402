@@ -45,8 +45,13 @@ elif [ -d /usr/lib/llvm/lib ]; then
 fi
 
 # Build for target architecture
-# Note: Cross-compilation for RPM is complex, currently only x86_64 is supported
-cargo build --release
+# Support cross-compilation via RUST_TARGET environment variable
+if [ -n "$RUST_TARGET" ] && [ "$RUST_TARGET" != "x86_64-unknown-linux-gnu" ]; then
+    rustup target add $RUST_TARGET || true
+    cargo build --release --target $RUST_TARGET
+else
+    cargo build --release
+fi
 
 %install
 # Create directories
@@ -54,9 +59,17 @@ mkdir -p %{buildroot}%{moduledir}
 mkdir -p %{buildroot}%{_docdir}/%{name}
 mkdir -p %{buildroot}%{_sysconfdir}/nginx/modules-available
 
-# Install module
-find target -name "libnginx_x402.so" -type f | head -1 | xargs -I {} cp {} %{buildroot}%{moduledir}/libnginx_x402.so || \
-cp target/release/libnginx_x402.so %{buildroot}%{moduledir}/libnginx_x402.so || true
+# Install module (try architecture-specific path first, then fallback)
+if [ -n "$RUST_TARGET" ] && [ "$RUST_TARGET" != "x86_64-unknown-linux-gnu" ]; then
+    if [ -f "target/$RUST_TARGET/release/libnginx_x402.so" ]; then
+        cp target/$RUST_TARGET/release/libnginx_x402.so %{buildroot}%{moduledir}/libnginx_x402.so
+    else
+        find target/$RUST_TARGET -name "libnginx_x402.so" -type f | head -1 | xargs -I {} cp {} %{buildroot}%{moduledir}/libnginx_x402.so || true
+    fi
+else
+    find target -name "libnginx_x402.so" -type f | head -1 | xargs -I {} cp {} %{buildroot}%{moduledir}/libnginx_x402.so || \
+    cp target/release/libnginx_x402.so %{buildroot}%{moduledir}/libnginx_x402.so || true
+fi
 
 # Install documentation
 cp README.md %{buildroot}%{_docdir}/%{name}/

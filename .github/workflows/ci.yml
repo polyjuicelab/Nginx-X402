@@ -237,16 +237,40 @@ jobs:
     name: Build RPM Package (${{ matrix.arch }})
     strategy:
       matrix:
-        arch: [x86_64]
+        arch: [x86_64, aarch64, armv7hl]
         include:
           - arch: x86_64
             rust_target: x86_64-unknown-linux-gnu
+            rpm_arch: x86_64
+          - arch: aarch64
+            rust_target: aarch64-unknown-linux-gnu
+            rpm_arch: aarch64
+          - arch: armv7hl
+            rust_target: armv7-unknown-linux-gnueabihf
+            rpm_arch: armv7hl
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cross-compilation toolchain
+        if: matrix.arch != 'x86_64'
+        run: |
+          rustup target add ${{ matrix.rust_target }}
+
+      - name: Setup QEMU for aarch64
+        if: matrix.arch == 'aarch64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Setup QEMU for armv7hl
+        if: matrix.arch == 'armv7hl'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm
 
       - name: Install build dependencies
         run: |
@@ -258,7 +282,34 @@ jobs:
             libssl-dev \
             pkg-config \
             libclang-dev \
-            build-essential
+            build-essential \
+            qemu-user-static \
+            binfmt-support
+          # Install cross-compilation toolchain for non-x86_64 architectures
+          if [ "${{ matrix.arch }}" != "x86_64" ]; then
+            if [ "${{ matrix.arch }}" = "aarch64" ]; then
+              sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+            elif [ "${{ matrix.arch }}" = "armv7hl" ]; then
+              sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+            fi
+          fi
+
+      - name: Setup cross-compilation environment
+        if: matrix.arch != 'x86_64'
+        run: |
+          # Setup cargo config for cross-compilation
+          mkdir -p ~/.cargo
+          if [ "${{ matrix.arch }}" = "aarch64" ]; then
+            cat >> ~/.cargo/config.toml <<EOF
+          [target.aarch64-unknown-linux-gnu]
+          linker = "aarch64-linux-gnu-gcc"
+          EOF
+          elif [ "${{ matrix.arch }}" = "armv7hl" ]; then
+            cat >> ~/.cargo/config.toml <<EOF
+          [target.armv7-unknown-linux-gnueabihf]
+          linker = "arm-linux-gnueabihf-gcc"
+          EOF
+          fi
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -289,6 +340,8 @@ jobs:
       - name: Build RPM package
         env:
           NGX_CONFIGURE_ARGS: "--without-http_rewrite_module"
+          RUST_TARGET: ${{ matrix.rust_target }}
+          RPM_ARCH: ${{ matrix.rpm_arch }}
         run: |
           # Set libclang path
           if [ -d /usr/lib64/llvm/lib ]; then
@@ -296,27 +349,29 @@ jobs:
           elif [ -d /usr/lib/llvm/lib ]; then
             export LIBCLANG_PATH=/usr/lib/llvm/lib
           fi
-          # Build RPM (only x86_64 supported on Ubuntu runner)
-          rpmbuild -ba rpm/nginx-x402.spec
+          # Build RPM with architecture support
+          # Use --nodeps to skip dependency checking (dependencies are installed via apt)
+          rpmbuild -ba rpm/nginx-x402.spec --nodeps --target ${{ matrix.rpm_arch }}
 
       - name: Copy RPM package to workspace
         run: |
-          echo "Looking for RPM package with architecture: ${{ matrix.arch }}"
-          RPM_FILE=$(find ~/rpmbuild/RPMS -name "nginx-x402-*.${{ matrix.arch }}.rpm" 2>/dev/null | head -1)
+          echo "Looking for RPM package with architecture: ${{ matrix.rpm_arch }}"
+          RPM_FILE=$(find ~/rpmbuild/RPMS -name "nginx-x402-*.${{ matrix.rpm_arch }}.rpm" 2>/dev/null | head -1)
           if [ -z "$RPM_FILE" ]; then
-            echo "Error: Could not find RPM package for architecture ${{ matrix.arch }}"
+            echo "Error: Could not find RPM package for architecture ${{ matrix.rpm_arch }}"
+            echo "Searching in: ~/rpmbuild/RPMS"
             find ~/rpmbuild/RPMS -name "*.rpm" 2>/dev/null || echo "No RPM files found"
             exit 1
           fi
           echo "Found RPM package: $RPM_FILE"
-          cp "$RPM_FILE" "./nginx-x402_${{ matrix.arch }}.rpm"
+          cp "$RPM_FILE" "./nginx-x402_${{ matrix.rpm_arch }}.rpm"
           echo "Copied RPM package: $(basename "$RPM_FILE")"
 
       - name: Upload RPM package
         uses: actions/upload-artifact@v4
         with:
-          name: nginx-x402-rpm-${{ matrix.arch }}
+          name: nginx-x402-rpm-${{ matrix.rpm_arch }}
           path: |
-            nginx-x402_${{ matrix.arch }}.rpm
+            nginx-x402_${{ matrix.rpm_arch }}.rpm
           if-no-files-found: error
 
