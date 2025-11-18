@@ -56,12 +56,9 @@ pub fn is_browser_request(r: &Request) -> bool {
 
     // Priority 1: Check Accept header with q-value parsing
     if let Some(ref accept_header) = accept {
-        let html_priority =
-            crate::config::validation::parse_accept_priority(accept_header, "text/html");
-        let json_priority =
-            crate::config::validation::parse_accept_priority(accept_header, "application/json");
-        let wildcard_priority =
-            crate::config::validation::parse_accept_priority(accept_header, "*/*");
+        let html_priority = crate::config::parse_accept_priority(accept_header, "text/html");
+        let json_priority = crate::config::parse_accept_priority(accept_header, "application/json");
+        let wildcard_priority = crate::config::parse_accept_priority(accept_header, "*/*");
 
         // If HTML has high priority (>0.5), likely browser
         if html_priority > 0.5 {
@@ -136,7 +133,7 @@ pub fn is_browser_request(r: &Request) -> bool {
         || (has_browser_ua
             && (has_upgrade
                 || accept.is_none()
-                || crate::config::validation::parse_accept_priority(
+                || crate::config::parse_accept_priority(
                     accept.as_deref().unwrap_or(""),
                     "text/html",
                 ) > 0.0))

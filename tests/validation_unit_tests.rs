@@ -8,7 +8,10 @@ mod tests {
     use rust_x402::types::networks;
     use std::str::FromStr;
 
-    use nginx_x402::validation;
+    use nginx_x402::{
+        parse_accept_priority, validate_amount, validate_ethereum_address, validate_network,
+        validate_resource_path, validate_url,
+    };
 
     // ============================================================================
     // fix-6: Configuration Validation Tests (Direct Function Tests)
@@ -25,7 +28,7 @@ mod tests {
         ];
 
         for address in valid_addresses {
-            let result = validation::validate_ethereum_address(address);
+            let result = validate_ethereum_address(address);
             assert!(
                 result.is_ok(),
                 "Valid address '{}' should pass validation",
@@ -59,7 +62,7 @@ mod tests {
         ];
 
         for (address, expected_error) in invalid_cases {
-            let result = validation::validate_ethereum_address(address);
+            let result = validate_ethereum_address(address);
             assert!(
                 result.is_err(),
                 "Invalid address '{}' should fail validation",
@@ -86,7 +89,7 @@ mod tests {
         ];
 
         for url in valid_urls {
-            let result = validation::validate_url(url);
+            let result = validate_url(url);
             assert!(result.is_ok(), "Valid URL '{}' should pass validation", url);
         }
     }
@@ -104,7 +107,7 @@ mod tests {
         ];
 
         for (url, expected_error) in invalid_cases {
-            let result = validation::validate_url(url);
+            let result = validate_url(url);
             assert!(
                 result.is_err(),
                 "Invalid URL '{}' should fail validation",
@@ -125,7 +128,7 @@ mod tests {
     fn test_validate_network_valid_cases() {
         let supported = networks::all_supported();
         for network in supported {
-            let result = validation::validate_network(network);
+            let result = validate_network(network);
             assert!(
                 result.is_ok(),
                 "Supported network '{}' should pass validation",
@@ -144,7 +147,7 @@ mod tests {
         ];
 
         for (network, expected_error) in invalid_cases {
-            let result = validation::validate_network(network);
+            let result = validate_network(network);
             assert!(
                 result.is_err(),
                 "Unsupported network '{}' should fail validation",
@@ -179,7 +182,7 @@ mod tests {
         ];
 
         for amount in valid_amounts {
-            let result = validation::validate_amount(amount);
+            let result = validate_amount(amount);
             assert!(
                 result.is_ok(),
                 "Valid amount '{}' should pass validation",
@@ -197,7 +200,7 @@ mod tests {
         ];
 
         for amount in negative_amounts {
-            let result = validation::validate_amount(amount);
+            let result = validate_amount(amount);
             assert!(
                 result.is_err(),
                 "Negative amount '{}' should fail validation",
@@ -221,7 +224,7 @@ mod tests {
         ];
 
         for amount in too_large {
-            let result = validation::validate_amount(amount);
+            let result = validate_amount(amount);
             assert!(
                 result.is_err(),
                 "Amount '{}' exceeding maximum should fail validation",
@@ -246,7 +249,7 @@ mod tests {
         ];
 
         for amount in too_many_decimals {
-            let result = validation::validate_amount(amount);
+            let result = validate_amount(amount);
             assert!(
                 result.is_err(),
                 "Amount '{}' with too many decimals should fail validation",
@@ -265,7 +268,7 @@ mod tests {
     fn test_validate_amount_max_decimals() {
         // Test that exactly 6 decimals is allowed
         let max_decimals = Decimal::from_str("0.123456").unwrap();
-        let result = validation::validate_amount(max_decimals);
+        let result = validate_amount(max_decimals);
         assert!(
             result.is_ok(),
             "Amount with exactly 6 decimal places should be valid"
@@ -276,11 +279,11 @@ mod tests {
     fn test_validate_amount_boundary_values() {
         // Test boundary values
         let max_allowed = Decimal::from_str("1000000000").unwrap();
-        let result = validation::validate_amount(max_allowed);
+        let result = validate_amount(max_allowed);
         assert!(result.is_ok(), "Maximum allowed amount should be valid");
 
         let just_over_max = Decimal::from_str("1000000000.000001").unwrap();
-        let result = validation::validate_amount(just_over_max);
+        let result = validate_amount(just_over_max);
         assert!(result.is_err(), "Amount just over maximum should fail");
     }
 }

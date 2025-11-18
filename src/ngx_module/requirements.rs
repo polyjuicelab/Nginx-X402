@@ -56,10 +56,10 @@ pub fn create_requirements(
     // Use configured resource or fall back to provided resource
     // Validate and sanitize the resource path to prevent path traversal attacks
     let resource = if let Some(ref resource_url) = config.resource {
-        crate::config::validation::validate_resource_path(resource_url)
+        crate::config::validate_resource_path(resource_url)
             .map_err(|e| ConfigError::from(e.to_string()))?
     } else {
-        crate::config::validation::validate_resource_path(resource)
+        crate::config::validate_resource_path(resource)
             .map_err(|e| ConfigError::from(e.to_string()))?
     };
 

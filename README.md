@@ -4,6 +4,17 @@
   <img src="logo.png" alt="nginx-x402 logo" width="200">
 </div>
 
+<div align="center">
+
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://opensource.org/licenses/AGPL-3.0)
+[![CI](https://github.com/RyanKung/nginx-x402/actions/workflows/ci.yml/badge.svg)](https://github.com/RyanKung/nginx-x402/actions/workflows/ci.yml)
+[![Crates.io](https://img.shields.io/crates/v/nginx-x402.svg)](https://crates.io/crates/nginx-x402)
+[![Crates.io](https://img.shields.io/crates/d/nginx-x402.svg)](https://crates.io/crates/nginx-x402)
+[![Rust](https://img.shields.io/badge/rust-1.81%2B-orange.svg)](https://www.rust-lang.org/)
+[![GitHub release](https://img.shields.io/github/release/RyanKung/nginx-x402.svg)](https://github.com/RyanKung/nginx-x402/releases)
+
+</div>
+
 Pure Rust implementation of Nginx module for x402 HTTP micropayment protocol.
 
 ## Overview

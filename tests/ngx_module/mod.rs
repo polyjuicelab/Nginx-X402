@@ -6,5 +6,11 @@
 //! Note: These tests can run without Nginx source code by testing only the
 //! core logic functions that don't depend on ngx-rust types.
 
-#[path = "ngx_module/mod.rs"]
-mod ngx_module;
+mod common;
+
+mod address;
+mod amount;
+mod basic;
+mod fields;
+mod resource;
+mod validation;

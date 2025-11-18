@@ -5,7 +5,7 @@
 //! - fix-10: Resource path security (preventing path traversal attacks)
 
 mod tests {
-    use nginx_x402::validation::validate_resource_path;
+    use nginx_x402::validate_resource_path;
 
     #[test]
     fn test_validate_resource_path_valid() {

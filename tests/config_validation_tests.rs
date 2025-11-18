@@ -22,10 +22,11 @@ mod tests {
             amount_str: NgxString::default(),
             pay_to_str: NgxString::default(),
             facilitator_url_str: NgxString::default(),
-            testnet: 1,
             description_str: NgxString::default(),
             network_str: NgxString::default(),
             resource_str: NgxString::default(),
+            timeout_str: NgxString::default(),
+            facilitator_fallback_str: NgxString::default(),
         }
     }
 
@@ -33,6 +34,9 @@ mod tests {
     fn ngx_string(s: &str) -> ngx::string::String {
         ngx::string::String::from_str(s).unwrap_or_default()
     }
+
+    // Note: testnet field has been removed from X402Config and ParsedX402Config
+    // Network is now determined by the network_str field or defaults to BASE_MAINNET
 
     // ============================================================================
     // fix-6: Configuration Validation Tests
@@ -72,7 +76,7 @@ mod tests {
 
         let result = config.parse();
         assert!(result.is_err(), "Address with wrong length should fail");
-        let error = result.unwrap_err().to_string();
+        let error = format!("{}", result.unwrap_err());
         assert!(
             error.contains("Invalid Ethereum address length"),
             "Error should mention length issue, got: {}",
@@ -87,7 +91,7 @@ mod tests {
 
         let result = config.parse();
         assert!(result.is_err(), "Address without 0x prefix should fail");
-        let error = result.unwrap_err().to_string();
+        let error = format!("{}", result.unwrap_err());
         assert!(
             error.contains("must start with 0x"),
             "Error should mention 0x prefix, got: {}",
@@ -106,7 +110,7 @@ mod tests {
             result.is_err(),
             "Address with invalid characters should fail"
         );
-        let error = result.unwrap_err().to_string();
+        let error = format!("{}", result.unwrap_err());
         assert!(
             error.contains("invalid characters") || error.contains("must be hex"),
             "Error should mention invalid characters, got: {}",
@@ -165,7 +169,7 @@ mod tests {
 
         let result = config.parse();
         assert!(result.is_err(), "URL without scheme should fail");
-        let error = result.unwrap_err().to_string();
+        let error = format!("{}", result.unwrap_err());
         assert!(
             error.contains("http://") || error.contains("https://"),
             "Error should mention URL scheme, got: {}",
@@ -180,7 +184,7 @@ mod tests {
 
         let result = config.parse();
         assert!(result.is_err(), "URL that's too short should fail");
-        let error = result.unwrap_err().to_string();
+        let error = format!("{}", result.unwrap_err());
         assert!(
             error.contains("too short"),
             "Error should mention URL length, got: {}",
@@ -195,7 +199,7 @@ mod tests {
 
         let result = config.parse();
         assert!(result.is_err(), "URL with whitespace should fail");
-        let error = result.unwrap_err().to_string();
+        let error = format!("{}", result.unwrap_err());
         assert!(
             error.contains("whitespace") || error.contains("invalid"),
             "Error should mention whitespace, got: {}",
@@ -233,7 +237,7 @@ mod tests {
 
         let result = config.parse();
         assert!(result.is_err(), "Unsupported network should fail");
-        let error = result.unwrap_err().to_string();
+        let error = format!("{}", result.unwrap_err());
         assert!(
             error.contains("Unsupported network") || error.contains("unsupported-network"),
             "Error should mention unsupported network, got: {}",
@@ -292,7 +296,7 @@ mod tests {
 
         let result = config.parse();
         assert!(result.is_err(), "Negative amount should fail");
-        let error = result.unwrap_err().to_string();
+        let error = format!("{}", result.unwrap_err());
         assert!(
             error.contains("negative") || error.contains("cannot be negative"),
             "Error should mention negative amount, got: {}",
@@ -308,7 +312,7 @@ mod tests {
 
         let result = config.parse();
         assert!(result.is_err(), "Amount exceeding maximum should fail");
-        let error = result.unwrap_err().to_string();
+        let error = format!("{}", result.unwrap_err());
         assert!(
             error.contains("too large") || error.contains("maximum"),
             "Error should mention amount limit, got: {}",
@@ -337,7 +341,7 @@ mod tests {
             result.is_err(),
             "Amount with too many decimal places should fail"
         );
-        let error = result.unwrap_err().to_string();
+        let error = format!("{}", result.unwrap_err());
         assert!(
             error.contains("decimal places") || error.contains("precision"),
             "Error should mention decimal places, got: {}",
@@ -365,7 +369,7 @@ mod tests {
 
         let result = config.parse();
         assert!(result.is_err(), "Invalid amount format should fail");
-        let error = result.unwrap_err().to_string();
+        let error = format!("{}", result.unwrap_err());
         assert!(
             error.contains("Invalid amount format") || error.contains("parse"),
             "Error should mention invalid format, got: {}",
@@ -418,7 +422,7 @@ mod tests {
             "Multiple validation failures should result in error"
         );
         // Should fail on the first validation error (amount)
-        let error = result.unwrap_err().to_string();
+        let error = format!("{}", result.unwrap_err());
         assert!(
             error.contains("negative") || error.contains("Amount"),
             "Should fail on first validation error, got: {}",
@@ -433,7 +437,7 @@ mod tests {
         config.amount_str = ngx_string("0.0001");
         config.pay_to_str = ngx_string("0x209693Bc6afc0C5328bA36FaF03C514EF312287C");
         config.facilitator_url_str = ngx_string("https://x402.org/facilitator");
-        config.testnet = 1;
+        // testnet field removed - network is determined by network_str
         config.description_str = ngx_string("Test payment");
         config.network_str = ngx_string("base-sepolia");
         config.resource_str = ngx_string("/test");
@@ -448,7 +452,9 @@ mod tests {
         assert!(parsed.amount.is_some());
         assert!(parsed.pay_to.is_some());
         assert!(parsed.facilitator_url.is_some());
-        assert_eq!(parsed.testnet, true);
+        // testnet field removed - network is determined by network_str or defaults to BASE_MAINNET
+        // Verify network is set correctly instead
+        assert_eq!(parsed.network, Some("base-sepolia".to_string()));
         assert!(parsed.description.is_some());
         assert!(parsed.network.is_some());
         assert!(parsed.resource.is_some());

@@ -69,8 +69,7 @@ impl X402Config {
                 .map_err(|e| ConfigError::from(format!("Invalid amount format: {}", e)))?;
 
             // Validate amount range and format
-            crate::config::validation::validate_amount(amount)
-                .map_err(|e| ConfigError::from(e.to_string()))?;
+            crate::config::validate_amount(amount).map_err(|e| ConfigError::from(e.to_string()))?;
 
             Some(amount)
         };
@@ -84,7 +83,7 @@ impl X402Config {
                 .map_err(|_| ConfigError::from("Invalid pay_to string encoding"))?;
 
             // Validate Ethereum address format
-            crate::config::validation::validate_ethereum_address(pay_to_str)
+            crate::config::validate_ethereum_address(pay_to_str)
                 .map_err(|e| ConfigError::from(e.to_string()))?;
 
             Some(pay_to_str.to_string())
@@ -99,8 +98,7 @@ impl X402Config {
                 .map_err(|_| ConfigError::from("Invalid facilitator_url string encoding"))?;
 
             // Validate URL format
-            crate::config::validation::validate_url(url_str)
-                .map_err(|e| ConfigError::from(e.to_string()))?;
+            crate::config::validate_url(url_str).map_err(|e| ConfigError::from(e.to_string()))?;
 
             Some(url_str.to_string())
         };
@@ -121,7 +119,7 @@ impl X402Config {
                 .map_err(|_| ConfigError::from("Invalid network string encoding"))?;
 
             // Validate network name
-            crate::config::validation::validate_network(network_str)
+            crate::config::validate_network(network_str)
                 .map_err(|e| ConfigError::from(e.to_string()))?;
 
             Some(network_str.to_string())

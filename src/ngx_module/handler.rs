@@ -1,6 +1,6 @@
 //! Request handler implementation
 
-use crate::config::validation::validate_payment_header;
+use crate::config::validate_payment_header;
 use crate::ngx_module::config::{FacilitatorFallback, ParsedX402Config};
 use crate::ngx_module::error::{user_errors, ConfigError, Result};
 use crate::ngx_module::logging::{log_debug, log_error, log_info, log_warn};
