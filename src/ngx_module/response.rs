@@ -51,10 +51,11 @@ pub fn send_402_response(
 
     let is_browser = is_browser_request(r);
 
+    // Use error_msg if provided, otherwise use config description, otherwise use empty string
+    let error_message = error_msg.or(config.description.as_deref()).unwrap_or("");
+
     if is_browser {
         // Send HTML paywall
-        // Use error_msg if provided, otherwise use config description, otherwise use empty string
-        let error_message = error_msg.or(config.description.as_deref()).unwrap_or("");
         let html = generate_paywall_html(error_message, requirements, None);
 
         // Set Content-Type header
@@ -65,8 +66,6 @@ pub fn send_402_response(
         send_response_body(r, html.as_bytes())?;
     } else {
         // Send JSON response
-        // Use error_msg if provided, otherwise use config description, otherwise use empty string
-        let error_message = error_msg.or(config.description.as_deref()).unwrap_or("");
         let response = PaymentRequirementsResponse::new(error_message, requirements.to_vec());
         let json = serde_json::to_string(&response)
             .map_err(|_| ConfigError::from("Failed to serialize response"))?;
