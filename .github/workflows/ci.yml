@@ -237,25 +237,16 @@ jobs:
     name: Build RPM Package (${{ matrix.arch }})
     strategy:
       matrix:
-        arch: [x86_64, aarch64, armv7hl]
+        arch: [x86_64]
         include:
           - arch: x86_64
             rust_target: x86_64-unknown-linux-gnu
-          - arch: aarch64
-            rust_target: aarch64-unknown-linux-gnu
-          - arch: armv7hl
-            rust_target: armv7-unknown-linux-gnueabihf
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cross-compilation toolchain
-        if: matrix.arch != 'x86_64'
-        run: |
-          rustup target add ${{ matrix.rust_target }}
 
       - name: Install build dependencies
         run: |
@@ -268,16 +259,6 @@ jobs:
             pkg-config \
             libclang-dev \
             build-essential
-
-      - name: Setup cross-compilation environment
-        if: matrix.arch != 'x86_64'
-        run: |
-          # Setup cargo config for cross-compilation
-          mkdir -p ~/.cargo
-          cat >> ~/.cargo/config.toml <<EOF
-          [target.${{ matrix.rust_target }}]
-          linker = "${{ matrix.rust_target }}-gcc"
-          EOF
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -308,7 +289,6 @@ jobs:
       - name: Build RPM package
         env:
           NGX_CONFIGURE_ARGS: "--without-http_rewrite_module"
-          RUST_TARGET: ${{ matrix.rust_target }}
         run: |
           # Set libclang path
           if [ -d /usr/lib64/llvm/lib ]; then
@@ -316,8 +296,8 @@ jobs:
           elif [ -d /usr/lib/llvm/lib ]; then
             export LIBCLANG_PATH=/usr/lib/llvm/lib
           fi
-          # Build RPM
-          rpmbuild -ba rpm/nginx-x402.spec --target ${{ matrix.arch }}
+          # Build RPM (only x86_64 supported on Ubuntu runner)
+          rpmbuild -ba rpm/nginx-x402.spec
 
       - name: Copy RPM package to workspace
         run: |
