@@ -402,6 +402,13 @@ jobs:
           NGX_CONFIGURE_ARGS: "--without-http_rewrite_module"
           RUST_TARGET: ${{ matrix.rust_target }}
           RPM_ARCH: ${{ matrix.rpm_arch }}
+          # Cross-compilation environment variables for aarch64
+          CC_aarch64_unknown_linux_gnu: ${{ matrix.arch == 'aarch64' && 'aarch64-linux-gnu-gcc' || '' }}
+          PKG_CONFIG_ALLOW_CROSS: ${{ matrix.arch != 'x86_64' && '1' || '' }}
+          PKG_CONFIG_PATH_aarch64_unknown_linux_gnu: ${{ matrix.arch == 'aarch64' && '/usr/lib/aarch64-linux-gnu/pkgconfig' || '' }}
+          # Cross-compilation environment variables for armv7hl
+          CC_armv7_unknown_linux_gnueabihf: ${{ matrix.arch == 'armv7hl' && 'arm-linux-gnueabihf-gcc' || '' }}
+          PKG_CONFIG_PATH_armv7_unknown_linux_gnueabihf: ${{ matrix.arch == 'armv7hl' && '/usr/lib/arm-linux-gnueabihf/pkgconfig' || '' }}
         run: |
           # Set libclang path
           if [ -d /usr/lib64/llvm/lib ]; then
@@ -409,24 +416,14 @@ jobs:
           elif [ -d /usr/lib/llvm/lib ]; then
             export LIBCLANG_PATH=/usr/lib/llvm/lib
           fi
-          # Setup cross-compilation environment variables
+          # Setup additional cross-compilation environment variables
           if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            # Set CC for target architecture only (not global CC)
-            # ring crate's build script needs host CC, but C code needs target CC
-            export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
-            # Setup pkg-config for cross-compilation
-            export PKG_CONFIG_ALLOW_CROSS=1
-            export PKG_CONFIG_PATH_aarch64_unknown_linux_gnu=/usr/lib/aarch64-linux-gnu/pkgconfig
+            # Set pkg-config executable if available
             if command -v aarch64-linux-gnu-pkg-config >/dev/null 2>&1; then
               export PKG_CONFIG_aarch64_unknown_linux_gnu=aarch64-linux-gnu-pkg-config
             fi
           elif [ "${{ matrix.arch }}" = "armv7hl" ]; then
-            # Set CC for target architecture only (not global CC)
-            # ring crate's build script needs host CC, but C code needs target CC
-            export CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc
-            # Setup pkg-config for cross-compilation
-            export PKG_CONFIG_ALLOW_CROSS=1
-            export PKG_CONFIG_PATH_armv7_unknown_linux_gnueabihf=/usr/lib/arm-linux-gnueabihf/pkgconfig
+            # Set pkg-config executable if available
             if command -v arm-linux-gnueabihf-pkg-config >/dev/null 2>&1; then
               export PKG_CONFIG_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-pkg-config
             fi
