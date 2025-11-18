@@ -11,8 +11,8 @@ Build-Depends: debhelper-compat (= 12),
                nginx-dev | libnginx-mod-dev
 Standards-Version: 4.5.0
 Homepage: https://x402.org
-Vcs-Git: https://github.com/RyanKung/nginx-x402.git
-Vcs-Browser: https://github.com/RyanKung/nginx-x402
+Vcs-Git: https://github.com/polyjuicelab/Nginx-X402.git
+Vcs-Browser: https://github.com/polyjuicelab/Nginx-X402
 
 Package: nginx-x402
 Architecture: any

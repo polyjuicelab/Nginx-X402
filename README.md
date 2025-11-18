@@ -7,11 +7,11 @@
 <div align="center">
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://opensource.org/licenses/AGPL-3.0)
-[![CI](https://github.com/RyanKung/nginx-x402/actions/workflows/ci.yml/badge.svg)](https://github.com/RyanKung/nginx-x402/actions/workflows/ci.yml)
+[![CI](https://github.com/polyjuicelab/Nginx-X402/actions/workflows/ci.yml/badge.svg)](https://github.com/polyjuicelab/Nginx-X402/actions/workflows/ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/nginx-x402.svg)](https://crates.io/crates/nginx-x402)
 [![Crates.io](https://img.shields.io/crates/d/nginx-x402.svg)](https://crates.io/crates/nginx-x402)
 [![Rust](https://img.shields.io/badge/rust-1.81%2B-orange.svg)](https://www.rust-lang.org/)
-[![GitHub release](https://img.shields.io/github/release/RyanKung/nginx-x402.svg)](https://github.com/RyanKung/nginx-x402/releases)
+[![GitHub release](https://img.shields.io/github/release/polyjuicelab/Nginx-X402.svg)](https://github.com/polyjuicelab/Nginx-X402/releases)
 
 </div>
 
@@ -328,13 +328,13 @@ All tests can run without requiring Nginx source code or a running Nginx instanc
 
 ### Method 1: Install from GitHub Release (Recommended)
 
-Download the pre-built `.deb` package from [GitHub Releases](https://github.com/RyanKung/nginx-x402/releases):
+Download the pre-built `.deb` package from [GitHub Releases](https://github.com/polyjuicelab/Nginx-X402/releases):
 
 **Option A: Download latest version automatically**
 
 ```bash
 # Download the latest release (automatically gets the newest version)
-wget https://github.com/RyanKung/nginx-x402/releases/download/latest/nginx-x402_latest_amd64.deb -O nginx-x402_latest_amd64.deb
+wget https://github.com/polyjuicelab/Nginx-X402/releases/download/latest/nginx-x402_latest_amd64.deb -O nginx-x402_latest_amd64.deb
 
 # Install the package
 sudo dpkg -i nginx-x402_latest_amd64.deb
@@ -344,7 +344,7 @@ sudo dpkg -i nginx-x402_latest_amd64.deb
 
 ```bash
 # Download a specific version (replace VERSION and COMMIT with actual values)
-wget https://github.com/RyanKung/nginx-x402/releases/download/v<VERSION>-<COMMIT>/nginx-x402_<VERSION>-1_amd64.deb
+wget https://github.com/polyjuicelab/Nginx-X402/releases/download/v<VERSION>-<COMMIT>/nginx-x402_<VERSION>-1_amd64.deb
 
 # Install the package
 sudo dpkg -i nginx-x402_<VERSION>-1_amd64.deb
@@ -354,7 +354,7 @@ sudo dpkg -i nginx-x402_<VERSION>-1_amd64.deb
 
 ```bash
 # Get latest release download URL automatically
-LATEST_URL=$(curl -s https://api.github.com/repos/RyanKung/nginx-x402/releases/latest | grep "browser_download_url.*\.deb" | cut -d '"' -f 4 | head -1)
+LATEST_URL=$(curl -s https://api.github.com/repos/polyjuicelab/Nginx-X402/releases/latest | grep "browser_download_url.*\.deb" | cut -d '"' -f 4 | head -1)
 wget "$LATEST_URL" -O nginx-x402_latest_amd64.deb
 
 # Install the package
@@ -400,7 +400,7 @@ sudo apt-get install -y \
 
 ```bash
 # Clone the repository
-git clone https://github.com/RyanKung/nginx-x402.git
+git clone https://github.com/polyjuicelab/Nginx-X402.git
 cd nginx-x402
 
 # Build the deb package

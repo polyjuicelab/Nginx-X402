@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: nginx-x402
-Source: https://github.com/RyanKung/nginx-x402
+Source: https://github.com/polyjuicelab/Nginx-X402
 
 Files: *
 Copyright: 2025 Ryan Kung <ryan@polyjuice.io>
