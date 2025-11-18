@@ -55,6 +55,9 @@ if [ -n "$RUST_TARGET" ]; then
             ;;
         aarch64-unknown-linux-gnu)
             TARGET_ARCH="aarch64"
+            # Set CC for C compilation (required by ring crate)
+            export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
+            export CC=aarch64-linux-gnu-gcc
             # Setup pkg-config for cross-compilation
             export PKG_CONFIG_ALLOW_CROSS=1
             export PKG_CONFIG_PATH_aarch64_unknown_linux_gnu=/usr/lib/aarch64-linux-gnu/pkgconfig
@@ -64,6 +67,9 @@ if [ -n "$RUST_TARGET" ]; then
             ;;
         armv7-unknown-linux-gnueabihf)
             TARGET_ARCH="armv7hl"
+            # Set CC for C compilation (required by ring crate)
+            export CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc
+            export CC=arm-linux-gnueabihf-gcc
             # Setup pkg-config for cross-compilation
             export PKG_CONFIG_ALLOW_CROSS=1
             export PKG_CONFIG_PATH_armv7_unknown_linux_gnueabihf=/usr/lib/arm-linux-gnueabihf/pkgconfig
