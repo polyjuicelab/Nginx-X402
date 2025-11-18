@@ -290,7 +290,8 @@ jobs:
             if [ "${{ matrix.arch }}" = "aarch64" ]; then
               # Enable multiarch support for arm64
               sudo dpkg --add-architecture arm64
-              sudo apt-get update
+              # Update package lists - ignore errors from security.ubuntu.com (may not have arm64 packages)
+              sudo apt-get update || true
               # Install cross-compilation toolchain using crossbuild-essential (like debian build)
               sudo apt-get install -y \
                 crossbuild-essential-arm64 \
@@ -308,7 +309,8 @@ jobs:
             elif [ "${{ matrix.arch }}" = "armv7hl" ]; then
               # Enable multiarch support for armhf
               sudo dpkg --add-architecture armhf
-              sudo apt-get update
+              # Update package lists - ignore errors from security.ubuntu.com (may not have armhf packages)
+              sudo apt-get update || true
               # Install cross-compilation toolchain using crossbuild-essential (like debian build)
               sudo apt-get install -y \
                 crossbuild-essential-armhf \
