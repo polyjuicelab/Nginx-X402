@@ -153,7 +153,7 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Build release
-        run: cargo build --release --features vendored
+        run: cargo build --release
 
       - name: Determine artifact path
         id: artifact
@@ -179,15 +179,33 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-deb:
-    name: Build Debian Package
+    name: Build Debian Package (${{ matrix.arch }})
     needs: create-release
     if: needs.create-release.outputs.created == 'true'
+    strategy:
+      matrix:
+        arch: [amd64, arm64, armhf]
+        include:
+          - arch: amd64
+            deb_arch: amd64
+            rust_target: x86_64-unknown-linux-gnu
+          - arch: arm64
+            deb_arch: arm64
+            rust_target: aarch64-unknown-linux-gnu
+          - arch: armhf
+            deb_arch: armhf
+            rust_target: armv7-unknown-linux-gnueabihf
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cross-compilation toolchain
+        if: matrix.arch != 'amd64'
+        run: |
+          rustup target add ${{ matrix.rust_target }}
 
       - name: Install build dependencies
         run: |
@@ -199,7 +217,24 @@ jobs:
             libssl-dev \
             pkg-config \
             libclang-dev \
-            build-essential
+            build-essential \
+            crossbuild-essential-${{ matrix.deb_arch }} \
+            qemu-user-static \
+            binfmt-support
+
+      - name: Setup cross-compilation environment
+        if: matrix.arch != 'amd64'
+        run: |
+          # Install cross-compilation libraries
+          sudo apt-get install -y \
+            libssl-dev:${{ matrix.deb_arch }} \
+            libclang-dev:${{ matrix.deb_arch }} || true
+          # Setup cargo config for cross-compilation
+          mkdir -p ~/.cargo
+          cat >> ~/.cargo/config.toml <<EOF
+          [target.${{ matrix.rust_target }}]
+          linker = "${{ matrix.rust_target }}-gcc"
+          EOF
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -210,23 +245,29 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ matrix.arch }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-
+            ${{ runner.os }}-cargo-${{ matrix.arch }}-
 
       - name: Build Debian package
         env:
           NGX_CONFIGURE_ARGS: "--without-http_rewrite_module"
+          DEB_BUILD_OPTIONS: "nocheck"
+          DEB_HOST_ARCH: ${{ matrix.deb_arch }}
+          DEB_BUILD_ARCH: ${{ matrix.deb_arch }}
         run: |
+          # Build for target architecture
+          # dpkg-buildpackage will use DEB_HOST_ARCH and DEB_BUILD_ARCH env vars
           dpkg-buildpackage -b -us -uc
 
       - name: Get deb package filename
         id: deb_file
         run: |
-          DEB_FILE=$(ls ../nginx-x402_*.deb | head -1)
+          DEB_FILE=$(ls ../nginx-x402_*_${{ matrix.deb_arch }}.deb 2>/dev/null | head -1 || ls ../nginx-x402_*.deb | head -1)
           DEB_BASENAME=$(basename "$DEB_FILE")
           echo "file=$DEB_FILE" >> $GITHUB_OUTPUT
           echo "basename=$DEB_BASENAME" >> $GITHUB_OUTPUT
+          echo "arch=${{ matrix.deb_arch }}" >> $GITHUB_OUTPUT
           echo "Found deb package: $DEB_BASENAME"
 
       - name: Upload deb package to release
@@ -237,15 +278,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create latest deb package symlink
+      - name: Create latest deb package for amd64
+        if: matrix.arch == 'amd64'
         run: |
           DEB_FILE="${{ steps.deb_file.outputs.file }}"
-          DEB_BASENAME="${{ steps.deb_file.outputs.basename }}"
-          # Copy the deb file with latest name for easy download
           cp "$DEB_FILE" "../nginx-x402_latest_amd64.deb"
-          echo "Created latest symlink: nginx-x402_latest_amd64.deb"
+          echo "Created latest deb: nginx-x402_latest_amd64.deb"
 
-      - name: Upload latest deb package
+      - name: Upload latest deb package (amd64 only)
+        if: matrix.arch == 'amd64'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: latest

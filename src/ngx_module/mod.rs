@@ -25,8 +25,8 @@
 //! To use this module, build with the `vendored` feature (recommended for CI/CD):
 //!
 //! ```bash
-//! # With vendored Nginx source (auto-download, recommended)
-//! cargo build --release --features vendored
+//! # With vendored Nginx source (auto-download, enabled by default)
+//! cargo build --release
 //!
 //! # Or with Nginx source (for production matching)
 //! export NGINX_SOURCE_DIR=/path/to/nginx

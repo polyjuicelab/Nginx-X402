@@ -14,8 +14,23 @@ override_dh_auto_build:
 	if [ -d /usr/lib/llvm-*/lib ]; then \
 		export LIBCLANG_PATH=$$(ls -d /usr/lib/llvm-*/lib | head -1); \
 	fi
-	# Build the module
-	cargo build --release --features vendored
+	# Determine Rust target based on DEB_HOST_ARCH or DEB_BUILD_ARCH
+	if [ -n "$$DEB_HOST_ARCH" ]; then \
+		case "$$DEB_HOST_ARCH" in \
+			amd64) RUST_TARGET=x86_64-unknown-linux-gnu ;; \
+			arm64) RUST_TARGET=aarch64-unknown-linux-gnu ;; \
+			armhf) RUST_TARGET=armv7-unknown-linux-gnueabihf ;; \
+			*) RUST_TARGET=$$(dpkg-architecture -qDEB_HOST_GNU_TYPE) ;; \
+		esac; \
+		if [ "$$RUST_TARGET" != "x86_64-unknown-linux-gnu" ]; then \
+			rustup target add $$RUST_TARGET || true; \
+			cargo build --release --target $$RUST_TARGET; \
+		else \
+			cargo build --release; \
+		fi \
+	else \
+		cargo build --release; \
+	fi
 
 override_dh_auto_install:
 	# Install files manually
@@ -23,10 +38,26 @@ override_dh_auto_install:
 	mkdir -p debian/nginx-x402/usr/share/doc/nginx-x402
 	mkdir -p debian/nginx-x402/etc/nginx/modules-available
 	# Copy the built module (find the correct architecture-specific path)
-	find target -name "libnginx_x402.so" -type f | head -1 | xargs -I {} cp {} debian/nginx-x402/usr/lib/nginx/modules/libnginx_x402.so || \
-	find target -name "libnginx_x402.dylib" -type f | head -1 | xargs -I {} cp {} debian/nginx-x402/usr/lib/nginx/modules/libnginx_x402.so || \
-	cp target/release/libnginx_x402.so debian/nginx-x402/usr/lib/nginx/modules/ || \
-	cp target/*/release/libnginx_x402.so debian/nginx-x402/usr/lib/nginx/modules/ || true
+	# Try architecture-specific target directory first, then fallback to release
+	if [ -n "$$DEB_HOST_ARCH" ]; then \
+		case "$$DEB_HOST_ARCH" in \
+			amd64) RUST_TARGET=x86_64-unknown-linux-gnu ;; \
+			arm64) RUST_TARGET=aarch64-unknown-linux-gnu ;; \
+			armhf) RUST_TARGET=armv7-unknown-linux-gnueabihf ;; \
+			*) RUST_TARGET=$$(dpkg-architecture -qDEB_HOST_GNU_TYPE) ;; \
+		esac; \
+		if [ -f "target/$$RUST_TARGET/release/libnginx_x402.so" ]; then \
+			cp target/$$RUST_TARGET/release/libnginx_x402.so debian/nginx-x402/usr/lib/nginx/modules/libnginx_x402.so; \
+		else \
+			find target -name "libnginx_x402.so" -type f | head -1 | xargs -I {} cp {} debian/nginx-x402/usr/lib/nginx/modules/libnginx_x402.so || \
+			cp target/release/libnginx_x402.so debian/nginx-x402/usr/lib/nginx/modules/ || true; \
+		fi \
+	else \
+		find target -name "libnginx_x402.so" -type f | head -1 | xargs -I {} cp {} debian/nginx-x402/usr/lib/nginx/modules/libnginx_x402.so || \
+		find target -name "libnginx_x402.dylib" -type f | head -1 | xargs -I {} cp {} debian/nginx-x402/usr/lib/nginx/modules/libnginx_x402.so || \
+		cp target/release/libnginx_x402.so debian/nginx-x402/usr/lib/nginx/modules/ || \
+		cp target/*/release/libnginx_x402.so debian/nginx-x402/usr/lib/nginx/modules/ || true; \
+	fi
 	# Copy documentation
 	cp README.md debian/nginx-x402/usr/share/doc/nginx-x402/
 	cp LICENSE debian/nginx-x402/usr/share/doc/nginx-x402/
@@ -35,5 +66,5 @@ override_dh_auto_install:
 	echo "load_module /usr/lib/nginx/modules/libnginx_x402.so;" > debian/nginx-x402/etc/nginx/modules-available/x402.conf
 
 override_dh_auto_test:
-	# Run tests
-	cargo test --features vendored || true
+	# Run tests (vendored feature is enabled by default)
+	cargo test || true

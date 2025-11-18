@@ -34,22 +34,32 @@ Uses the official [ngx-rust](https://github.com/nginx/ngx-rust) crate to impleme
 
 - Rust toolchain (latest stable, 1.81.0+)
 - `rust-x402` library (from crates.io)
-- **Option A (Recommended)**: Nginx source code (same version as production)
+- **Default**: `vendored` feature is enabled by default, which auto-downloads Nginx source
+  - No manual Nginx source needed
+  - Convenient for development and CI/CD
+  - May not match production Nginx version
+- **Option (Production)**: Provide Nginx source code (same version as production)
   - Set `NGINX_SOURCE_DIR` or `NGINX_BUILD_DIR` environment variable
-- **Option B (Convenient)**: Use `vendored` feature to auto-download Nginx source
-  - No manual Nginx source needed, but may not match production version
+  - Disable vendored feature: `cargo build --release --no-default-features`
 - libclang (for bindgen)
 
 ## Environment Variables
 
-### Required (when not using `vendored` feature)
+### Optional (when not using vendored feature)
+
+If you want to use a specific Nginx version matching production, disable the default `vendored` feature:
+
+```bash
+# Disable vendored feature and use your own Nginx source
+cargo build --release --no-default-features
+```
 
 - **`NGINX_SOURCE_DIR`**: Path to Nginx source code directory
   ```bash
   export NGINX_SOURCE_DIR=/path/to/nginx-1.29.1
   ```
   - Use the same Nginx version as your production environment
-  - Required if `vendored` feature is not enabled
+  - Required if `vendored` feature is disabled
 
 - **`NGINX_BUILD_DIR`** (optional): Path to Nginx build directory
   ```bash
@@ -57,7 +67,7 @@ Uses the official [ngx-rust](https://github.com/nginx/ngx-rust) crate to impleme
   ```
   - Alternative to `NGINX_SOURCE_DIR` if you have a pre-built Nginx
 
-### Required (for macOS with vendored feature)
+### Required (for macOS - vendored feature is enabled by default)
 
 - **`SDKROOT`**: macOS SDK path (required for finding system headers like `sys/types.h`)
   ```bash
@@ -81,9 +91,9 @@ Uses the official [ngx-rust](https://github.com/nginx/ngx-rust) crate to impleme
   - On Linux, install `libclang-dev` package: `sudo apt-get install libclang-dev`
   - Ensure Xcode Command Line Tools are installed: `xcode-select --install`
 
-### Required (for vendored feature - disable rewrite module)
+### Recommended (vendored feature enabled by default - disable rewrite module)
 
-When using the `vendored` feature, the simplest approach is to disable the HTTP rewrite module (which requires PCRE). Since the x402 plugin does not use rewrite functionality, this is safe and recommended:
+Since the `vendored` feature is enabled by default, the simplest approach is to disable the HTTP rewrite module (which requires PCRE). Since the x402 plugin does not use rewrite functionality, this is safe and recommended:
 
 - **`NGX_CONFIGURE_ARGS`**: Disable HTTP rewrite module (recommended for plugin builds)
   ```bash
@@ -93,9 +103,9 @@ When using the `vendored` feature, the simplest approach is to disable the HTTP 
   - Safe because the x402 plugin does not use HTTP rewrite functionality
   - Avoids the need to download PCRE source code
 
-### Optional (for vendored feature - if you need rewrite module)
+### Optional (if you need rewrite module)
 
-If you need the HTTP rewrite module for other purposes:
+If you need the HTTP rewrite module for other purposes (vendored feature is enabled by default):
 
 - **`PKG_CONFIG_PATH`**: Help pkg-config find PCRE (macOS with Homebrew)
   ```bash
@@ -176,7 +186,7 @@ export SDKROOT=$(xcrun --show-sdk-path)
 export LIBCLANG_PATH="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib"
 
 # Build
-cargo build --release --features vendored
+cargo build --release
 ```
 
 **Linux:**
@@ -188,7 +198,7 @@ sudo apt-get install -y libclang-dev
 export NGX_CONFIGURE_ARGS="--without-http_rewrite_module"
 
 # Build
-cargo build --release --features vendored
+cargo build --release
 ```
 
 **Alternative (if you need rewrite module):**
@@ -210,7 +220,7 @@ tar -xzf pcre-8.45.tar.gz
 export NGX_CONFIGURE_ARGS="--with-pcre=/tmp/pcre-8.45"
 
 # Build
-cargo build --release --features vendored
+cargo build --release
 ```
 
 ## Building
@@ -239,7 +249,7 @@ export SDKROOT=$(xcrun --show-sdk-path)
 export LIBCLANG_PATH="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib"
 
 # Build (ngx-rust will download Nginx source automatically)
-cargo build --release --features vendored
+cargo build --release
 ```
 
 **Linux:**
@@ -248,10 +258,10 @@ cargo build --release --features vendored
 export NGX_CONFIGURE_ARGS="--without-http_rewrite_module"
 
 # Build (ngx-rust will download Nginx source automatically)
-cargo build --release --features vendored
+cargo build --release
 ```
 
-**Note**: The `vendored` feature downloads a default Nginx version. For production, use Method A with the exact Nginx version you'll deploy.
+**Note**: The `vendored` feature (enabled by default) downloads a default Nginx version. For production, disable vendored and use Method A with the exact Nginx version you'll deploy: `cargo build --release --no-default-features`
 
 ### Load Module in Nginx
 
@@ -330,35 +340,46 @@ All tests can run without requiring Nginx source code or a running Nginx instanc
 
 Download the pre-built `.deb` package from [GitHub Releases](https://github.com/polyjuicelab/Nginx-X402/releases):
 
-**Option A: Download latest version automatically**
+**Supported Architectures:**
+- `amd64` (x86_64) - Intel/AMD 64-bit
+- `arm64` (aarch64) - ARM 64-bit
+- `armhf` (armv7) - ARM hard float
+
+**Option A: Download latest version automatically (amd64)**
 
 ```bash
-# Download the latest release (automatically gets the newest version)
+# Download the latest release for amd64 (automatically gets the newest version)
 wget https://github.com/polyjuicelab/Nginx-X402/releases/download/latest/nginx-x402_latest_amd64.deb -O nginx-x402_latest_amd64.deb
 
 # Install the package
 sudo dpkg -i nginx-x402_latest_amd64.deb
 ```
 
-**Option B: Download specific version**
+**Option B: Download specific version and architecture**
 
 ```bash
+# Determine your architecture
+ARCH=$(dpkg --print-architecture)
+
 # Download a specific version (replace VERSION and COMMIT with actual values)
-wget https://github.com/polyjuicelab/Nginx-X402/releases/download/v<VERSION>-<COMMIT>/nginx-x402_<VERSION>-1_amd64.deb
+wget https://github.com/polyjuicelab/Nginx-X402/releases/download/v<VERSION>-<COMMIT>/nginx-x402_<VERSION>-1_${ARCH}.deb
 
 # Install the package
-sudo dpkg -i nginx-x402_<VERSION>-1_amd64.deb
+sudo dpkg -i nginx-x402_<VERSION>-1_${ARCH}.deb
 ```
 
 **Option C: Use GitHub API to get latest release**
 
 ```bash
-# Get latest release download URL automatically
-LATEST_URL=$(curl -s https://api.github.com/repos/polyjuicelab/Nginx-X402/releases/latest | grep "browser_download_url.*\.deb" | cut -d '"' -f 4 | head -1)
-wget "$LATEST_URL" -O nginx-x402_latest_amd64.deb
+# Determine your architecture
+ARCH=$(dpkg --print-architecture)
+
+# Get latest release download URL automatically for your architecture
+LATEST_URL=$(curl -s https://api.github.com/repos/polyjuicelab/Nginx-X402/releases/latest | grep "browser_download_url.*${ARCH}\.deb" | cut -d '"' -f 4 | head -1)
+wget "$LATEST_URL" -O nginx-x402_latest_${ARCH}.deb
 
 # Install the package
-sudo dpkg -i nginx-x402_latest_amd64.deb
+sudo dpkg -i nginx-x402_latest_${ARCH}.deb
 ```
 
 After installation (for all options above):

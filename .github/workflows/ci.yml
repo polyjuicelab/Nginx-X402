@@ -38,7 +38,7 @@ jobs:
         run: cargo fmt --check
 
       - name: Run clippy
-        run: cargo clippy --features vendored -- -D warnings
+        run: cargo clippy -- -D warnings
 
   test:
     name: Run Tests
@@ -71,7 +71,7 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Run tests
-        run: cargo test --features vendored --lib
+        run: cargo test --lib
 
   build:
     name: Build
@@ -112,7 +112,7 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Build release
-        run: cargo build --release --features vendored
+        run: cargo build --release
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -123,13 +123,31 @@ jobs:
           if-no-files-found: ignore
 
   build-deb:
-    name: Build Debian Package
+    name: Build Debian Package (${{ matrix.arch }})
+    strategy:
+      matrix:
+        arch: [amd64, arm64, armhf]
+        include:
+          - arch: amd64
+            deb_arch: amd64
+            rust_target: x86_64-unknown-linux-gnu
+          - arch: arm64
+            deb_arch: arm64
+            rust_target: aarch64-unknown-linux-gnu
+          - arch: armhf
+            deb_arch: armhf
+            rust_target: armv7-unknown-linux-gnueabihf
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cross-compilation toolchain
+        if: matrix.arch != 'amd64'
+        run: |
+          rustup target add ${{ matrix.rust_target }}
 
       - name: Install build dependencies
         run: |
@@ -141,7 +159,24 @@ jobs:
             libssl-dev \
             pkg-config \
             libclang-dev \
-            build-essential
+            build-essential \
+            crossbuild-essential-${{ matrix.deb_arch }} \
+            qemu-user-static \
+            binfmt-support
+
+      - name: Setup cross-compilation environment
+        if: matrix.arch != 'amd64'
+        run: |
+          # Install cross-compilation libraries
+          sudo apt-get install -y \
+            libssl-dev:${{ matrix.deb_arch }} \
+            libclang-dev:${{ matrix.deb_arch }} || true
+          # Setup cargo config for cross-compilation
+          mkdir -p ~/.cargo
+          cat >> ~/.cargo/config.toml <<EOF
+          [target.${{ matrix.rust_target }}]
+          linker = "${{ matrix.rust_target }}-gcc"
+          EOF
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -152,21 +187,26 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ matrix.arch }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-
+            ${{ runner.os }}-cargo-${{ matrix.arch }}-
 
       - name: Build Debian package
         env:
           NGX_CONFIGURE_ARGS: "--without-http_rewrite_module"
+          DEB_BUILD_OPTIONS: "nocheck"
+          DEB_HOST_ARCH: ${{ matrix.deb_arch }}
+          DEB_BUILD_ARCH: ${{ matrix.deb_arch }}
         run: |
+          # Build for target architecture
+          # dpkg-buildpackage will use DEB_HOST_ARCH and DEB_BUILD_ARCH env vars
           dpkg-buildpackage -b -us -uc
 
       - name: Upload deb package
         uses: actions/upload-artifact@v4
         with:
-          name: nginx-x402-deb
+          name: nginx-x402-deb-${{ matrix.deb_arch }}
           path: |
-            ../nginx-x402_*.deb
+            ../nginx-x402_*_${{ matrix.deb_arch }}.deb
           if-no-files-found: error
 
