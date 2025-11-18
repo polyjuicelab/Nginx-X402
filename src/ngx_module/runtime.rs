@@ -33,10 +33,10 @@ pub const MAX_PAYMENT_HEADER_SIZE: usize = 64 * 1024;
 /// # Errors
 /// - Returns error if runtime cannot be created (e.g., system resource exhaustion)
 pub fn get_runtime() -> Result<&'static tokio::runtime::Runtime> {
-    RUNTIME.get_or_try_init(|| {
+    RUNTIME.get_or_init(|| {
         tokio::runtime::Runtime::new()
-            .map_err(|e| ConfigError::from(format!("Failed to create tokio runtime: {}", e)))
-    })?;
+            .unwrap_or_else(|e| panic!("Failed to create tokio runtime: {}", e))
+    });
     RUNTIME
         .get()
         .ok_or_else(|| ConfigError::from("Runtime not initialized"))

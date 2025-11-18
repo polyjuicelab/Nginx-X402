@@ -12,6 +12,7 @@ use crate::ngx_module::response::{send_402_response, send_response_body};
 use crate::ngx_module::runtime::{get_runtime, verify_payment};
 use ngx::core::Status;
 use ngx::http::{HTTPStatus, Request};
+use rust_decimal::prelude::ToPrimitive;
 use std::time::Instant;
 
 /// Request handler - core payment verification logic
