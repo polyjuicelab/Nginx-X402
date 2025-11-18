@@ -47,6 +47,7 @@ pub mod config;
 pub mod error;
 pub mod handler;
 pub mod logging;
+pub mod metrics;
 pub mod module;
 pub mod request;
 pub mod requirements;
@@ -56,8 +57,9 @@ pub mod runtime;
 // Re-export public types and functions
 pub use config::{FacilitatorFallback, ParsedX402Config, X402Config};
 pub use error::{user_errors, ConfigError, Result};
-pub use handler::{x402_handler_impl, x402_ngx_handler_impl};
+pub use handler::{x402_handler_impl, x402_metrics_handler_impl, x402_ngx_handler_impl};
 pub use logging::{log_debug, log_error, log_info, log_warn};
+pub use metrics::{collect_metrics, X402Metrics};
 pub use module::{get_module_config, ngx_http_x402_module};
 pub use request::{get_header_value, is_browser_request};
 pub use requirements::create_requirements;
@@ -67,5 +69,6 @@ pub use runtime::{
     FACILITATOR_CLIENTS, MAX_PAYMENT_HEADER_SIZE, RUNTIME,
 };
 
-// Export the handler using ngx-rust's macro
+// Export the handlers using ngx-rust's macro
 ngx::http_request_handler!(x402_ngx_handler, x402_ngx_handler_impl);
+ngx::http_request_handler!(x402_metrics_handler, x402_metrics_handler_impl);

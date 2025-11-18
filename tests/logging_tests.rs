@@ -22,7 +22,7 @@ mod tests {
 
         // This test serves as documentation that logging is implemented and
         // will be integrated with ngx-rust's logging API.
-        assert!(true, "Logging functions are defined in ngx_module.rs");
+        // The test passes if the module compiles successfully.
     }
 
     #[test]
@@ -40,7 +40,7 @@ mod tests {
         // - Code review (logging calls are present)
         // - Runtime testing with actual Nginx (when ngx-rust API is confirmed)
 
-        assert!(true, "Logging is integrated at key points in the handler");
+        // The test passes if the module compiles successfully.
     }
 
     #[test]
@@ -52,7 +52,7 @@ mod tests {
         // Once integrated with ngx-rust, we'll need to ensure error handling
         // doesn't break the request flow.
 
-        assert!(true, "Logging functions handle errors gracefully");
+        // The test passes if the module compiles successfully.
     }
 
     #[test]
@@ -64,9 +64,6 @@ mod tests {
         // - debug: For detailed flow information (request processing)
 
         // This is verified by code review of the logging calls in ngx_module.rs
-        assert!(
-            true,
-            "Log levels are used appropriately throughout the code"
-        );
+        // The test passes if the module compiles successfully.
     }
 }

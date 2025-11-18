@@ -30,6 +30,6 @@ mod tests {
         // fn get_runtime() -> &'static tokio::runtime::Runtime
 
         // This is a compile-time guarantee that errors are handled
-        assert!(true, "Runtime function signature change verified in code");
+        // The test passes if the module compiles successfully.
     }
 }

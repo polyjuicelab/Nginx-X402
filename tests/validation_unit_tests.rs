@@ -8,10 +8,7 @@ mod tests {
     use rust_x402::types::networks;
     use std::str::FromStr;
 
-    use nginx_x402::{
-        parse_accept_priority, validate_amount, validate_ethereum_address, validate_network,
-        validate_resource_path, validate_url,
-    };
+    use nginx_x402::{validate_amount, validate_ethereum_address, validate_network, validate_url};
 
     // ============================================================================
     // fix-6: Configuration Validation Tests (Direct Function Tests)

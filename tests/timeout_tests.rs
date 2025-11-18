@@ -5,10 +5,8 @@
 //! - fix-4: Network request timeout control
 
 mod tests {
-    use rust_decimal::Decimal;
     use rust_x402::facilitator::FacilitatorClient;
-    use rust_x402::types::{FacilitatorConfig, PaymentPayload, PaymentRequirements};
-    use std::str::FromStr;
+    use rust_x402::types::{FacilitatorConfig, PaymentRequirements};
     use std::time::Duration;
 
     fn create_test_requirements() -> PaymentRequirements {
