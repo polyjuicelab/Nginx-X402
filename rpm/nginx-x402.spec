@@ -46,57 +46,8 @@ elif [ -d /usr/lib/llvm/lib ]; then
     export LIBCLANG_PATH=/usr/lib/llvm/lib
 fi
 
-# Determine target architecture from RUST_TARGET or use default
-# Map Rust target triple to RPM architecture name
-if [ -n "$RUST_TARGET" ]; then
-    case "$RUST_TARGET" in
-        x86_64-unknown-linux-gnu)
-            TARGET_ARCH="x86_64"
-            ;;
-        aarch64-unknown-linux-gnu)
-            TARGET_ARCH="aarch64"
-            # Set CC for target architecture only (not global CC)
-            # ring crate's build script needs host CC, but C code needs target CC
-            export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
-            # Setup pkg-config for cross-compilation
-            export PKG_CONFIG_ALLOW_CROSS=1
-            export PKG_CONFIG_PATH_aarch64_unknown_linux_gnu=/usr/lib/aarch64-linux-gnu/pkgconfig
-            if command -v aarch64-linux-gnu-pkg-config >/dev/null 2>&1; then
-                export PKG_CONFIG_aarch64_unknown_linux_gnu=aarch64-linux-gnu-pkg-config
-            fi
-            ;;
-        armv7-unknown-linux-gnueabihf)
-            TARGET_ARCH="armv7hl"
-            # Set CC for target architecture only (not global CC)
-            # ring crate's build script needs host CC, but C code needs target CC
-            export CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc
-            # Setup pkg-config for cross-compilation
-            export PKG_CONFIG_ALLOW_CROSS=1
-            export PKG_CONFIG_PATH_armv7_unknown_linux_gnueabihf=/usr/lib/arm-linux-gnueabihf/pkgconfig
-            if command -v arm-linux-gnueabihf-pkg-config >/dev/null 2>&1; then
-                export PKG_CONFIG_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-pkg-config
-            fi
-            # For openssl-sys, we need to set OPENSSL_DIR for cross-compilation
-            # Try to find OpenSSL in the cross-compilation sysroot
-            if [ -d /usr/arm-linux-gnueabihf ]; then
-                export OPENSSL_DIR=/usr/arm-linux-gnueabihf
-            elif [ -d /usr/lib/arm-linux-gnueabihf ]; then
-                export OPENSSL_DIR=/usr/lib/arm-linux-gnueabihf
-            fi
-            ;;
-        *)
-            TARGET_ARCH="x86_64"
-            ;;
-    esac
-    # Override BuildArch for cross-compilation
-    # Note: This is a workaround - rpmbuild doesn't support --target for cross-compilation
-    # We build the binary first, then rpmbuild will package it
-    rustup target add $RUST_TARGET || true
-    cargo build --release --target $RUST_TARGET
-else
-    TARGET_ARCH="x86_64"
-    cargo build --release
-fi
+# Build for native architecture (x86_64)
+cargo build --release
 
 %install
 # Create directories
@@ -104,17 +55,8 @@ mkdir -p %{buildroot}%{moduledir}
 mkdir -p %{buildroot}%{_docdir}/%{name}
 mkdir -p %{buildroot}%{_sysconfdir}/nginx/modules-available
 
-# Install module (try architecture-specific path first, then fallback)
-if [ -n "$RUST_TARGET" ] && [ "$RUST_TARGET" != "x86_64-unknown-linux-gnu" ]; then
-    if [ -f "target/$RUST_TARGET/release/libnginx_x402.so" ]; then
-        cp target/$RUST_TARGET/release/libnginx_x402.so %{buildroot}%{moduledir}/libnginx_x402.so
-    else
-        find target/$RUST_TARGET -name "libnginx_x402.so" -type f | head -1 | xargs -I {} cp {} %{buildroot}%{moduledir}/libnginx_x402.so || true
-    fi
-else
-    find target -name "libnginx_x402.so" -type f | head -1 | xargs -I {} cp {} %{buildroot}%{moduledir}/libnginx_x402.so || \
-    cp target/release/libnginx_x402.so %{buildroot}%{moduledir}/libnginx_x402.so || true
-fi
+# Install module (native build)
+cp target/release/libnginx_x402.so %{buildroot}%{moduledir}/libnginx_x402.so
 
 # Install documentation
 cp README.md %{buildroot}%{_docdir}/%{name}/

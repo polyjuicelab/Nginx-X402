@@ -123,31 +123,13 @@ jobs:
           if-no-files-found: ignore
 
   build-deb:
-    name: Build Debian Package (${{ matrix.arch }})
-    strategy:
-      matrix:
-        arch: [amd64, arm64, armhf]
-        include:
-          - arch: amd64
-            deb_arch: amd64
-            rust_target: x86_64-unknown-linux-gnu
-          - arch: arm64
-            deb_arch: arm64
-            rust_target: aarch64-unknown-linux-gnu
-          - arch: armhf
-            deb_arch: armhf
-            rust_target: armv7-unknown-linux-gnueabihf
+    name: Build Debian Package
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cross-compilation toolchain
-        if: matrix.arch != 'amd64'
-        run: |
-          rustup target add ${{ matrix.rust_target }}
 
       - name: Install build dependencies
         run: |
@@ -159,24 +141,7 @@ jobs:
             libssl-dev \
             pkg-config \
             libclang-dev \
-            build-essential \
-            crossbuild-essential-${{ matrix.deb_arch }} \
-            qemu-user-static \
-            binfmt-support
-
-      - name: Setup cross-compilation environment
-        if: matrix.arch != 'amd64'
-        run: |
-          # Install cross-compilation libraries
-          sudo apt-get install -y \
-            libssl-dev:${{ matrix.deb_arch }} \
-            libclang-dev:${{ matrix.deb_arch }} || true
-          # Setup cargo config for cross-compilation
-          mkdir -p ~/.cargo
-          cat >> ~/.cargo/config.toml <<EOF
-          [target.${{ matrix.rust_target }}]
-          linker = "${{ matrix.rust_target }}-gcc"
-          EOF
+            build-essential
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -187,90 +152,57 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-${{ matrix.arch }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-deb-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-${{ matrix.arch }}-
+            ${{ runner.os }}-cargo-deb-
 
       - name: Build Debian package
         env:
           NGX_CONFIGURE_ARGS: "--without-http_rewrite_module"
           DEB_BUILD_OPTIONS: "nocheck"
-          DEB_HOST_ARCH: ${{ matrix.deb_arch }}
-          DEB_BUILD_ARCH: ${{ matrix.deb_arch }}
         run: |
-          # Build for target architecture
-          # dpkg-buildpackage will use DEB_HOST_ARCH and DEB_BUILD_ARCH env vars
+          # Build for native architecture (amd64)
           dpkg-buildpackage -b -us -uc
 
       - name: Copy deb package to workspace
         run: |
-          echo "Looking for deb package with architecture: ${{ matrix.deb_arch }}"
+          echo "Looking for deb package"
           echo "Files in parent directory:"
           ls -la ../ || echo "Cannot list parent directory"
           echo "Files in current directory:"
           ls -la . || echo "Cannot list current directory"
-          # Try multiple patterns to find the deb package
-          DEB_FILE=$(find .. -maxdepth 1 -name "nginx-x402_*_${{ matrix.deb_arch }}.deb" 2>/dev/null | head -1)
+          # Find the deb package
+          DEB_FILE=$(find .. -maxdepth 1 -name "nginx-x402_*_amd64.deb" 2>/dev/null | head -1)
           if [ -z "$DEB_FILE" ]; then
             DEB_FILE=$(find .. -maxdepth 1 -name "nginx-x402_*.deb" 2>/dev/null | head -1)
           fi
           if [ -z "$DEB_FILE" ]; then
-            echo "Error: Could not find deb package for architecture ${{ matrix.deb_arch }}"
+            echo "Error: Could not find deb package"
             echo "Searched patterns:"
-            echo "  - nginx-x402_*_${{ matrix.deb_arch }}.deb"
+            echo "  - nginx-x402_*_amd64.deb"
             echo "  - nginx-x402_*.deb"
             exit 1
           fi
           echo "Found deb package: $DEB_FILE"
-          cp "$DEB_FILE" "./nginx-x402_${{ matrix.deb_arch }}.deb"
+          cp "$DEB_FILE" "./nginx-x402_amd64.deb"
           echo "Copied deb package: $(basename "$DEB_FILE")"
 
       - name: Upload deb package
         uses: actions/upload-artifact@v4
         with:
-          name: nginx-x402-deb-${{ matrix.deb_arch }}
+          name: nginx-x402-deb-amd64
           path: |
-            nginx-x402_${{ matrix.deb_arch }}.deb
+            nginx-x402_amd64.deb
           if-no-files-found: error
 
   build-rpm:
-    name: Build RPM Package (${{ matrix.arch }})
-    strategy:
-      matrix:
-        arch: [x86_64, aarch64, armv7hl]
-        include:
-          - arch: x86_64
-            rust_target: x86_64-unknown-linux-gnu
-            rpm_arch: x86_64
-          - arch: aarch64
-            rust_target: aarch64-unknown-linux-gnu
-            rpm_arch: aarch64
-          - arch: armv7hl
-            rust_target: armv7-unknown-linux-gnueabihf
-            rpm_arch: armv7hl
+    name: Build RPM Package
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cross-compilation toolchain
-        if: matrix.arch != 'x86_64'
-        run: |
-          rustup target add ${{ matrix.rust_target }}
-
-      - name: Setup QEMU for aarch64
-        if: matrix.arch == 'aarch64'
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
-      - name: Setup QEMU for armv7hl
-        if: matrix.arch == 'armv7hl'
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm
 
       - name: Install build dependencies
         run: |
@@ -282,94 +214,7 @@ jobs:
             libssl-dev \
             pkg-config \
             libclang-dev \
-            build-essential \
-            qemu-user-static \
-            binfmt-support
-          # Install cross-compilation toolchain and libraries for non-x86_64 architectures
-          if [ "${{ matrix.arch }}" != "x86_64" ]; then
-            if [ "${{ matrix.arch }}" = "aarch64" ]; then
-              # Enable multiarch support for arm64
-              sudo dpkg --add-architecture arm64
-              # Update package lists - use Acquire::Check-Valid-Until=false to ignore stale index errors
-              # This allows apt to continue even if some repositories fail
-              sudo apt-get update -o Acquire::Check-Valid-Until=false || true
-              # Install cross-compilation toolchain using crossbuild-essential (like debian build)
-              # Try installing crossbuild-essential first, which should pull in the compiler
-              sudo apt-get install -y crossbuild-essential-arm64 || {
-                echo "Warning: crossbuild-essential-arm64 installation failed, trying individual packages..."
-                sudo apt-get install -y \
-                  gcc-aarch64-linux-gnu \
-                  g++-aarch64-linux-gnu \
-                  libc6-dev-arm64-cross || true
-              }
-              # Install additional packages (may fail if multiarch packages aren't available)
-              sudo apt-get install -y libssl-dev:arm64 || echo "Warning: libssl-dev:arm64 not available"
-              sudo apt-get install -y pkg-config-aarch64-linux-gnu || echo "Warning: pkg-config-aarch64-linux-gnu not available"
-              # Verify installation
-              if ! command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
-                echo "Error: Failed to install aarch64-linux-gnu-gcc"
-                echo "Checking available packages..."
-                apt-cache search gcc-aarch64 | head -10 || true
-                which aarch64-linux-gnu-gcc || echo "Compiler not in PATH"
-                exit 1
-              fi
-              echo "Successfully installed: $(which aarch64-linux-gnu-gcc)"
-            elif [ "${{ matrix.arch }}" = "armv7hl" ]; then
-              # Enable multiarch support for armhf
-              sudo dpkg --add-architecture armhf
-              # Update package lists - use Acquire::Check-Valid-Until=false to ignore stale index errors
-              # This allows apt to continue even if some repositories fail
-              sudo apt-get update -o Acquire::Check-Valid-Until=false || true
-              # Install cross-compilation toolchain using crossbuild-essential (like debian build)
-              # Try installing crossbuild-essential first, which should pull in the compiler
-              sudo apt-get install -y crossbuild-essential-armhf || {
-                echo "Warning: crossbuild-essential-armhf installation failed, trying individual packages..."
-                sudo apt-get install -y \
-                  gcc-arm-linux-gnueabihf \
-                  g++-arm-linux-gnueabihf \
-                  libc6-dev-armhf-cross || true
-              }
-              # Install additional packages (may fail if multiarch packages aren't available)
-              sudo apt-get install -y libssl-dev:armhf || echo "Warning: libssl-dev:armhf not available"
-              sudo apt-get install -y pkg-config-arm-linux-gnueabihf || echo "Warning: pkg-config-arm-linux-gnueabihf not available"
-              # Verify installation
-              if ! command -v arm-linux-gnueabihf-gcc >/dev/null 2>&1; then
-                echo "Error: Failed to install arm-linux-gnueabihf-gcc"
-                echo "Checking available packages..."
-                apt-cache search gcc-arm | head -10 || true
-                which arm-linux-gnueabihf-gcc || echo "Compiler not in PATH"
-                exit 1
-              fi
-              echo "Successfully installed: $(which arm-linux-gnueabihf-gcc)"
-            fi
-          fi
-
-      - name: Setup cross-compilation environment
-        if: matrix.arch != 'x86_64'
-        run: |
-          # Setup cargo config for cross-compilation
-          mkdir -p ~/.cargo
-          if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            cat >> ~/.cargo/config.toml <<EOF
-          [target.aarch64-unknown-linux-gnu]
-          linker = "aarch64-linux-gnu-gcc"
-          EOF
-            # Verify cross-compiler is installed
-            if ! command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
-              echo "Error: aarch64-linux-gnu-gcc not found"
-              exit 1
-            fi
-          elif [ "${{ matrix.arch }}" = "armv7hl" ]; then
-            cat >> ~/.cargo/config.toml <<EOF
-          [target.armv7-unknown-linux-gnueabihf]
-          linker = "arm-linux-gnueabihf-gcc"
-          EOF
-            # Verify cross-compiler is installed
-            if ! command -v arm-linux-gnueabihf-gcc >/dev/null 2>&1; then
-              echo "Error: arm-linux-gnueabihf-gcc not found"
-              exit 1
-            fi
-          fi
+            build-essential
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -380,9 +225,9 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-rpm-${{ matrix.arch }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-rpm-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-rpm-${{ matrix.arch }}-
+            ${{ runner.os }}-cargo-rpm-
 
       - name: Create source tarball
         run: |
@@ -400,15 +245,6 @@ jobs:
       - name: Build RPM package
         env:
           NGX_CONFIGURE_ARGS: "--without-http_rewrite_module"
-          RUST_TARGET: ${{ matrix.rust_target }}
-          RPM_ARCH: ${{ matrix.rpm_arch }}
-          # Cross-compilation environment variables for aarch64
-          CC_aarch64_unknown_linux_gnu: ${{ matrix.arch == 'aarch64' && 'aarch64-linux-gnu-gcc' || '' }}
-          PKG_CONFIG_ALLOW_CROSS: ${{ matrix.arch != 'x86_64' && '1' || '' }}
-          PKG_CONFIG_PATH_aarch64_unknown_linux_gnu: ${{ matrix.arch == 'aarch64' && '/usr/lib/aarch64-linux-gnu/pkgconfig' || '' }}
-          # Cross-compilation environment variables for armv7hl
-          CC_armv7_unknown_linux_gnueabihf: ${{ matrix.arch == 'armv7hl' && 'arm-linux-gnueabihf-gcc' || '' }}
-          PKG_CONFIG_PATH_armv7_unknown_linux_gnueabihf: ${{ matrix.arch == 'armv7hl' && '/usr/lib/arm-linux-gnueabihf/pkgconfig' || '' }}
         run: |
           # Set libclang path
           if [ -d /usr/lib64/llvm/lib ]; then
@@ -416,66 +252,31 @@ jobs:
           elif [ -d /usr/lib/llvm/lib ]; then
             export LIBCLANG_PATH=/usr/lib/llvm/lib
           fi
-          # Setup additional cross-compilation environment variables
-          if [ "${{ matrix.arch }}" = "aarch64" ]; then
-            # Set pkg-config executable if available
-            if command -v aarch64-linux-gnu-pkg-config >/dev/null 2>&1; then
-              export PKG_CONFIG_aarch64_unknown_linux_gnu=aarch64-linux-gnu-pkg-config
-            fi
-          elif [ "${{ matrix.arch }}" = "armv7hl" ]; then
-            # Set pkg-config executable if available
-            if command -v arm-linux-gnueabihf-pkg-config >/dev/null 2>&1; then
-              export PKG_CONFIG_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-pkg-config
-            fi
-            # For openssl-sys, try to find OpenSSL in cross-compilation sysroot
-            if [ -d /usr/arm-linux-gnueabihf ]; then
-              export OPENSSL_DIR=/usr/arm-linux-gnueabihf
-            elif [ -d /usr/lib/arm-linux-gnueabihf ]; then
-              export OPENSSL_DIR=/usr/lib/arm-linux-gnueabihf
-            fi
-          fi
-          # Build RPM with architecture support
-          # Use --nodeps to skip dependency checking (dependencies are installed via apt)
-          # Note: rpmbuild --target doesn't work for cross-compilation on Ubuntu
-          # The binary is already built in the spec file's %build section with correct architecture
-          # rpmbuild will detect the architecture from the binary file
-          # We need to manually set the architecture in the RPM filename by using --target
-          # But since --target doesn't work, we'll build without it and rename the output
+          # Build RPM for native architecture (x86_64)
           rpmbuild -ba rpm/nginx-x402.spec --nodeps
-          
-          # For cross-compilation, rpmbuild may create the package with wrong architecture name
-          # We need to rename the output file to match the target architecture
-          if [ "${{ matrix.arch }}" != "x86_64" ]; then
-            # Find the generated RPM file and rename it to match target architecture
-            GENERATED_RPM=$(find ~/rpmbuild/RPMS -name "nginx-x402-*.rpm" 2>/dev/null | head -1)
-            if [ -n "$GENERATED_RPM" ]; then
-              TARGET_RPM=$(echo "$GENERATED_RPM" | sed "s/\.[^.]*\.rpm$/.${{ matrix.rpm_arch }}.rpm/")
-              if [ "$GENERATED_RPM" != "$TARGET_RPM" ]; then
-                mv "$GENERATED_RPM" "$TARGET_RPM"
-                echo "Renamed RPM from $(basename "$GENERATED_RPM") to $(basename "$TARGET_RPM")"
-              fi
-            fi
-          fi
 
       - name: Copy RPM package to workspace
         run: |
-          echo "Looking for RPM package with architecture: ${{ matrix.rpm_arch }}"
-          RPM_FILE=$(find ~/rpmbuild/RPMS -name "nginx-x402-*.${{ matrix.rpm_arch }}.rpm" 2>/dev/null | head -1)
+          echo "Looking for RPM package"
+          RPM_FILE=$(find ~/rpmbuild/RPMS -name "nginx-x402-*.x86_64.rpm" 2>/dev/null | head -1)
           if [ -z "$RPM_FILE" ]; then
-            echo "Error: Could not find RPM package for architecture ${{ matrix.rpm_arch }}"
+            RPM_FILE=$(find ~/rpmbuild/RPMS -name "nginx-x402-*.rpm" 2>/dev/null | head -1)
+          fi
+          if [ -z "$RPM_FILE" ]; then
+            echo "Error: Could not find RPM package"
             echo "Searching in: ~/rpmbuild/RPMS"
             find ~/rpmbuild/RPMS -name "*.rpm" 2>/dev/null || echo "No RPM files found"
             exit 1
           fi
           echo "Found RPM package: $RPM_FILE"
-          cp "$RPM_FILE" "./nginx-x402_${{ matrix.rpm_arch }}.rpm"
+          cp "$RPM_FILE" "./nginx-x402_x86_64.rpm"
           echo "Copied RPM package: $(basename "$RPM_FILE")"
 
       - name: Upload RPM package
         uses: actions/upload-artifact@v4
         with:
-          name: nginx-x402-rpm-${{ matrix.rpm_arch }}
+          name: nginx-x402-rpm-x86_64
           path: |
-            nginx-x402_${{ matrix.rpm_arch }}.rpm
+            nginx-x402_x86_64.rpm
           if-no-files-found: error
 
