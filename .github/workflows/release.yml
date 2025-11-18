@@ -260,15 +260,16 @@ jobs:
           # dpkg-buildpackage will use DEB_HOST_ARCH and DEB_BUILD_ARCH env vars
           dpkg-buildpackage -b -us -uc
 
-      - name: Get deb package filename
+      - name: Copy deb package to workspace
         id: deb_file
         run: |
           DEB_FILE=$(ls ../nginx-x402_*_${{ matrix.deb_arch }}.deb 2>/dev/null | head -1 || ls ../nginx-x402_*.deb | head -1)
           DEB_BASENAME=$(basename "$DEB_FILE")
-          echo "file=$DEB_FILE" >> $GITHUB_OUTPUT
+          cp "$DEB_FILE" "./$DEB_BASENAME"
+          echo "file=./$DEB_BASENAME" >> $GITHUB_OUTPUT
           echo "basename=$DEB_BASENAME" >> $GITHUB_OUTPUT
           echo "arch=${{ matrix.deb_arch }}" >> $GITHUB_OUTPUT
-          echo "Found deb package: $DEB_BASENAME"
+          echo "Copied deb package: $DEB_BASENAME"
 
       - name: Upload deb package to release
         uses: softprops/action-gh-release@v1
@@ -282,7 +283,7 @@ jobs:
         if: matrix.arch == 'amd64'
         run: |
           DEB_FILE="${{ steps.deb_file.outputs.file }}"
-          cp "$DEB_FILE" "../nginx-x402_latest_amd64.deb"
+          cp "$DEB_FILE" "./nginx-x402_latest_amd64.deb"
           echo "Created latest deb: nginx-x402_latest_amd64.deb"
 
       - name: Upload latest deb package (amd64 only)
@@ -290,7 +291,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: latest
-          files: ../nginx-x402_latest_amd64.deb
+          files: ./nginx-x402_latest_amd64.deb
           overwrite: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -202,11 +202,17 @@ jobs:
           # dpkg-buildpackage will use DEB_HOST_ARCH and DEB_BUILD_ARCH env vars
           dpkg-buildpackage -b -us -uc
 
+      - name: Copy deb package to workspace
+        run: |
+          DEB_FILE=$(ls ../nginx-x402_*_${{ matrix.deb_arch }}.deb 2>/dev/null | head -1 || ls ../nginx-x402_*.deb | head -1)
+          cp "$DEB_FILE" "./nginx-x402_${{ matrix.deb_arch }}.deb"
+          echo "Copied deb package: $(basename "$DEB_FILE")"
+
       - name: Upload deb package
         uses: actions/upload-artifact@v4
         with:
           name: nginx-x402-deb-${{ matrix.deb_arch }}
           path: |
-            ../nginx-x402_*_${{ matrix.deb_arch }}.deb
+            nginx-x402_${{ matrix.deb_arch }}.deb
           if-no-files-found: error
 
