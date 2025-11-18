@@ -263,8 +263,25 @@ jobs:
       - name: Copy deb package to workspace
         id: deb_file
         run: |
-          DEB_FILE=$(ls ../nginx-x402_*_${{ matrix.deb_arch }}.deb 2>/dev/null | head -1 || ls ../nginx-x402_*.deb | head -1)
+          echo "Looking for deb package with architecture: ${{ matrix.deb_arch }}"
+          echo "Files in parent directory:"
+          ls -la ../ || echo "Cannot list parent directory"
+          echo "Files in current directory:"
+          ls -la . || echo "Cannot list current directory"
+          # Try multiple patterns to find the deb package
+          DEB_FILE=$(find .. -maxdepth 1 -name "nginx-x402_*_${{ matrix.deb_arch }}.deb" 2>/dev/null | head -1)
+          if [ -z "$DEB_FILE" ]; then
+            DEB_FILE=$(find .. -maxdepth 1 -name "nginx-x402_*.deb" 2>/dev/null | head -1)
+          fi
+          if [ -z "$DEB_FILE" ]; then
+            echo "Error: Could not find deb package for architecture ${{ matrix.deb_arch }}"
+            echo "Searched patterns:"
+            echo "  - nginx-x402_*_${{ matrix.deb_arch }}.deb"
+            echo "  - nginx-x402_*.deb"
+            exit 1
+          fi
           DEB_BASENAME=$(basename "$DEB_FILE")
+          echo "Found deb package: $DEB_FILE"
           cp "$DEB_FILE" "./$DEB_BASENAME"
           echo "file=./$DEB_BASENAME" >> $GITHUB_OUTPUT
           echo "basename=$DEB_BASENAME" >> $GITHUB_OUTPUT
