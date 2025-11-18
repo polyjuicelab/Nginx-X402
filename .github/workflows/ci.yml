@@ -285,12 +285,20 @@ jobs:
             build-essential \
             qemu-user-static \
             binfmt-support
-          # Install cross-compilation toolchain for non-x86_64 architectures
+          # Install cross-compilation toolchain and libraries for non-x86_64 architectures
           if [ "${{ matrix.arch }}" != "x86_64" ]; then
             if [ "${{ matrix.arch }}" = "aarch64" ]; then
-              sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+              sudo apt-get install -y \
+                gcc-aarch64-linux-gnu \
+                g++-aarch64-linux-gnu \
+                libssl-dev:arm64 \
+                pkg-config-aarch64-linux-gnu || true
             elif [ "${{ matrix.arch }}" = "armv7hl" ]; then
-              sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+              sudo apt-get install -y \
+                gcc-arm-linux-gnueabihf \
+                g++-arm-linux-gnueabihf \
+                libssl-dev:armhf \
+                pkg-config-arm-linux-gnueabihf || true
             fi
           fi
 
@@ -304,11 +312,19 @@ jobs:
           [target.aarch64-unknown-linux-gnu]
           linker = "aarch64-linux-gnu-gcc"
           EOF
+            # Setup pkg-config for cross-compilation
+            export PKG_CONFIG_ALLOW_CROSS=1
+            export PKG_CONFIG_PATH_aarch64_unknown_linux_gnu=/usr/lib/aarch64-linux-gnu/pkgconfig
+            export PKG_CONFIG_aarch64_unknown_linux_gnu=aarch64-linux-gnu-pkg-config || export PKG_CONFIG=pkg-config
           elif [ "${{ matrix.arch }}" = "armv7hl" ]; then
             cat >> ~/.cargo/config.toml <<EOF
           [target.armv7-unknown-linux-gnueabihf]
           linker = "arm-linux-gnueabihf-gcc"
           EOF
+            # Setup pkg-config for cross-compilation
+            export PKG_CONFIG_ALLOW_CROSS=1
+            export PKG_CONFIG_PATH_armv7_unknown_linux_gnueabihf=/usr/lib/arm-linux-gnueabihf/pkgconfig
+            export PKG_CONFIG_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-pkg-config || export PKG_CONFIG=pkg-config
           fi
 
       - name: Cache cargo registry
@@ -348,6 +364,26 @@ jobs:
             export LIBCLANG_PATH=/usr/lib64/llvm/lib
           elif [ -d /usr/lib/llvm/lib ]; then
             export LIBCLANG_PATH=/usr/lib/llvm/lib
+          fi
+          # Setup cross-compilation environment variables
+          if [ "${{ matrix.arch }}" = "aarch64" ]; then
+            export PKG_CONFIG_ALLOW_CROSS=1
+            export PKG_CONFIG_PATH_aarch64_unknown_linux_gnu=/usr/lib/aarch64-linux-gnu/pkgconfig
+            if command -v aarch64-linux-gnu-pkg-config >/dev/null 2>&1; then
+              export PKG_CONFIG_aarch64_unknown_linux_gnu=aarch64-linux-gnu-pkg-config
+            fi
+          elif [ "${{ matrix.arch }}" = "armv7hl" ]; then
+            export PKG_CONFIG_ALLOW_CROSS=1
+            export PKG_CONFIG_PATH_armv7_unknown_linux_gnueabihf=/usr/lib/arm-linux-gnueabihf/pkgconfig
+            if command -v arm-linux-gnueabihf-pkg-config >/dev/null 2>&1; then
+              export PKG_CONFIG_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-pkg-config
+            fi
+            # For openssl-sys, try to find OpenSSL in cross-compilation sysroot
+            if [ -d /usr/arm-linux-gnueabihf ]; then
+              export OPENSSL_DIR=/usr/arm-linux-gnueabihf
+            elif [ -d /usr/lib/arm-linux-gnueabihf ]; then
+              export OPENSSL_DIR=/usr/lib/arm-linux-gnueabihf
+            fi
           fi
           # Build RPM with architecture support
           # Use --nodeps to skip dependency checking (dependencies are installed via apt)

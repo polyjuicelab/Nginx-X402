@@ -55,9 +55,28 @@ if [ -n "$RUST_TARGET" ]; then
             ;;
         aarch64-unknown-linux-gnu)
             TARGET_ARCH="aarch64"
+            # Setup pkg-config for cross-compilation
+            export PKG_CONFIG_ALLOW_CROSS=1
+            export PKG_CONFIG_PATH_aarch64_unknown_linux_gnu=/usr/lib/aarch64-linux-gnu/pkgconfig
+            if command -v aarch64-linux-gnu-pkg-config >/dev/null 2>&1; then
+                export PKG_CONFIG_aarch64_unknown_linux_gnu=aarch64-linux-gnu-pkg-config
+            fi
             ;;
         armv7-unknown-linux-gnueabihf)
             TARGET_ARCH="armv7hl"
+            # Setup pkg-config for cross-compilation
+            export PKG_CONFIG_ALLOW_CROSS=1
+            export PKG_CONFIG_PATH_armv7_unknown_linux_gnueabihf=/usr/lib/arm-linux-gnueabihf/pkgconfig
+            if command -v arm-linux-gnueabihf-pkg-config >/dev/null 2>&1; then
+                export PKG_CONFIG_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-pkg-config
+            fi
+            # For openssl-sys, we need to set OPENSSL_DIR for cross-compilation
+            # Try to find OpenSSL in the cross-compilation sysroot
+            if [ -d /usr/arm-linux-gnueabihf ]; then
+                export OPENSSL_DIR=/usr/arm-linux-gnueabihf
+            elif [ -d /usr/lib/arm-linux-gnueabihf ]; then
+                export OPENSSL_DIR=/usr/lib/arm-linux-gnueabihf
+            fi
             ;;
         *)
             TARGET_ARCH="x86_64"
