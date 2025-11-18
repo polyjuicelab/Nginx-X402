@@ -351,7 +351,26 @@ jobs:
           fi
           # Build RPM with architecture support
           # Use --nodeps to skip dependency checking (dependencies are installed via apt)
-          rpmbuild -ba rpm/nginx-x402.spec --nodeps --target ${{ matrix.rpm_arch }}
+          # Note: rpmbuild --target doesn't work for cross-compilation on Ubuntu
+          # The binary is already built in the spec file's %build section with correct architecture
+          # rpmbuild will detect the architecture from the binary file
+          # We need to manually set the architecture in the RPM filename by using --target
+          # But since --target doesn't work, we'll build without it and rename the output
+          rpmbuild -ba rpm/nginx-x402.spec --nodeps
+          
+          # For cross-compilation, rpmbuild may create the package with wrong architecture name
+          # We need to rename the output file to match the target architecture
+          if [ "${{ matrix.arch }}" != "x86_64" ]; then
+            # Find the generated RPM file and rename it to match target architecture
+            GENERATED_RPM=$(find ~/rpmbuild/RPMS -name "nginx-x402-*.rpm" 2>/dev/null | head -1)
+            if [ -n "$GENERATED_RPM" ]; then
+              TARGET_RPM=$(echo "$GENERATED_RPM" | sed "s/\.[^.]*\.rpm$/.${{ matrix.rpm_arch }}.rpm/")
+              if [ "$GENERATED_RPM" != "$TARGET_RPM" ]; then
+                mv "$GENERATED_RPM" "$TARGET_RPM"
+                echo "Renamed RPM from $(basename "$GENERATED_RPM") to $(basename "$TARGET_RPM")"
+              fi
+            fi
+          fi
 
       - name: Copy RPM package to workspace
         run: |
