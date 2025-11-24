@@ -66,10 +66,7 @@ unsafe fn copy_string_to_pool(cf: *mut ngx_conf_t, src: ngx_str_t) -> Option<ngx
             // Copy the string data
             ptr::copy_nonoverlapping(s.as_ptr(), data, len);
 
-            Some(ngx_str_t {
-                len: len,
-                data: data,
-            })
+            Some(ngx_str_t { len, data })
         }
         Err(_) => None,
     }
