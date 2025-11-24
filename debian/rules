@@ -8,6 +8,57 @@ export DEB_CARGO_BUILD_PROFILE = release
 	dh $@
 
 override_dh_auto_build:
+	# Detect system nginx version and use it for building if available
+	# This ensures the module is built against the same nginx version as the system
+	NGINX_VERSION=; \
+	NGINX_SOURCE_DIR=; \
+	USE_VENDORED=1; \
+	# Try to detect nginx version from installed package
+	if command -v nginx >/dev/null 2>&1; then \
+		NGINX_VERSION=$$(nginx -v 2>&1 | sed -n 's/.*nginx\/\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/p' || echo ""); \
+	elif dpkg -l nginx 2>/dev/null | grep -q "^ii"; then \
+		NGINX_VERSION=$$(dpkg -l nginx | grep "^ii" | awk '{print $$3}' | cut -d'-' -f1 | cut -d':' -f2 || echo ""); \
+	fi; \
+	# If nginx version detected, try to use system nginx source
+	if [ -n "$$NGINX_VERSION" ]; then \
+		echo "Detected system nginx version: $$NGINX_VERSION"; \
+		# Try to find nginx source in common locations
+		# Check if nginx-dev package provides source
+		if [ -d /usr/src/nginx-$$NGINX_VERSION ]; then \
+			NGINX_SOURCE_DIR=/usr/src/nginx-$$NGINX_VERSION; \
+			USE_VENDORED=0; \
+			echo "Using nginx source from /usr/src/nginx-$$NGINX_VERSION"; \
+		# Check if nginx source is in /usr/share/nginx
+		elif [ -d /usr/share/nginx-$$NGINX_VERSION ]; then \
+			NGINX_SOURCE_DIR=/usr/share/nginx-$$NGINX_VERSION; \
+			USE_VENDORED=0; \
+			echo "Using nginx source from /usr/share/nginx-$$NGINX_VERSION"; \
+		# Try to download nginx source matching system version
+		elif [ ! -d /tmp/nginx-$$NGINX_VERSION ]; then \
+			echo "Attempting to download nginx-$$NGINX_VERSION source..."; \
+			if wget -q -O /tmp/nginx-$$NGINX_VERSION.tar.gz "http://nginx.org/download/nginx-$$NGINX_VERSION.tar.gz" 2>/dev/null; then \
+				cd /tmp && tar -xzf nginx-$$NGINX_VERSION.tar.gz && rm nginx-$$NGINX_VERSION.tar.gz; \
+				if [ -d /tmp/nginx-$$NGINX_VERSION ]; then \
+					NGINX_SOURCE_DIR=/tmp/nginx-$$NGINX_VERSION; \
+					USE_VENDORED=0; \
+					echo "Downloaded and extracted nginx-$$NGINX_VERSION source"; \
+				fi; \
+			fi; \
+		elif [ -d /tmp/nginx-$$NGINX_VERSION ]; then \
+			NGINX_SOURCE_DIR=/tmp/nginx-$$NGINX_VERSION; \
+			USE_VENDORED=0; \
+			echo "Using cached nginx source from /tmp/nginx-$$NGINX_VERSION"; \
+		fi; \
+	fi; \
+	# Set environment variables based on detection result
+	if [ "$$USE_VENDORED" = "0" ] && [ -n "$$NGINX_SOURCE_DIR" ]; then \
+		export NGINX_SOURCE_DIR=$$NGINX_SOURCE_DIR; \
+		export CARGO_FEATURES="--no-default-features"; \
+		echo "Building with system nginx source: $$NGINX_SOURCE_DIR"; \
+	else \
+		export CARGO_FEATURES=""; \
+		echo "Building with vendored nginx (default)"; \
+	fi; \
 	# Set required environment variables for vendored feature
 	# Note: NGX_CONFIGURE_ARGS may be set by parent process (e.g., GitHub Actions)
 	# Set libclang path if available (Linux) and not already set
@@ -28,12 +79,12 @@ override_dh_auto_build:
 		esac; \
 		if [ "$$RUST_TARGET" != "x86_64-unknown-linux-gnu" ]; then \
 			rustup target add $$RUST_TARGET || true; \
-			cargo build --release --target $$RUST_TARGET; \
+			cargo build --release --target $$RUST_TARGET $$CARGO_FEATURES; \
 		else \
-			cargo build --release; \
+			cargo build --release $$CARGO_FEATURES; \
 		fi; \
 	else \
-		cargo build --release; \
+		cargo build --release $$CARGO_FEATURES; \
 	fi
 
 override_dh_auto_install:
