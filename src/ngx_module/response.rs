@@ -88,7 +88,7 @@ pub fn send_response_body(r: &mut Request, body: &[u8]) -> Result<()> {
 
     let pool = r.pool();
     let body_len = body.len();
-    
+
     // Ensure body is not empty - nginx requires non-zero buffer size
     if body_len == 0 {
         return Err(ConfigError::from("Cannot send empty response body"));

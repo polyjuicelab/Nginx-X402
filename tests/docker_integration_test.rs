@@ -100,9 +100,7 @@ mod tests {
         let _ = Command::new("docker")
             .args(["stop", CONTAINER_NAME])
             .output();
-        let _ = Command::new("docker")
-            .args(["rm", CONTAINER_NAME])
-            .output();
+        let _ = Command::new("docker").args(["rm", CONTAINER_NAME]).output();
     }
 
     /// Check if nginx is responding
@@ -167,7 +165,14 @@ mod tests {
 
         // Check if container exists but is stopped
         let check_output = Command::new("docker")
-            .args(["ps", "-a", "--filter", &format!("name={}", CONTAINER_NAME), "--format", "{{.Status}}"])
+            .args([
+                "ps",
+                "-a",
+                "--filter",
+                &format!("name={}", CONTAINER_NAME),
+                "--format",
+                "{{.Status}}",
+            ])
             .output();
 
         if let Ok(output) = check_output {
