@@ -86,15 +86,55 @@ fi
 # Check Rust version - need at least 1.80.0 for edition2024 support
 RUST_VERSION=$(rustc --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
 RUST_MAJOR=$(echo "$RUST_VERSION" | cut -d'.' -f1)
-RUST_MINOR=$(echo "$RUST_VERSION" | cut -d'.' -f2)
+RUST_MINOR=$(echo "$RUST_MINOR=$(echo "$RUST_VERSION" | cut -d'.' -f2)
 
 if [ "$RUST_MAJOR" -lt 1 ] || ([ "$RUST_MAJOR" -eq 1 ] && [ "$RUST_MINOR" -lt 80 ]); then
-    echo "ERROR: Rust version $RUST_VERSION is too old. Need at least 1.80.0"
-    echo "Please install a newer version of Rust using rustup or update your system Rust package."
-    exit 1
+    echo "WARNING: System Rust version $RUST_VERSION is too old. Need at least 1.80.0"
+    echo "Attempting to install rustup and use newer Rust version..."
+    
+    # Try to install rustup if not available
+    if ! command -v rustup >/dev/null 2>&1; then
+        echo "Installing rustup..."
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable || {
+            echo "ERROR: Failed to install rustup"
+            echo "Please install rustup manually or update your system Rust package to at least 1.80.0"
+            exit 1
+        }
+        # Source rustup environment
+        export PATH="$HOME/.cargo/bin:$PATH"
+        source "$HOME/.cargo/env" 2>/dev/null || true
+    fi
+    
+    # Use rustup to install/use stable toolchain
+    if command -v rustup >/dev/null 2>&1; then
+        echo "Installing stable Rust toolchain via rustup..."
+        rustup toolchain install stable --profile minimal || {
+            echo "ERROR: Failed to install Rust toolchain via rustup"
+            exit 1
+        }
+        rustup default stable || {
+            echo "ERROR: Failed to set default Rust toolchain"
+            exit 1
+        }
+        export PATH="$HOME/.cargo/bin:$PATH"
+        
+        # Verify new version
+        RUST_VERSION=$(rustc --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        RUST_MAJOR=$(echo "$RUST_VERSION" | cut -d'.' -f1)
+        RUST_MINOR=$(echo "$RUST_VERSION" | cut -d'.' -f2)
+        
+        if [ "$RUST_MAJOR" -lt 1 ] || ([ "$RUST_MAJOR" -eq 1 ] && [ "$RUST_MINOR" -lt 80 ]); then
+            echo "ERROR: Installed Rust version $RUST_VERSION is still too old"
+            exit 1
+        fi
+        echo "Using Rust version from rustup: $RUST_VERSION"
+    else
+        echo "ERROR: rustup not available and system Rust version is too old"
+        exit 1
+    fi
+else
+    echo "Using Rust version: $RUST_VERSION"
 fi
-
-echo "Using Rust version: $RUST_VERSION"
 
 # Build the module
 echo "Building module..."
