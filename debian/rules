@@ -52,12 +52,9 @@ override_dh_auto_build:
 			else \
 				echo "ERROR: Failed to download nginx source"; \
 				exit 1; \
-			fi; \
 		fi; \
-	else \
-		echo "ERROR: Could not detect nginx version. Please ensure nginx is installed."; \
-		exit 1; \
 	fi; \
+fi; \
 	# Set environment variables - we always use NGINX_SOURCE_DIR (no vendored feature)
 	if [ -n "$$NGINX_SOURCE_DIR" ]; then \
 		export NGINX_SOURCE_DIR=$$NGINX_SOURCE_DIR; \
