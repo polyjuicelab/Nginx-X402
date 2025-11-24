@@ -124,6 +124,31 @@ export NGINX_SOURCE_DIR="$NGINX_SOURCE_DIR"
 export CARGO_FEATURES="--no-default-features"
 export NGX_CONFIGURE_ARGS="--without-http_rewrite_module"
 
+# Verify NGINX_SOURCE_DIR is set correctly
+echo "Build environment:"
+echo "  NGINX_SOURCE_DIR=$NGINX_SOURCE_DIR"
+echo "  CARGO_FEATURES=$CARGO_FEATURES"
+echo "  NGX_CONFIGURE_ARGS=$NGX_CONFIGURE_ARGS"
+
+# Verify nginx source has been configured correctly
+if [ ! -f "$NGINX_SOURCE_DIR/objs/ngx_modules.c" ]; then
+    echo "ERROR: Nginx source appears to be not configured properly"
+    echo "Missing: $NGINX_SOURCE_DIR/objs/ngx_modules.c"
+    exit 1
+fi
+
+# Check nginx version in objs/ngx_auto_config.h
+if [ -f "$NGINX_SOURCE_DIR/objs/ngx_auto_config.h" ]; then
+    echo "Nginx auto config found, checking version compatibility..."
+    NGINX_BUILD_VERSION=$(grep -E 'NGINX_VER' "$NGINX_SOURCE_DIR/objs/ngx_auto_config.h" 2>/dev/null | head -1 | sed -n 's/.*"\(.*\)".*/\1/p' || echo "")
+    if [ -n "$NGINX_BUILD_VERSION" ]; then
+        echo "Nginx build version: $NGINX_BUILD_VERSION"
+        if [ "$NGINX_BUILD_VERSION" != "$NGINX_VERSION" ]; then
+            echo "WARNING: Build version ($NGINX_BUILD_VERSION) != System version ($NGINX_VERSION)"
+        fi
+    fi
+fi
+
 # Set libclang path
 if [ -z "$LIBCLANG_PATH" ]; then
     if [ -d /usr/lib64/llvm/lib ]; then
