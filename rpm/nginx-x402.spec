@@ -151,8 +151,21 @@ else
             
             # Configure nginx source with similar arguments
             if [ -n "$NGINX_CONFIGURE_ARGS_SYSTEM" ]; then
-                # Remove any existing --with-http_rewrite_module
+                # Remove problematic modules that require additional dependencies
+                # Remove rewrite module (we don't need it)
                 CONFIGURE_ARGS_CLEAN=$(echo "$NGINX_CONFIGURE_ARGS_SYSTEM" | sed 's/--with-http_rewrite_module//g')
+                # Remove dynamic modules that may require additional libraries
+                CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/--with-http_xslt_module=dynamic//g')
+                CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/--with-http_perl_module=dynamic//g')
+                CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/--with-http_image_filter_module=dynamic//g')
+                CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/--with-http_geoip_module=dynamic//g')
+                CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/--with-mail=dynamic//g')
+                CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/--with-stream=dynamic//g')
+                CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/--with-stream_geoip_module=dynamic//g')
+                # Remove --with-debug if present (may cause issues)
+                CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/--with-debug//g')
+                # Clean up multiple spaces
+                CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/  */ /g' | sed 's/^ *//' | sed 's/ *$//')
                 # Add --without-http_rewrite_module if not already present
                 if echo "$CONFIGURE_ARGS_CLEAN" | grep -qv -- "--without-http_rewrite_module"; then
                     CONFIGURE_ARGS_CLEAN="$CONFIGURE_ARGS_CLEAN --without-http_rewrite_module"
