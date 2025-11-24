@@ -266,6 +266,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-deb-
 
+      - name: Update Debian changelog version
+        run: |
+          VERSION=$(grep '^version' Cargo.toml | cut -d'"' -f2)
+          echo "Detected version from Cargo.toml: $VERSION"
+          # Update debian/changelog version to match Cargo.toml
+          # Format: nginx-x402 (VERSION-1) unstable; urgency=medium
+          sed -i "1s/(.*)/(${VERSION}-1)/" debian/changelog
+
       - name: Build Debian package
         env:
           NGX_CONFIGURE_ARGS: "--without-http_rewrite_module"
