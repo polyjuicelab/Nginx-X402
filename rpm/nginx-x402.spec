@@ -91,16 +91,37 @@ MODULE_DIR="%{moduledir}"
 
 echo "Building %{name} module for your system..."
 
-# Detect nginx version
+# Detect nginx version - try multiple methods for accuracy
 NGINX_VERSION=""
+NGINX_VERSION_FULL=""
+
+# Method 1: Use nginx -V to get detailed version info
 if command -v nginx >/dev/null 2>&1; then
-    NGINX_VERSION=$(nginx -v 2>&1 | grep -oE 'nginx/[0-9]+\.[0-9]+\.[0-9]+' | cut -d'/' -f2 || echo "")
-elif rpm -q nginx >/dev/null 2>&1; then
+    NGINX_VERSION_FULL=$(nginx -v 2>&1)
+    echo "Nginx version output: $NGINX_VERSION_FULL"
+    NGINX_VERSION=$(echo "$NGINX_VERSION_FULL" | sed -n 's/.*nginx\/\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/p' | head -1)
+    
+    # If still not found, try -V output
+    if [ -z "$NGINX_VERSION" ]; then
+        NGINX_VERSION=$(nginx -V 2>&1 | sed -n 's/.*nginx\/\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/p' | head -1)
+    fi
+fi
+
+# Method 2: Check rpm if nginx command didn't work
+if [ -z "$NGINX_VERSION" ] && rpm -q nginx >/dev/null 2>&1; then
     NGINX_VERSION=$(rpm -q --qf '%%{VERSION}' nginx 2>/dev/null | cut -d'-' -f1 || echo "")
+    echo "Detected nginx version from rpm: $NGINX_VERSION"
+fi
+
+# Method 3: Try to read from nginx binary directly
+if [ -z "$NGINX_VERSION" ] && [ -f "/usr/sbin/nginx" ]; then
+    NGINX_VERSION=$(strings /usr/sbin/nginx 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || echo "")
+    echo "Detected nginx version from binary: $NGINX_VERSION"
 fi
 
 if [ -z "$NGINX_VERSION" ]; then
     echo "ERROR: Could not detect nginx version. Please ensure nginx is installed."
+    echo "Tried methods: nginx -v, rpm -q, reading binary"
     exit 1
 fi
 
