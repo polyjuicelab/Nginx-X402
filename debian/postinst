@@ -171,13 +171,20 @@ fi
 # Extract compiler flags from system nginx configure arguments
 # This ensures binary compatibility by using the same compilation options
 RUSTFLAGS_EXTRA=""
+EXTRACTION_FAILED=0
+
 if command -v nginx >/dev/null 2>&1; then
     NGINX_V_OUTPUT=$(nginx -V 2>&1)
     
     # Extract --with-cc-opt (compiler options)
     # Use sed to extract the value between single quotes
     CC_OPT=$(echo "$NGINX_V_OUTPUT" | sed -n "s/.*--with-cc-opt='\([^']*\)'.*/\1/p" || echo "")
-    if [ -n "$CC_OPT" ]; then
+    if [ -z "$CC_OPT" ]; then
+        echo "WARNING: Failed to extract --with-cc-opt from nginx -V output"
+        echo "This may cause binary compatibility issues"
+        echo "nginx -V output: $NGINX_V_OUTPUT"
+        EXTRACTION_FAILED=1
+    else
         echo "Extracted --with-cc-opt: $CC_OPT"
         # Convert C compiler options to Rust linker arguments
         # Key options that affect binary compatibility:
@@ -205,7 +212,11 @@ if command -v nginx >/dev/null 2>&1; then
     # Extract --with-ld-opt (linker options)
     # Use sed to extract the value between single quotes
     LD_OPT=$(echo "$NGINX_V_OUTPUT" | sed -n "s/.*--with-ld-opt='\([^']*\)'.*/\1/p" || echo "")
-    if [ -n "$LD_OPT" ]; then
+    if [ -z "$LD_OPT" ]; then
+        echo "WARNING: Failed to extract --with-ld-opt from nginx -V output"
+        echo "This may cause binary compatibility issues"
+        EXTRACTION_FAILED=1
+    else
         echo "Extracted --with-ld-opt: $LD_OPT"
         # Convert linker options to Rust linker arguments
         # -Wl,options -> -C link-arg=-Wl,options
@@ -233,8 +244,20 @@ if command -v nginx >/dev/null 2>&1; then
         echo "Setting RUSTFLAGS for binary compatibility: $RUSTFLAGS_EXTRA"
         export RUSTFLAGS="$RUSTFLAGS_EXTRA"
     else
-        echo "No compiler/linker options extracted, using default RUSTFLAGS"
+        if [ "$EXTRACTION_FAILED" -eq 1 ]; then
+            echo "ERROR: Failed to extract compiler/linker options from system nginx"
+            echo "Cannot ensure binary compatibility without matching compilation flags"
+            echo "Please check nginx -V output format or report this issue"
+            exit 1
+        else
+            echo "No compiler/linker options found in nginx configuration (this is unusual)"
+            echo "Continuing with default RUSTFLAGS, but binary compatibility is not guaranteed"
+        fi
     fi
+else
+    echo "ERROR: nginx command not found, cannot extract compilation flags"
+    echo "Binary compatibility cannot be ensured"
+    exit 1
 fi
 
 # Set up build environment
