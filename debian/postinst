@@ -72,14 +72,34 @@ if [ -z "$LIBCLANG_PATH" ]; then
     fi
 fi
 
+# Verify Rust toolchain is available
+if ! command -v cargo >/dev/null 2>&1; then
+    echo "ERROR: cargo not found. Please install cargo."
+    exit 1
+fi
+
+if ! command -v rustc >/dev/null 2>&1; then
+    echo "ERROR: rustc not found. Please install rustc."
+    exit 1
+fi
+
 # Build the module
 echo "Building module..."
 mkdir -p "$BUILD_DIR"
 cp -r "$SRC_DIR"/* "$BUILD_DIR/"
 cd "$BUILD_DIR"
 
+# Ensure Cargo.toml exists
+if [ ! -f "Cargo.toml" ]; then
+    echo "ERROR: Cargo.toml not found in source directory"
+    rm -rf "$BUILD_DIR"
+    exit 1
+fi
+
 cargo build --release $CARGO_FEATURES || {
     echo "ERROR: Failed to build module"
+    echo "Build logs:"
+    cargo build --release $CARGO_FEATURES 2>&1 | tail -50
     rm -rf "$BUILD_DIR"
     exit 1
 }
