@@ -70,8 +70,8 @@ if [ -n "$NGINX_VERSION" ]; then
             (cd /tmp && tar -xzf nginx-$NGINX_VERSION.tar.gz && rm nginx-$NGINX_VERSION.tar.gz)
             if [ -d /tmp/nginx-$NGINX_VERSION ]; then
                 echo "Downloaded nginx-$NGINX_VERSION source, configuring..."
-                cd /tmp/nginx-$NGINX_VERSION && ./configure --without-http_rewrite_module >/dev/null 2>&1 || \
-                ./configure --without-http_rewrite_module --with-cc-opt="-fPIC" >/dev/null 2>&1 || true
+                (cd /tmp/nginx-$NGINX_VERSION && ./configure --without-http_rewrite_module >/dev/null 2>&1 || \
+                ./configure --without-http_rewrite_module --with-cc-opt="-fPIC" >/dev/null 2>&1 || true)
                 if [ -d /tmp/nginx-$NGINX_VERSION/objs ]; then
                     NGINX_SOURCE_DIR=/tmp/nginx-$NGINX_VERSION
                     echo "Successfully configured nginx-$NGINX_VERSION source"
@@ -104,14 +104,16 @@ else
 fi
 
 # Set libclang path if available
-if [ -z "$LIBCLANG_PATH" ] && [ -d /usr/lib64/llvm*/lib ]; then
-    export LIBCLANG_PATH=$(ls -d /usr/lib64/llvm*/lib | head -1)
-elif [ -z "$LIBCLANG_PATH" ] && [ -d /usr/lib/llvm*/lib ]; then
-    export LIBCLANG_PATH=$(ls -d /usr/lib/llvm*/lib | head -1)
-elif [ -d /usr/lib64/llvm/lib ]; then
-    export LIBCLANG_PATH=/usr/lib64/llvm/lib
-elif [ -d /usr/lib/llvm/lib ]; then
-    export LIBCLANG_PATH=/usr/lib/llvm/lib
+if [ -z "$LIBCLANG_PATH" ]; then
+    if [ -d /usr/lib64/llvm/lib ]; then
+        export LIBCLANG_PATH=/usr/lib64/llvm/lib
+    elif [ -d /usr/lib/llvm/lib ]; then
+        export LIBCLANG_PATH=/usr/lib/llvm/lib
+    elif ls -d /usr/lib64/llvm*/lib >/dev/null 2>&1; then
+        export LIBCLANG_PATH=$(ls -d /usr/lib64/llvm*/lib 2>/dev/null | head -1)
+    elif ls -d /usr/lib/llvm-*/lib >/dev/null 2>&1; then
+        export LIBCLANG_PATH=$(ls -d /usr/lib/llvm-*/lib 2>/dev/null | head -1)
+    fi
 fi
 
 # Set NGX_CONFIGURE_ARGS if not already set
