@@ -166,7 +166,6 @@ fi
 RUST_VERSION=$(rustc --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
 RUST_MAJOR=$(echo "$RUST_VERSION" | cut -d'.' -f1)
 RUST_MINOR=$(echo "$RUST_VERSION" | cut -d'.' -f2)
-)
 
 if [ "$RUST_MAJOR" -lt 1 ] || ([ "$RUST_MAJOR" -eq 1 ] && [ "$RUST_MINOR" -lt 80 ]); then
     echo "ERROR: Rust version $RUST_VERSION is too old. Need at least 1.80.0"
