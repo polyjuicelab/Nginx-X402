@@ -4,6 +4,7 @@ use std::env;
 use std::fs;
 use std::io;
 use std::path::PathBuf;
+use std::process::Command;
 
 /// Default module signature used as fallback when nginx source is not available.
 /// This matches a typical nginx configuration: 64-bit pointers, 32-bit atomic, 64-bit time.
@@ -14,6 +15,18 @@ const DEFAULT_FEATURE_FLAGS: &str = "0010111111010111001111111111100110";
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
+
+    // Auto-download nginx source if NGINX_SOURCE_DIR is not set
+    // This needs to happen early so nginx-sys can use it
+    if env::var("NGINX_SOURCE_DIR").is_err() {
+        if let Ok(source_dir) = auto_download_nginx_source() {
+            // Set environment variable for nginx-sys (though it may have already run)
+            // This is best-effort - nginx-sys may need NGINX_SOURCE_DIR set before cargo build
+            println!("cargo:rustc-env=NGINX_SOURCE_DIR={}", source_dir.display());
+            // Also set it for our own use
+            env::set_var("NGINX_SOURCE_DIR", source_dir.to_str().unwrap());
+        }
+    }
 
     // Extract nginx module signature from source
     let signature = extract_nginx_module_signature();
@@ -79,10 +92,16 @@ fn configure_linker_flags() {
 /// 2. Build from objs/ngx_auto_config.h (fallback, constructs from defines)
 /// 3. Use default signature (final fallback)
 fn extract_nginx_module_signature() -> String {
-    let nginx_source_dir = match env::var("NGINX_SOURCE_DIR") {
-        Ok(dir) => PathBuf::from(dir),
-        Err(_) => {
-            return DEFAULT_SIGNATURE.to_string();
+    // Try to get NGINX_SOURCE_DIR from environment
+    let nginx_source_dir = if let Ok(dir) = env::var("NGINX_SOURCE_DIR") {
+        PathBuf::from(dir)
+    } else {
+        // Auto-detect and download nginx source if not set
+        match auto_download_nginx_source() {
+            Ok(dir) => dir,
+            Err(_) => {
+                return DEFAULT_SIGNATURE.to_string();
+            }
         }
     };
 
@@ -92,18 +111,29 @@ fn extract_nginx_module_signature() -> String {
     // Try to extract signature from ngx_modules.c first (most reliable)
     if let Ok(modules_content) = fs::read_to_string(&modules_path) {
         if let Some(signature) = extract_signature_from_modules_c(&modules_content) {
+            eprintln!("cargo:warning=Extracted module signature from ngx_modules.c: {}", signature);
             return signature;
+        } else {
+            eprintln!("cargo:warning=Failed to extract signature from ngx_modules.c");
         }
+    } else {
+        eprintln!("cargo:warning=Could not read ngx_modules.c at: {}", modules_path.display());
     }
 
     // Fallback: Build signature from ngx_auto_config.h
     if let Ok(config_content) = fs::read_to_string(&auto_config_path) {
         if let Some(signature) = build_signature_from_config_h(&config_content) {
+            eprintln!("cargo:warning=Built module signature from ngx_auto_config.h: {}", signature);
             return signature;
+        } else {
+            eprintln!("cargo:warning=Failed to build signature from ngx_auto_config.h");
         }
+    } else {
+        eprintln!("cargo:warning=Could not read ngx_auto_config.h at: {}", auto_config_path.display());
     }
 
     // Final fallback: use default signature
+    eprintln!("cargo:warning=Using default module signature: {}", DEFAULT_SIGNATURE);
     DEFAULT_SIGNATURE.to_string()
 }
 
@@ -280,4 +310,366 @@ fn extract_define_string(content: &str, name: &str) -> Option<String> {
     }
 
     None
+}
+
+/// Automatically detect nginx version and download source if needed.
+///
+/// This function:
+/// 1. Detects nginx version from system nginx binary
+/// 2. Checks common locations for existing nginx source
+/// 3. Downloads and configures nginx source if not found
+fn auto_download_nginx_source() -> io::Result<PathBuf> {
+    // Detect nginx version
+    let nginx_version = detect_nginx_version()?;
+
+    // Check common locations for existing nginx source
+    let common_paths = [
+        format!("/usr/src/nginx-{}", nginx_version),
+        format!("/usr/share/nginx-{}", nginx_version),
+        format!("/tmp/nginx-{}", nginx_version),
+    ];
+
+    for path_str in &common_paths {
+        let path = PathBuf::from(path_str);
+        if path.join("objs/ngx_modules.c").exists() {
+            return Ok(path);
+        }
+    }
+
+    // Download and configure nginx source
+    download_and_configure_nginx(&nginx_version)
+}
+
+/// Detect nginx version from system nginx binary.
+fn detect_nginx_version() -> io::Result<String> {
+    // Try to get version from nginx -v command
+    let output = Command::new("nginx").arg("-v").output().map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("nginx command not found: {}", e),
+        )
+    })?;
+
+    let output_str = String::from_utf8_lossy(&output.stderr);
+
+    // Extract version from output like "nginx version: nginx/1.24.0"
+    if let Some(version) = extract_version_from_string(&output_str) {
+        return Ok(version);
+    }
+
+    Err(io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!("Could not detect nginx version from: {}", output_str),
+    ))
+}
+
+/// Extract version number from nginx version string.
+fn extract_version_from_string(s: &str) -> Option<String> {
+    // Look for pattern like "nginx/1.24.0" or "nginx version: nginx/1.24.0"
+    for part in s.split_whitespace() {
+        if part.starts_with("nginx/") {
+            return Some(part.strip_prefix("nginx/")?.to_string());
+        }
+        if let Some(version) = part.strip_prefix("nginx/") {
+            return Some(version.to_string());
+        }
+    }
+
+    // Fallback: look for version pattern X.Y.Z
+    for part in s.split_whitespace() {
+        if part.matches('.').count() == 2 {
+            let parts: Vec<&str> = part.split('.').collect();
+            if parts.len() == 3 && parts.iter().all(|p| p.parse::<u32>().is_ok()) {
+                return Some(part.to_string());
+            }
+        }
+    }
+
+    None
+}
+
+/// Download and configure nginx source.
+fn download_and_configure_nginx(version: &str) -> io::Result<PathBuf> {
+    let download_dir = PathBuf::from("/tmp");
+    let tarball_name = format!("nginx-{}.tar.gz", version);
+    let tarball_path = download_dir.join(&tarball_name);
+    let source_dir = download_dir.join(format!("nginx-{}", version));
+
+    // Check if already downloaded and configured
+    if source_dir.join("objs/ngx_modules.c").exists() {
+        return Ok(source_dir);
+    }
+
+    // Download nginx source
+    let download_url = format!("http://nginx.org/download/{}", tarball_name);
+
+    // Try wget first, then curl
+    let download_success = if Command::new("wget")
+        .args(&["-q", "-O", tarball_path.to_str().unwrap(), &download_url])
+        .status()
+        .is_ok()
+    {
+        true
+    } else if Command::new("curl")
+        .args(&["-sSfL", "-o", tarball_path.to_str().unwrap(), &download_url])
+        .status()
+        .is_ok()
+    {
+        true
+    } else {
+        false
+    };
+
+    if !download_success {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("Failed to download nginx source from {}", download_url),
+        ));
+    }
+
+    // Extract tarball
+    let extract_success = Command::new("tar")
+        .args(&["-xzf", tarball_path.to_str().unwrap()])
+        .current_dir(&download_dir)
+        .status()
+        .is_ok();
+
+    // Clean up tarball
+    let _ = fs::remove_file(&tarball_path);
+
+    if !extract_success || !source_dir.exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            "Failed to extract nginx source",
+        ));
+    }
+
+    // Configure nginx source
+    configure_nginx_source(&source_dir)?;
+
+    Ok(source_dir)
+}
+
+/// Configure nginx source with minimal configuration.
+fn configure_nginx_source(source_dir: &PathBuf) -> io::Result<()> {
+    // Try to get configure args from system nginx
+    let configure_args = get_system_configure_args()
+        .unwrap_or_else(|_| "--without-http_rewrite_module --with-cc-opt=-fPIC".to_string());
+
+    eprintln!("cargo:warning=Configuring nginx source with args: {}", configure_args);
+    
+    // Run configure with shell to properly handle quoted arguments
+    // Use sh -c to ensure proper argument parsing
+    let configure_script = format!("cd {} && ./configure {}", 
+        source_dir.display(),
+        configure_args
+    );
+    
+    let configure_output = Command::new("sh")
+        .arg("-c")
+        .arg(&configure_script)
+        .output();
+
+    match configure_output {
+        Ok(output) if output.status.success() => {
+            eprintln!("cargo:warning=Nginx configure succeeded");
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            eprintln!("cargo:warning=Nginx configure failed, trying fallback. Error: {}", stderr);
+            
+            // Try with parsed arguments as fallback
+            let parsed_args = parse_configure_args(&configure_args);
+            let mut cmd = Command::new("./configure");
+            cmd.current_dir(source_dir);
+            for arg in &parsed_args {
+                cmd.arg(arg);
+            }
+            
+            let parsed_output = cmd.output();
+            match parsed_output {
+                Ok(output) if output.status.success() => {
+                    eprintln!("cargo:warning=Nginx configure succeeded with parsed arguments");
+                }
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    eprintln!("cargo:warning=Parsed args configure failed, trying minimal. Error: {}", stderr);
+                    
+                    // Try minimal configuration
+                    let minimal_output = Command::new("./configure")
+                        .args(&["--without-http_rewrite_module", "--with-cc-opt=-fPIC"])
+                        .current_dir(source_dir)
+                        .output();
+
+                    match minimal_output {
+                        Ok(output) if output.status.success() => {
+                            eprintln!("cargo:warning=Nginx configure succeeded with minimal args");
+                        }
+                        Ok(output) => {
+                            let stderr = String::from_utf8_lossy(&output.stderr);
+                            return Err(io::Error::new(
+                                io::ErrorKind::Other,
+                                format!("Failed to configure nginx source: {}", stderr),
+                            ));
+                        }
+                        Err(e) => {
+                            return Err(io::Error::new(
+                                io::ErrorKind::Other,
+                                format!("Failed to run configure: {}", e),
+                            ));
+                        }
+                    }
+                }
+                Err(e) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("Failed to run configure with parsed args: {}", e),
+                    ));
+                }
+            }
+        }
+        Err(e) => {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("Failed to run configure script: {}", e),
+            ));
+        }
+    }
+
+    // Verify configure succeeded
+    if !source_dir.join("objs/ngx_modules.c").exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            "Configure appeared to succeed but ngx_modules.c not found",
+        ));
+    }
+
+    Ok(())
+}
+
+/// Parse configure arguments handling quoted strings properly.
+/// 
+/// This function properly handles arguments like:
+/// --with-cc-opt='-g -O2 -fPIC'
+/// --with-ld-opt='-Wl,-z,relro'
+/// 
+/// Returns a vector of argument strings, preserving quoted strings as single arguments.
+fn parse_configure_args(args: &str) -> Vec<String> {
+    let mut result = Vec::new();
+    let mut current = String::new();
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+
+    for ch in args.chars() {
+        match ch {
+            '\'' if !in_double_quote => {
+                in_single_quote = !in_single_quote;
+                current.push(ch);
+            }
+            '"' if !in_single_quote => {
+                in_double_quote = !in_double_quote;
+                current.push(ch);
+            }
+            ' ' | '\t' if !in_single_quote && !in_double_quote => {
+                if !current.is_empty() {
+                    result.push(current.clone());
+                    current.clear();
+                }
+            }
+            _ => {
+                current.push(ch);
+            }
+        }
+    }
+
+    if !current.is_empty() {
+        result.push(current);
+    }
+
+    result
+}
+
+/// Get configure arguments from system nginx.
+fn get_system_configure_args() -> io::Result<String> {
+    let output = Command::new("nginx").arg("-V").output().map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("nginx command not found: {}", e),
+        )
+    })?;
+
+    let output_str = String::from_utf8_lossy(&output.stderr);
+
+    // Extract configure arguments
+    if let Some(args_start) = output_str.find("configure arguments:") {
+        let args = &output_str[args_start + "configure arguments:".len()..];
+        // Clean up the arguments (remove problematic modules)
+        let cleaned = clean_configure_args(args.trim());
+        return Ok(cleaned);
+    }
+
+    Err(io::Error::new(
+        io::ErrorKind::InvalidData,
+        "Could not extract configure arguments from nginx -V",
+    ))
+}
+
+/// Clean configure arguments by removing problematic modules.
+/// 
+/// IMPORTANT: We preserve all arguments that affect binary compatibility:
+/// - --with-cc-opt (compiler flags)
+/// - --with-ld-opt (linker flags)
+/// - --prefix, --conf-path, etc. (paths don't affect signature)
+/// - Feature flags (--with-*, --without-*) that affect module signature
+/// 
+/// We only remove modules that cause build issues but don't affect signature.
+/// 
+/// This function uses simple string replacement but is careful to only remove
+/// standalone module arguments, not ones that might be inside quoted strings.
+fn clean_configure_args(args: &str) -> String {
+    let mut cleaned = args.to_string();
+    
+    // Modules that cause build issues but don't affect signature
+    // These can be safely removed, but we need to be careful about quoted strings
+    // We only remove them if they appear as standalone arguments (preceded by space or start of string,
+    // followed by space or end of string)
+    let modules_to_remove = [
+        " --with-http_rewrite_module ",
+        " --with-http_xslt_module=dynamic ",
+        " --with-http_perl_module=dynamic ",
+        " --with-http_image_filter_module=dynamic ",
+        " --with-http_geoip_module=dynamic ",
+        " --with-mail=dynamic ",
+        " --with-stream=dynamic ",
+        " --with-stream_geoip_module=dynamic ",
+    ];
+    
+    // Also handle cases at start/end of string
+    for module in &modules_to_remove {
+        let trimmed = module.trim();
+        // Remove from middle of string
+        cleaned = cleaned.replace(module, " ");
+        // Remove from start
+        if cleaned.starts_with(trimmed) {
+            cleaned = cleaned.replacen(trimmed, "", 1);
+        }
+        // Remove from end
+        if cleaned.ends_with(trimmed) {
+            let len = cleaned.len();
+            let trim_len = trimmed.len();
+            cleaned = cleaned[..len - trim_len].to_string();
+        }
+    }
+    
+    // Add --without-http_rewrite_module if not present
+    if !cleaned.contains("--without-http_rewrite_module") {
+        cleaned.push_str(" --without-http_rewrite_module");
+    }
+    
+    // Clean up multiple spaces
+    while cleaned.contains("  ") {
+        cleaned = cleaned.replace("  ", " ");
+    }
+    
+    cleaned.trim().to_string()
 }
