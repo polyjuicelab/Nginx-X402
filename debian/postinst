@@ -140,6 +140,10 @@ fi
 echo "Building module..."
 mkdir -p "$BUILD_DIR"
 cp -r "$SRC_DIR"/* "$BUILD_DIR/"
+# Copy README.md if it exists in source directory (needed for doc generation)
+if [ -f "$SRC_DIR/README.md" ]; then
+    cp "$SRC_DIR/README.md" "$BUILD_DIR/"
+fi
 cd "$BUILD_DIR"
 
 # Ensure Cargo.toml exists
