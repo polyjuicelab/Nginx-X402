@@ -175,7 +175,8 @@ if command -v nginx >/dev/null 2>&1; then
     NGINX_V_OUTPUT=$(nginx -V 2>&1)
     
     # Extract --with-cc-opt (compiler options)
-    CC_OPT=$(echo "$NGINX_V_OUTPUT" | grep -oE "--with-cc-opt='[^']*'" | sed "s/--with-cc-opt='//" | sed "s/'$//" || echo "")
+    # Use sed to extract the value between single quotes
+    CC_OPT=$(echo "$NGINX_V_OUTPUT" | sed -n "s/.*--with-cc-opt='\([^']*\)'.*/\1/p" || echo "")
     if [ -n "$CC_OPT" ]; then
         echo "Extracted --with-cc-opt: $CC_OPT"
         # Convert C compiler options to Rust linker arguments
@@ -202,7 +203,8 @@ if command -v nginx >/dev/null 2>&1; then
     fi
     
     # Extract --with-ld-opt (linker options)
-    LD_OPT=$(echo "$NGINX_V_OUTPUT" | grep -oE "--with-ld-opt='[^']*'" | sed "s/--with-ld-opt='//" | sed "s/'$//" || echo "")
+    # Use sed to extract the value between single quotes
+    LD_OPT=$(echo "$NGINX_V_OUTPUT" | sed -n "s/.*--with-ld-opt='\([^']*\)'.*/\1/p" || echo "")
     if [ -n "$LD_OPT" ]; then
         echo "Extracted --with-ld-opt: $LD_OPT"
         # Convert linker options to Rust linker arguments
