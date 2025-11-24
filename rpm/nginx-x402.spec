@@ -183,7 +183,10 @@ if [ "$RUST_MAJOR" -lt 1 ] || ([ "$RUST_MAJOR" -eq 1 ] && [ "$RUST_MINOR" -lt 80
         }
         # Source rustup environment
         export PATH="$HOME/.cargo/bin:$PATH"
-        source "$HOME/.cargo/env" 2>/dev/null || true
+        # Try to source rustup env, but don't fail if it doesn't exist
+        if [ -f "$HOME/.cargo/env" ]; then
+            . "$HOME/.cargo/env"
+        fi
     fi
     
     # Use rustup to install/use stable toolchain
