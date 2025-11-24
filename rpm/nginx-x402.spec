@@ -52,12 +52,6 @@ elif rpm -q nginx >/dev/null 2>&1; then
     NGINX_VERSION=$(rpm -q --qf '%{VERSION}' nginx 2>/dev/null | cut -d'-' -f1 || echo "")
 fi
 
-# If nginx version not detected, use default version for CI builds
-if [ -z "$NGINX_VERSION" ]; then
-    NGINX_VERSION="1.28.0"
-    echo "No nginx detected, using default version: $NGINX_VERSION"
-fi
-
 # If nginx version detected, find or download matching source
 if [ -n "$NGINX_VERSION" ]; then
     echo "Detected system nginx version: $NGINX_VERSION"
@@ -94,6 +88,9 @@ if [ -n "$NGINX_VERSION" ]; then
             exit 1
         fi
     fi
+else
+    echo "ERROR: Could not detect nginx version. Please ensure nginx is installed."
+    exit 1
 fi
 
 # Set environment variables - we always use NGINX_SOURCE_DIR (no vendored feature)
