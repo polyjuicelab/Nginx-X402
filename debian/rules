@@ -39,12 +39,12 @@ override_dh_auto_build:
 					(cd /tmp/nginx-$$NGINX_VERSION && ./configure --without-http_rewrite_module >/dev/null 2>&1 || \
 					./configure --without-http_rewrite_module --with-cc-opt="-fPIC" >/dev/null 2>&1 || true); \
 					if [ -d /tmp/nginx-$$NGINX_VERSION/objs ]; then \
-					NGINX_SOURCE_DIR=/tmp/nginx-$$NGINX_VERSION; \
+						NGINX_SOURCE_DIR=/tmp/nginx-$$NGINX_VERSION; \
 						echo "Successfully configured nginx-$$NGINX_VERSION source"; \
 					else \
 						echo "ERROR: Failed to configure nginx source"; \
 						exit 1; \
-			fi; \
+					fi; \
 				else \
 					echo "ERROR: Failed to extract nginx source"; \
 					exit 1; \
