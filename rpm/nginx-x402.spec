@@ -65,6 +65,8 @@ mkdir -p %{buildroot}%{_datadir}/%{name}/src
 cp -r src %{buildroot}%{_datadir}/%{name}/
 cp build.rs %{buildroot}%{_datadir}/%{name}/ 2>/dev/null || true
 cp Cargo.toml %{buildroot}%{_datadir}/%{name}/
+# Copy README.md (needed for doc generation in src/lib.rs)
+cp README.md %{buildroot}%{_datadir}/%{name}/ 2>/dev/null || true
 # Don't copy Cargo.lock - let cargo regenerate it during installation
 # This avoids lock file version compatibility issues
 
