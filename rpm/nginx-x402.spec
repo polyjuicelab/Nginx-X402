@@ -20,6 +20,15 @@ BuildRequires:  gcc
 BuildRequires:  make
 
 Requires:       nginx >= 1.18.0
+Requires:       cargo
+Requires:       rustc
+Requires:       clang-devel
+Requires:       openssl-devel
+Requires:       pkgconfig
+Requires:       gcc
+Requires:       make
+Requires:       wget
+Requires:       ca-certificates
 
 %description
 Pure Rust implementation of Nginx module for x402 HTTP micropayment protocol.
@@ -45,15 +54,17 @@ Features:
 echo "Skipping build during package creation - will build during installation"
 
 %install
-# Create directories
+# Install source code and documentation - module will be built during installation
 mkdir -p %{buildroot}%{moduledir}
 mkdir -p %{buildroot}%{_docdir}/%{name}
 mkdir -p %{buildroot}%{_sysconfdir}/nginx/modules-available
+mkdir -p %{buildroot}%{_datadir}/%{name}/src
 
-# Copy the built module (try multiple locations for cross-compilation support)
-find target -name "libnginx_x402.so" -type f | head -1 | xargs -I {} cp {} %{buildroot}%{moduledir}/libnginx_x402.so || \
-cp target/release/libnginx_x402.so %{buildroot}%{moduledir}/libnginx_x402.so || \
-cp target/*/release/libnginx_x402.so %{buildroot}%{moduledir}/libnginx_x402.so
+# Copy source code for building during installation
+cp -r src %{buildroot}%{_datadir}/%{name}/
+cp build.rs %{buildroot}%{_datadir}/%{name}/ 2>/dev/null || true
+cp Cargo.toml %{buildroot}%{_datadir}/%{name}/
+cp Cargo.lock %{buildroot}%{_datadir}/%{name}/ 2>/dev/null || true
 
 # Install documentation
 cp README.md %{buildroot}%{_docdir}/%{name}/
@@ -63,12 +74,142 @@ cp nginx/example.conf %{buildroot}%{_docdir}/%{name}/example.conf
 # Create module configuration snippet
 echo "load_module %{moduledir}/libnginx_x402.so;" > %{buildroot}%{_sysconfdir}/nginx/modules-available/x402.conf
 
+%post
+# Build the module during package installation to match system nginx version
+SRC_DIR="%{_datadir}/%{name}"
+BUILD_DIR="/tmp/%{name}-build"
+MODULE_DIR="%{moduledir}"
+
+echo "Building %{name} module for your system..."
+
+# Detect nginx version
+NGINX_VERSION=""
+if command -v nginx >/dev/null 2>&1; then
+    NGINX_VERSION=$(nginx -v 2>&1 | grep -oE 'nginx/[0-9]+\.[0-9]+\.[0-9]+' | cut -d'/' -f2 || echo "")
+elif rpm -q nginx >/dev/null 2>&1; then
+    NGINX_VERSION=$(rpm -q --qf '%%{VERSION}' nginx 2>/dev/null | cut -d'-' -f1 || echo "")
+fi
+
+if [ -z "$NGINX_VERSION" ]; then
+    echo "ERROR: Could not detect nginx version. Please ensure nginx is installed."
+    exit 1
+fi
+
+echo "Detected system nginx version: $NGINX_VERSION"
+
+# Find or download matching nginx source
+NGINX_SOURCE_DIR=""
+if [ -d "/usr/src/nginx-$NGINX_VERSION" ] && [ -d "/usr/src/nginx-$NGINX_VERSION/objs" ]; then
+    NGINX_SOURCE_DIR="/usr/src/nginx-$NGINX_VERSION"
+elif [ -d "/usr/share/nginx-$NGINX_VERSION" ] && [ -d "/usr/share/nginx-$NGINX_VERSION/objs" ]; then
+    NGINX_SOURCE_DIR="/usr/share/nginx-$NGINX_VERSION"
+elif [ -d "/tmp/nginx-$NGINX_VERSION" ] && [ -d "/tmp/nginx-$NGINX_VERSION/objs" ]; then
+    NGINX_SOURCE_DIR="/tmp/nginx-$NGINX_VERSION"
+else
+    echo "Downloading nginx-$NGINX_VERSION source..."
+    mkdir -p /tmp
+    if wget -q -O "/tmp/nginx-$NGINX_VERSION.tar.gz" "http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz" 2>/dev/null; then
+        (cd /tmp && tar -xzf "nginx-$NGINX_VERSION.tar.gz" && rm "nginx-$NGINX_VERSION.tar.gz")
+        if [ -d "/tmp/nginx-$NGINX_VERSION" ]; then
+            echo "Configuring nginx source..."
+            (cd "/tmp/nginx-$NGINX_VERSION" && ./configure --without-http_rewrite_module >/dev/null 2>&1 || \
+            ./configure --without-http_rewrite_module --with-cc-opt="-fPIC" >/dev/null 2>&1 || true)
+            if [ -d "/tmp/nginx-$NGINX_VERSION/objs" ]; then
+                NGINX_SOURCE_DIR="/tmp/nginx-$NGINX_VERSION"
+            fi
+        fi
+    fi
+fi
+
+if [ -z "$NGINX_SOURCE_DIR" ] || [ ! -d "$NGINX_SOURCE_DIR/objs" ]; then
+    echo "ERROR: Failed to find or configure nginx source for version $NGINX_VERSION"
+    exit 1
+fi
+
+echo "Using nginx source: $NGINX_SOURCE_DIR"
+
+# Set up build environment
+export NGINX_SOURCE_DIR="$NGINX_SOURCE_DIR"
+export CARGO_FEATURES="--no-default-features"
+export NGX_CONFIGURE_ARGS="--without-http_rewrite_module"
+
+# Set libclang path
+if [ -z "$LIBCLANG_PATH" ]; then
+    if [ -d /usr/lib64/llvm/lib ]; then
+        export LIBCLANG_PATH=/usr/lib64/llvm/lib
+    elif [ -d /usr/lib/llvm/lib ]; then
+        export LIBCLANG_PATH=/usr/lib/llvm/lib
+    elif ls -d /usr/lib64/llvm*/lib >/dev/null 2>&1; then
+        export LIBCLANG_PATH=$(ls -d /usr/lib64/llvm*/lib 2>/dev/null | head -1)
+    elif ls -d /usr/lib/llvm-*/lib >/dev/null 2>&1; then
+        export LIBCLANG_PATH=$(ls -d /usr/lib/llvm-*/lib 2>/dev/null | head -1)
+    fi
+fi
+
+# Verify Rust toolchain is available
+if ! command -v cargo >/dev/null 2>&1; then
+    echo "ERROR: cargo not found. Please install cargo."
+    exit 1
+fi
+
+if ! command -v rustc >/dev/null 2>&1; then
+    echo "ERROR: rustc not found. Please install rustc."
+    exit 1
+fi
+
+# Build the module
+echo "Building module..."
+mkdir -p "$BUILD_DIR"
+cp -r "$SRC_DIR"/* "$BUILD_DIR/"
+cd "$BUILD_DIR"
+
+# Ensure Cargo.toml exists
+if [ ! -f "Cargo.toml" ]; then
+    echo "ERROR: Cargo.toml not found in source directory"
+    rm -rf "$BUILD_DIR"
+    exit 1
+fi
+
+cargo build --release $CARGO_FEATURES || {
+    echo "ERROR: Failed to build module"
+    echo "Build logs:"
+    cargo build --release $CARGO_FEATURES 2>&1 | tail -50
+    rm -rf "$BUILD_DIR"
+    exit 1
+}
+
+# Find and copy the built module
+MODULE_FILE=$(find target -name "libnginx_x402.so" -type f | head -1)
+if [ -z "$MODULE_FILE" ]; then
+    echo "ERROR: Built module not found"
+    rm -rf "$BUILD_DIR"
+    exit 1
+fi
+
+cp "$MODULE_FILE" "$MODULE_DIR/libnginx_x402.so"
+chmod 644 "$MODULE_DIR/libnginx_x402.so"
+
+# Clean up build directory
+rm -rf "$BUILD_DIR"
+
+echo "Module built and installed successfully!"
+echo "Module location: $MODULE_DIR/libnginx_x402.so"
+
+%preun
+# Clean up module file before removal
+MODULE_FILE="%{moduledir}/libnginx_x402.so"
+if [ -f "$MODULE_FILE" ]; then
+    rm -f "$MODULE_FILE"
+fi
+
 %files
+%defattr(-,root,root,-)
 %{moduledir}/libnginx_x402.so
 %config(noreplace) %{_sysconfdir}/nginx/modules-available/x402.conf
 %doc %{_docdir}/%{name}/README.md
 %doc %{_docdir}/%{name}/LICENSE
 %doc %{_docdir}/%{name}/example.conf
+%{_datadir}/%{name}/
 
 %changelog
 * Mon Nov 24 2025 Ryan Kung <ryan@polyjuice.io> - 1.0.0-1
