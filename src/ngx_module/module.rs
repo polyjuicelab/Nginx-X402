@@ -232,35 +232,10 @@ unsafe extern "C" fn merge_loc_conf(
     ptr::null_mut()
 }
 
-/// Generate module signature dynamically from ngx::ffi constants
-///
-/// The signature format is: "{NGX_PTR_SIZE},{NGX_SIG_ATOMIC_T_SIZE},{NGX_TIME_T_SIZE},{feature_flags}"
-/// where feature_flags is a binary string concatenated from NGX_MODULE_SIGNATURE_1 through NGX_MODULE_SIGNATURE_N
-///
-/// This function constructs the signature at compile time using ngx::ffi constants.
-/// Since we need a static string pointer and const fn has limitations with string operations,
-/// we use a macro to generate the signature string from the constants.
-///
-/// Note: This approach avoids hardcoding the signature while ensuring it matches
-/// the nginx binary built with the same source.
-macro_rules! build_module_signature {
-    () => {{
-        // Fallback: Use hardcoded signature matching vendored nginx version
-        // This ensures compatibility when the dynamic approach isn't feasible
-        // Format: "{ptr_size},{sig_atomic_size},{time_size},{flags}"
-        // The signature is hardcoded to match the vendored nginx version
-        b"8,4,8,0010111111010111001111111111100110\0"
-    }};
-}
-
-// Use the macro to generate signature
-// Note: This still uses a fallback signature because building the feature flags
-// string from NGX_MODULE_SIGNATURE_1..N constants requires runtime string operations
-// which aren't available in const context. A full solution would require:
-// 1. A proc-macro to generate the signature at compile time, or
-// 2. A build.rs script that runs after nginx-sys compilation, or
-// 3. Runtime initialization of the signature (not ideal for static initialization)
-const MODULE_SIGNATURE: &[u8] = build_module_signature!();
+// Include the auto-generated module signature from build.rs
+// This signature is extracted from the nginx source configuration
+// to ensure binary compatibility with the target nginx binary
+include!(concat!(env!("OUT_DIR"), "/module_signature.rs"));
 
 /// Module structure for x402 HTTP module
 ///
@@ -272,16 +247,15 @@ const MODULE_SIGNATURE: &[u8] = build_module_signature!();
 ///
 /// # Signature Generation
 ///
-/// The module signature is currently hardcoded but should match the nginx binary.
+/// The module signature is extracted from nginx source at build time via build.rs.
 /// The signature format is: "{NGX_PTR_SIZE},{NGX_SIG_ATOMIC_T_SIZE},{NGX_TIME_T_SIZE},{feature_flags}"
 ///
-/// To avoid hardcoding, we would need to:
-/// 1. Generate signature at build time via build.rs (reading nginx-sys bindings)
-/// 2. Use a const fn to construct it from ngx::ffi constants (limited by const eval)
-/// 3. Initialize signature at runtime in init_module hook (not ideal for static initialization)
+/// The signature is extracted from:
+/// 1. objs/ngx_modules.c (preferred, contains the exact signature string)
+/// 2. objs/ngx_auto_config.h (fallback, constructs signature from defines)
+/// 3. Default hardcoded signature (final fallback if extraction fails)
 ///
-/// Current approach: Hardcode signature matching the vendored nginx version.
-/// For production, ensure the module is built with the same nginx source as the target nginx binary.
+/// This ensures binary compatibility with the target nginx binary by matching its exact configuration.
 #[no_mangle]
 pub static mut ngx_http_x402_module: ngx::ffi::ngx_module_t = ngx::ffi::ngx_module_t {
     ctx_index: 0, // Will be set by nginx during module initialization
@@ -291,19 +265,12 @@ pub static mut ngx_http_x402_module: ngx::ffi::ngx_module_t = ngx::ffi::ngx_modu
     // IMPORTANT: Module version must match Nginx runtime version exactly.
     // This version is set at build time based on the Nginx source used.
     version: ngx::ffi::nginx_version as usize,
-    // NGX_MODULE_SIGNATURE is constructed from ngx::ffi constants to avoid hardcoding
+    // NGX_MODULE_SIGNATURE is extracted from nginx source at build time via build.rs
     // Format: "{NGX_PTR_SIZE},{NGX_SIG_ATOMIC_T_SIZE},{NGX_TIME_T_SIZE},{feature_flags}"
     // The signature includes: pointer size, atomic type size, time type size, and feature flags
     //
-    // Current implementation: Uses a macro to build the signature from ngx::ffi constants.
-    // The feature flags part still uses a fallback value because extracting them from
-    // NGX_MODULE_SIGNATURE_1..N constants requires runtime string operations which aren't
-    // available in const context.
-    //
-    // To fully avoid hardcoding, consider:
-    // 1. Using a proc-macro to generate the signature at compile time
-    // 2. Using build.rs to extract signature from nginx-sys bindings after compilation
-    // 3. Runtime initialization (not ideal for static initialization)
+    // The signature is extracted from the nginx source's objs/ngx_modules.c or objs/ngx_auto_config.h
+    // This ensures binary compatibility with the target nginx binary by matching its exact configuration
     signature: MODULE_SIGNATURE.as_ptr() as *const c_char,
     name: c"ngx_http_x402_module".as_ptr() as *mut c_char,
     ctx: &raw const ngx_http_x402_module_ctx as *mut _,
