@@ -1,0 +1,11 @@
+#!/bin/bash
+set -e
+
+# Clean up module file before removal
+MODULE_FILE="/usr/lib/nginx/modules/libnginx_x402.so"
+if [ -f "$MODULE_FILE" ]; then
+    rm -f "$MODULE_FILE"
+fi
+
+exit 0
+
