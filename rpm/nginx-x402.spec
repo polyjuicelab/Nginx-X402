@@ -209,7 +209,11 @@ if [ "$RUST_MAJOR" -lt 1 ] || ([ "$RUST_MAJOR" -eq 1 ] && [ "$RUST_MINOR" -lt 80
         fi
         echo "Using Rust version from rustup: $RUST_VERSION"
     else
-        echo "Using Rust version: $RUST_VERSION"
+        echo "ERROR: rustup not available and system Rust version is too old"
+        exit 1
+    fi
+else
+    echo "Using Rust version: $RUST_VERSION"
 fi
 
 # Build the module
