@@ -242,7 +242,7 @@ pub fn x402_metrics_handler_impl(req: &mut Request) -> Status {
 
     // Collect metrics in Prometheus text format
     let mut metrics_text = collect_metrics();
-    
+
     // Ensure metrics text is not empty (Prometheus format requires at least a newline)
     // If no metrics are registered yet, return a minimal valid Prometheus response
     if metrics_text.trim().is_empty() {
