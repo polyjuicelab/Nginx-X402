@@ -19,3 +19,6 @@
 *.dylib
 *.dll
 
+# Documentation files (exclude all .md except README.md)
+*.md
+!README.md

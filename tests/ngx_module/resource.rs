@@ -27,8 +27,8 @@ fn test_create_requirements_special_characters_in_resource() {
 #[test]
 fn test_create_requirements_unicode_in_description() {
     let mut config = TestConfig::new();
-    config.description = Some("测试支付 🚀".to_string());
+    config.description = Some("Payment Test 🚀".to_string());
 
     let requirements = create_requirements_test(&config, "/test").unwrap();
-    assert_eq!(requirements.description, "测试支付 🚀");
+    assert_eq!(requirements.description, "Payment Test 🚀");
 }

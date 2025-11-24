@@ -1,37 +1,57 @@
 //! Logging functions for the Nginx module
+//!
+//! This module provides logging functionality for the x402 module.
+//! Uses Rust's standard `log` crate with a custom logger that writes to stderr.
 
 use ngx::http::Request;
+use log::{Log, Metadata, Record};
+use std::sync::Once;
 
-/// Log a message using Nginx's logging system
-///
-/// This function provides a wrapper around Nginx's logging functionality.
-/// It attempts to use ngx-rust's logging API if available, otherwise falls back
-/// to a no-op implementation for testing.
-///
-/// # Arguments
-/// - `r`: Nginx request object (optional, for request context)
-/// - `level`: Log level (error, warn, info, debug)
-/// - `message`: Log message
-///
-/// # Note
-/// In a real Nginx environment, this will write to Nginx's error log.
-/// During testing, this may be a no-op or use Rust's logging framework.
+/// Simple logger that writes to stderr (appears in Docker logs and Nginx error log)
+struct NginxLogger;
+
+impl Log for NginxLogger {
+    fn enabled(&self, _metadata: &Metadata) -> bool {
+        true
+    }
+    
+    fn log(&self, record: &Record) {
+        if self.enabled(record.metadata()) {
+            // Use eprintln! to write to stderr
+            // This will appear in Docker logs and Nginx error log
+            eprintln!("[x402][{}] {}", record.level(), record.args());
+        }
+    }
+    
+    fn flush(&self) {}
+}
+
+static LOGGER: NginxLogger = NginxLogger;
+static INIT: Once = Once::new();
+
+/// Initialize the logger
+pub fn init() {
+    INIT.call_once(|| {
+        log::set_logger(&LOGGER)
+            .map(|()| log::set_max_level(log::LevelFilter::Debug))
+            .expect("Failed to initialize logger");
+    });
+}
+
+/// Log a message using Rust's log crate
 #[inline]
-pub fn log_message(r: Option<&Request>, level: &str, message: &str) {
-    // Try to use ngx-rust's logging if available
-    // The exact API depends on ngx-rust 0.5's implementation
-    // For now, we use a simple approach that can be enhanced later
-
-    // In a real Nginx module, we would use:
-    // r.log(ngx::log::LogLevel::Error, message);
-    // But the exact API needs to be verified with ngx-rust 0.5
-
-    // For now, we'll use a format that can be easily integrated
-    // with Nginx's logging system once the API is confirmed
-    let _ = (r, level, message);
-
-    // TODO: Integrate with actual ngx-rust logging API once confirmed
-    // This is a placeholder that can be replaced with actual logging
+pub fn log_message(_r: Option<&Request>, level: &str, message: &str) {
+    // Initialize logger if not already done
+    init();
+    
+    // Use Rust's log crate
+    match level {
+        "error" => log::error!("{}", message),
+        "warn" => log::warn!("{}", message),
+        "info" => log::info!("{}", message),
+        "debug" => log::debug!("{}", message),
+        _ => log::error!("{}", message),
+    }
 }
 
 /// Log an error message

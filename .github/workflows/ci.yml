@@ -70,8 +70,61 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Run tests
+      - name: Run unit tests
         run: cargo test --lib
+
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libclang-dev \
+            curl \
+            docker.io
+
+      - name: Start Docker service
+        run: |
+          sudo systemctl start docker
+          sudo usermod -aG docker $USER || true
+          # Wait for Docker to be ready
+          sudo docker ps
+          # Verify Docker is working
+          sudo docker run --rm hello-world
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Run Docker integration tests
+        env:
+          NGX_CONFIGURE_ARGS: "--without-http_rewrite_module"
+        run: |
+          # Run Docker-based integration tests
+          # Use --ignored to run tests marked with #[ignore]
+          cargo test --test docker_integration_test --features integration-test -- --ignored --nocapture || {
+            echo "Docker integration tests failed or Docker is not available"
+            echo "Checking Docker status..."
+            sudo docker ps || echo "Docker is not running"
+            exit 1
+          }
 
   build:
     name: Build

@@ -1350,6 +1350,7 @@ dependencies = [
 name = "nginx-x402"
 version = "0.1.4"
 dependencies = [
+ "log",
  "ngx",
  "prometheus",
  "rust-x402",
