@@ -172,22 +172,40 @@ else
                 fi
                 
                 echo "Running configure with system arguments..."
+                echo "Cleaned configure args: $CONFIGURE_ARGS_CLEAN"
                 # Use eval to properly handle quoted arguments
                 (cd "/tmp/nginx-$NGINX_VERSION" && eval "./configure $CONFIGURE_ARGS_CLEAN" >/tmp/nginx-configure.log 2>&1 || {
                     echo "Configure with system args failed, checking log..."
                     if [ -f /tmp/nginx-configure.log ]; then
-                        echo "Last 30 lines of configure log:"
-                        tail -30 /tmp/nginx-configure.log || true
+                        echo "Last 50 lines of configure log:"
+                        tail -50 /tmp/nginx-configure.log || true
                     fi
                     echo "Trying minimal configuration with -fPIC..."
                     ./configure --without-http_rewrite_module --with-cc-opt="-fPIC" >/tmp/nginx-configure.log 2>&1 || {
                         echo "Minimal configure also failed"
                         if [ -f /tmp/nginx-configure.log ]; then
-                            tail -30 /tmp/nginx-configure.log || true
+                            tail -50 /tmp/nginx-configure.log || true
                         fi
                         exit 1
                     }
                 })
+                
+                # Verify configure actually succeeded by checking for key files
+                if [ ! -f "/tmp/nginx-$NGINX_VERSION/objs/ngx_modules.c" ]; then
+                    echo "ERROR: Configure appeared to succeed but ngx_modules.c not found"
+                    if [ -f /tmp/nginx-configure.log ]; then
+                        echo "Full configure log:"
+                        cat /tmp/nginx-configure.log
+                    fi
+                    exit 1
+                fi
+                
+                # Show what was actually configured
+                echo "Configure completed. Checking configured options..."
+                if [ -f "/tmp/nginx-$NGINX_VERSION/objs/ngx_auto_config.h" ]; then
+                    echo "Key configuration values:"
+                    grep -E "NGINX_VER|NGX_PTR_SIZE|NGX_64_SIGIC_T" "/tmp/nginx-$NGINX_VERSION/objs/ngx_auto_config.h" 2>/dev/null | head -10 || true
+                fi
             else
                 # Fallback to minimal configuration
                 echo "No system configure args found, using minimal configuration..."
