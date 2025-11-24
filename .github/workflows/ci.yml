@@ -296,6 +296,23 @@ jobs:
             libclang-dev \
             build-essential \
             nginx
+          
+      - name: Verify nginx installation
+        run: |
+          echo "Checking nginx installation..."
+          if command -v nginx >/dev/null 2>&1; then
+            echo "nginx command found: $(which nginx)"
+            nginx -v || true
+          else
+            echo "ERROR: nginx command not found"
+            exit 1
+          fi
+          if dpkg -l | grep -q "^ii.*nginx"; then
+            echo "nginx package installed:"
+            dpkg -l | grep "^ii.*nginx"
+          else
+            echo "WARNING: nginx package not found in dpkg list"
+          fi
 
       - name: Cache cargo registry
         uses: actions/cache@v4
