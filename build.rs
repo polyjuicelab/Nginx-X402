@@ -24,4 +24,13 @@ fn main() {
 
     // Linux doesn't need special flags - shared libraries allow undefined symbols by default
     // The symbols will be resolved when nginx loads the module at runtime
+    
+    // Apply compiler/linker flags from environment for binary compatibility
+    // These flags are extracted from system nginx configure arguments in postinst/%post scripts
+    // They ensure the module is compiled with the same options as system nginx
+    if let Ok(rustflags) = std::env::var("RUSTFLAGS") {
+        // RUSTFLAGS is already set by the build script, cargo will use it automatically
+        // We just log it here for debugging
+        println!("cargo:warning=Using RUSTFLAGS from environment: {}", rustflags);
+    }
 }

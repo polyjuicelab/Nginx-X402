@@ -251,6 +251,73 @@ if [ -f "$NGINX_SOURCE_DIR/src/core/nginx.h" ]; then
     fi
 fi
 
+# Extract compiler flags from system nginx configure arguments
+# This ensures binary compatibility by using the same compilation options
+RUSTFLAGS_EXTRA=""
+if command -v nginx >/dev/null 2>&1; then
+    NGINX_V_OUTPUT=$(nginx -V 2>&1)
+    
+    # Extract --with-cc-opt (compiler options)
+    CC_OPT=$(echo "$NGINX_V_OUTPUT" | grep -oE "--with-cc-opt='[^']*'" | sed "s/--with-cc-opt='//" | sed "s/'$//" || echo "")
+    if [ -n "$CC_OPT" ]; then
+        echo "Extracted --with-cc-opt: $CC_OPT"
+        # Convert C compiler options to Rust linker arguments
+        # Key options that affect binary compatibility:
+        # -flto=auto -> -C link-arg=-flto=auto
+        # -fPIC -> -C link-arg=-fPIC (already handled by Rust, but keep for consistency)
+        # -fstack-protector-strong -> -C link-arg=-fstack-protector-strong
+        for opt in $CC_OPT; do
+            # Skip options that are not relevant for linking or might cause issues
+            case "$opt" in
+                -ffile-prefix-map=*|-fdebug-prefix-map=*|-Wdate-time|-D_*)
+                    # Skip debug/map options that don't affect binary compatibility
+                    ;;
+                -flto=*|-fPIC|-fstack-protector*|-fcf-protection|-mno-omit-leaf-frame-pointer)
+                    # These affect binary compatibility, add to RUSTFLAGS
+                    RUSTFLAGS_EXTRA="$RUSTFLAGS_EXTRA -C link-arg=$opt"
+                    ;;
+                *)
+                    # Other options might be important, add them
+                    RUSTFLAGS_EXTRA="$RUSTFLAGS_EXTRA -C link-arg=$opt"
+                    ;;
+            esac
+        done
+    fi
+    
+    # Extract --with-ld-opt (linker options)
+    LD_OPT=$(echo "$NGINX_V_OUTPUT" | grep -oE "--with-ld-opt='[^']*'" | sed "s/--with-ld-opt='//" | sed "s/'$//" || echo "")
+    if [ -n "$LD_OPT" ]; then
+        echo "Extracted --with-ld-opt: $LD_OPT"
+        # Convert linker options to Rust linker arguments
+        # -Wl,options -> -C link-arg=-Wl,options
+        # Direct options -> -C link-arg=option
+        for opt in $LD_OPT; do
+            # These are critical for binary compatibility
+            case "$opt" in
+                -Wl,*)
+                    # Already has -Wl, prefix, use as-is
+                    RUSTFLAGS_EXTRA="$RUSTFLAGS_EXTRA -C link-arg=$opt"
+                    ;;
+                -flto=*|-ffat-lto-objects|-fPIC)
+                    # LTO and PIC options
+                    RUSTFLAGS_EXTRA="$RUSTFLAGS_EXTRA -C link-arg=$opt"
+                    ;;
+                *)
+                    # Other linker options
+                    RUSTFLAGS_EXTRA="$RUSTFLAGS_EXTRA -C link-arg=$opt"
+                    ;;
+            esac
+        done
+    fi
+    
+    if [ -n "$RUSTFLAGS_EXTRA" ]; then
+        echo "Setting RUSTFLAGS for binary compatibility: $RUSTFLAGS_EXTRA"
+        export RUSTFLAGS="$RUSTFLAGS_EXTRA"
+    else
+        echo "No compiler/linker options extracted, using default RUSTFLAGS"
+    fi
+fi
+
 # Set up build environment
 export NGINX_SOURCE_DIR="$NGINX_SOURCE_DIR"
 export CARGO_FEATURES="--no-default-features"
@@ -261,6 +328,9 @@ echo "Build environment:"
 echo "  NGINX_SOURCE_DIR=$NGINX_SOURCE_DIR"
 echo "  CARGO_FEATURES=$CARGO_FEATURES"
 echo "  NGX_CONFIGURE_ARGS=$NGX_CONFIGURE_ARGS"
+if [ -n "$RUSTFLAGS" ]; then
+    echo "  RUSTFLAGS=$RUSTFLAGS"
+fi
 
 # Verify nginx source has been configured correctly
 if [ ! -f "$NGINX_SOURCE_DIR/objs/ngx_modules.c" ]; then
