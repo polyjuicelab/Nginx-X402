@@ -28,19 +28,20 @@ Uses the official [ngx-rust](https://github.com/nginx/ngx-rust) crate to impleme
 - ✅ 100% Rust implementation
 - ✅ Type-safe Nginx API bindings
 - ✅ Official Nginx support
-- ⚠️ Requires Nginx source code for building
+- ✅ **Auto-detects system nginx version and downloads matching source** (in build scripts)
 
 ## Prerequisites
 
 - Rust toolchain (latest stable, 1.81.0+)
 - `rust-x402` library (from crates.io)
-- **Default**: `vendored` feature is enabled by default, which auto-downloads Nginx source
-  - No manual Nginx source needed
-  - Convenient for development and CI/CD
-  - May not match production Nginx version
-- **Option (Production)**: Provide Nginx source code (same version as production)
-  - Set `NGINX_SOURCE_DIR` or `NGINX_BUILD_DIR` environment variable
-  - Disable vendored feature: `cargo build --release --no-default-features`
+- **Automatic**: Build scripts automatically detect system nginx version and download matching source
+  - No manual nginx source needed
+  - Automatically matches production nginx version
+  - Works in deb/rpm builds and manual builds
+  - Falls back to manual `NGINX_SOURCE_DIR` if detection fails
+- **Manual (Optional)**: Provide Nginx source code manually
+  - Set `NGINX_SOURCE_DIR` environment variable
+  - Use `cargo build --release --no-default-features`
 - libclang (for bindgen)
 
 ## Environment Variables
