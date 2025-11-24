@@ -3,6 +3,7 @@
 use crate::ngx_module::config::ParsedX402Config;
 use crate::ngx_module::error::{ConfigError, Result};
 use crate::ngx_module::request::is_browser_request;
+use ngx::core::Status;
 use ngx::http::{HTTPStatus, Request};
 use rust_x402::template::generate_paywall_html;
 use rust_x402::types::{PaymentRequirements, PaymentRequirementsResponse};
@@ -122,7 +123,7 @@ pub fn send_response_body(r: &mut Request, body: &[u8]) -> Result<()> {
     // 2. Request is already finalized
     // 3. Header was already sent
     // 4. Request is not in correct state
-    
+
     // Check if header was already sent by checking request state
     unsafe {
         let r_raw = r.as_ref();
@@ -130,26 +131,35 @@ pub fn send_response_body(r: &mut Request, body: &[u8]) -> Result<()> {
         // But ngx-rust may wrap this differently, so we'll try to send header anyway
         // If it fails, we'll handle the error
     }
-    
+
     // Send header using ngx-rust's method
     // This should handle request state correctly
     let status = r.send_header();
-    if !status.is_ok() {
-        // send_header failed - check if we can use alternative approach
-        // In Nginx, we can use ngx_http_send_special_response for error responses
-        // But for now, let's try to understand why it fails
-        // The issue might be that we're calling send_header from a phase handler context
-        // instead of a content handler context
-        let error_msg = format!("Failed to send header: status={:?}. Request state may be incorrect.", status);
-        return Err(ConfigError::from(error_msg));
+    match status {
+        Status::NGX_OK => {}
+        _ => {
+            // send_header failed - check if we can use alternative approach
+            // In Nginx, we can use ngx_http_send_special_response for error responses
+            // But for now, let's try to understand why it fails
+            // The issue might be that we're calling send_header from a phase handler context
+            // instead of a content handler context
+            let error_msg = format!(
+                "Failed to send header: status={:?}. Request state may be incorrect.",
+                status
+            );
+            return Err(ConfigError::from(error_msg));
+        }
     }
 
     // Send body using output filter
     let chain_mut = unsafe { &mut *chain };
     let status = r.output_filter(chain_mut);
-    if !status.is_ok() {
-        let error_msg = format!("Failed to send body: status={:?}", status);
-        return Err(ConfigError::from(error_msg));
+    match status {
+        Status::NGX_OK => {}
+        _ => {
+            let error_msg = format!("Failed to send body: status={:?}", status);
+            return Err(ConfigError::from(error_msg));
+        }
     }
 
     Ok(())

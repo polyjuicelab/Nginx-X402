@@ -11,17 +11,22 @@
 #[cfg(test)]
 mod tests {
     use std::process::Command;
-    use std::time::Duration;
     use std::thread;
+    use std::time::Duration;
 
     /// Test helper to check if nginx is running
     fn nginx_is_running() -> bool {
         Command::new("curl")
-            .args(&["-s", "-o", "/dev/null", "-w", "%{http_code}", "http://localhost:8080/health"])
+            .args(&[
+                "-s",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code}",
+                "http://localhost:8080/health",
+            ])
             .output()
-            .map(|output| {
-                String::from_utf8_lossy(&output.stdout) == "200"
-            })
+            .map(|output| String::from_utf8_lossy(&output.stdout) == "200")
             .unwrap_or(false)
     }
 
@@ -45,12 +50,12 @@ mod tests {
         // 1. Module built: cargo build --release
         // 2. Nginx configured with: load_module /path/to/libnginx_x402.so;
         // 3. Nginx running: sudo nginx
-        
+
         let output = Command::new("nginx")
             .arg("-t")
             .output()
             .expect("Failed to run nginx -t");
-        
+
         assert!(
             output.status.success(),
             "Nginx configuration test failed: {}",
@@ -69,14 +74,23 @@ mod tests {
 
         let output = Command::new("curl")
             .args(&[
-                "-s", "-o", "/dev/null", "-w", "%{http_code}",
-                "http://localhost:8080/api/protected"
+                "-s",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code}",
+                "http://localhost:8080/api/protected",
             ])
             .output()
             .expect("Failed to run curl");
 
         let status_code = String::from_utf8_lossy(&output.stdout);
-        assert_eq!(status_code.trim(), "402", "Expected 402, got {}", status_code);
+        assert_eq!(
+            status_code.trim(),
+            "402",
+            "Expected 402, got {}",
+            status_code
+        );
     }
 
     #[test]
@@ -90,14 +104,23 @@ mod tests {
 
         let output = Command::new("curl")
             .args(&[
-                "-s", "-o", "/dev/null", "-w", "%{http_code}",
-                "http://localhost:8080/health"
+                "-s",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code}",
+                "http://localhost:8080/health",
             ])
             .output()
             .expect("Failed to run curl");
 
         let status_code = String::from_utf8_lossy(&output.stdout);
-        assert_eq!(status_code.trim(), "200", "Expected 200, got {}", status_code);
+        assert_eq!(
+            status_code.trim(),
+            "200",
+            "Expected 200, got {}",
+            status_code
+        );
     }
 
     #[test]
@@ -110,10 +133,7 @@ mod tests {
         }
 
         let output = Command::new("curl")
-            .args(&[
-                "-s",
-                "http://localhost:8080/metrics"
-            ])
+            .args(&["-s", "http://localhost:8080/metrics"])
             .output()
             .expect("Failed to run curl");
 
@@ -124,4 +144,3 @@ mod tests {
         );
     }
 }
-

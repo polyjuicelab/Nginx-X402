@@ -10,11 +10,11 @@
 
 #[cfg(feature = "integration-test")]
 mod tests {
-    use std::process::Command;
-    use std::time::Duration;
-    use std::thread;
     use std::fs;
     use std::path::Path;
+    use std::process::Command;
+    use std::thread;
+    use std::time::Duration;
 
     const DOCKER_IMAGE: &str = "nginx-x402-test";
     const CONTAINER_NAME: &str = "nginx-x402-test-container";
@@ -26,9 +26,11 @@ mod tests {
         let output = Command::new("docker")
             .args(&[
                 "build",
-                "-t", DOCKER_IMAGE,
-                "-f", "tests/Dockerfile.test",
-                "."
+                "-t",
+                DOCKER_IMAGE,
+                "-f",
+                "tests/Dockerfile.test",
+                ".",
             ])
             .output();
 
@@ -38,7 +40,10 @@ mod tests {
                 true
             }
             Ok(output) => {
-                eprintln!("Docker build failed: {}", String::from_utf8_lossy(&output.stderr));
+                eprintln!(
+                    "Docker build failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
                 false
             }
             Err(e) => {
@@ -55,9 +60,11 @@ mod tests {
             .args(&[
                 "run",
                 "-d",
-                "--name", CONTAINER_NAME,
-                "-p", &format!("{}:80", NGINX_PORT),
-                DOCKER_IMAGE
+                "--name",
+                CONTAINER_NAME,
+                "-p",
+                &format!("{}:80", NGINX_PORT),
+                DOCKER_IMAGE,
             ])
             .output();
 
@@ -104,13 +111,15 @@ mod tests {
     fn nginx_is_ready() -> bool {
         Command::new("curl")
             .args(&[
-                "-s", "-o", "/dev/null", "-w", "%{http_code}",
-                &format!("http://localhost:{}/health", NGINX_PORT)
+                "-s",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code}",
+                &format!("http://localhost:{}/health", NGINX_PORT),
             ])
             .output()
-            .map(|output| {
-                String::from_utf8_lossy(&output.stdout).trim() == "200"
-            })
+            .map(|output| String::from_utf8_lossy(&output.stdout).trim() == "200")
             .unwrap_or(false)
     }
 
@@ -130,38 +139,32 @@ mod tests {
     fn http_request(path: &str) -> Option<String> {
         Command::new("curl")
             .args(&[
-                "-s", "-o", "/dev/null", "-w", "%{http_code}",
-                &format!("http://localhost:{}{}", NGINX_PORT, path)
+                "-s",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code}",
+                &format!("http://localhost:{}{}", NGINX_PORT, path),
             ])
             .output()
             .ok()
-            .map(|output| {
-                String::from_utf8_lossy(&output.stdout).trim().to_string()
-            })
+            .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
 
     /// Get HTTP response body
     fn http_get(path: &str) -> Option<String> {
         Command::new("curl")
-            .args(&[
-                "-s",
-                &format!("http://localhost:{}{}", NGINX_PORT, path)
-            ])
+            .args(&["-s", &format!("http://localhost:{}{}", NGINX_PORT, path)])
             .output()
             .ok()
-            .map(|output| {
-                String::from_utf8_lossy(&output.stdout)
-            })
+            .map(|output| String::from_utf8_lossy(&output.stdout))
     }
 
     #[test]
     #[ignore] // Ignore by default - requires Docker
     fn test_docker_setup() {
         // Check if Docker is available
-        let docker_available = Command::new("docker")
-            .arg("--version")
-            .output()
-            .is_ok();
+        let docker_available = Command::new("docker").arg("--version").output().is_ok();
 
         if !docker_available {
             eprintln!("Docker is not available. Skipping Docker tests.");
@@ -191,9 +194,8 @@ mod tests {
             return;
         }
 
-        let status = http_request("/api/protected")
-            .expect("Failed to make HTTP request");
-        
+        let status = http_request("/api/protected").expect("Failed to make HTTP request");
+
         assert_eq!(status, "402", "Expected 402 response, got {}", status);
     }
 
@@ -205,9 +207,8 @@ mod tests {
             return;
         }
 
-        let status = http_request("/health")
-            .expect("Failed to make HTTP request");
-        
+        let status = http_request("/health").expect("Failed to make HTTP request");
+
         assert_eq!(status, "200", "Expected 200 response, got {}", status);
     }
 
@@ -219,13 +220,11 @@ mod tests {
             return;
         }
 
-        let body = http_get("/metrics")
-            .expect("Failed to make HTTP request");
-        
+        let body = http_get("/metrics").expect("Failed to make HTTP request");
+
         assert!(
             body.contains("x402") || body.contains("# HELP"),
             "Metrics endpoint should return Prometheus metrics"
         );
     }
 }
-
