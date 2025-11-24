@@ -83,7 +83,27 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libclang-dev
+          sudo apt-get install -y libclang-dev wget gcc make
+
+      - name: Setup nginx source for build
+        run: |
+          # Auto-detect nginx version or use default for CI
+          NGINX_VERSION="1.28.0"
+          if command -v nginx >/dev/null 2>&1; then
+            NGINX_VERSION=$(nginx -v 2>&1 | grep -oE 'nginx/[0-9]+\.[0-9]+\.[0-9]+' | cut -d'/' -f2 || echo "1.28.0")
+          fi
+          echo "NGINX_VERSION=$NGINX_VERSION" >> $GITHUB_ENV
+          # Download and configure nginx source if not cached
+          if [ ! -d "/tmp/nginx-$NGINX_VERSION" ] || [ ! -d "/tmp/nginx-$NGINX_VERSION/objs" ]; then
+            cd /tmp
+            wget -q "http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz" || exit 1
+            tar -xzf nginx-$NGINX_VERSION.tar.gz && rm nginx-$NGINX_VERSION.tar.gz || exit 1
+            cd nginx-$NGINX_VERSION
+            ./configure --without-http_rewrite_module >/dev/null 2>&1 || \
+            ./configure --without-http_rewrite_module --with-cc-opt="-fPIC" >/dev/null 2>&1 || exit 1
+          fi
+          echo "NGINX_SOURCE_DIR=/tmp/nginx-$NGINX_VERSION" >> $GITHUB_ENV
+          echo "CARGO_FEATURES=--no-default-features" >> $GITHUB_ENV
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -99,7 +119,9 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Run unit tests
-        run: cargo test --lib
+        env:
+          NGINX_SOURCE_DIR: ${{ env.NGINX_SOURCE_DIR }}
+        run: cargo test --lib --no-default-features
 
   integration-test:
     name: Integration Tests
@@ -114,7 +136,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libclang-dev curl
+          sudo apt-get install -y libclang-dev curl wget gcc make
           # Check if Docker is already installed
           if ! command -v docker >/dev/null 2>&1; then
             echo "Docker not found, installing..."
@@ -139,6 +161,26 @@ jobs:
           # Verify Docker is working
           sudo docker run --rm hello-world
 
+      - name: Setup nginx source for build
+        run: |
+          # Auto-detect nginx version or use default for CI
+          NGINX_VERSION="1.28.0"
+          if command -v nginx >/dev/null 2>&1; then
+            NGINX_VERSION=$(nginx -v 2>&1 | grep -oE 'nginx/[0-9]+\.[0-9]+\.[0-9]+' | cut -d'/' -f2 || echo "1.28.0")
+          fi
+          echo "NGINX_VERSION=$NGINX_VERSION" >> $GITHUB_ENV
+          # Download and configure nginx source if not cached
+          if [ ! -d "/tmp/nginx-$NGINX_VERSION" ] || [ ! -d "/tmp/nginx-$NGINX_VERSION/objs" ]; then
+            cd /tmp
+            wget -q "http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz" || exit 1
+            tar -xzf nginx-$NGINX_VERSION.tar.gz && rm nginx-$NGINX_VERSION.tar.gz || exit 1
+            cd nginx-$NGINX_VERSION
+            ./configure --without-http_rewrite_module >/dev/null 2>&1 || \
+            ./configure --without-http_rewrite_module --with-cc-opt="-fPIC" >/dev/null 2>&1 || exit 1
+          fi
+          echo "NGINX_SOURCE_DIR=/tmp/nginx-$NGINX_VERSION" >> $GITHUB_ENV
+          echo "CARGO_FEATURES=--no-default-features" >> $GITHUB_ENV
+
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
@@ -154,12 +196,13 @@ jobs:
 
       - name: Run Docker integration tests
         env:
+          NGINX_SOURCE_DIR: ${{ env.NGINX_SOURCE_DIR }}
           NGX_CONFIGURE_ARGS: "--without-http_rewrite_module"
         run: |
           # Run Docker-based integration tests
           # Use --ignored to run tests marked with #[ignore]
           # Ensure tests run and fail if they fail (don't skip)
-          cargo test --test docker_integration_test --features integration-test -- --ignored --nocapture
+          cargo test --test docker_integration_test --features integration-test --no-default-features -- --ignored --nocapture
 
   build:
     name: Build
