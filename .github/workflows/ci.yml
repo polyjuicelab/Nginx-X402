@@ -93,16 +93,27 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            libclang-dev \
-            curl \
-            docker.io
+          sudo apt-get install -y libclang-dev curl
+          # Check if Docker is already installed
+          if ! command -v docker >/dev/null 2>&1; then
+            echo "Docker not found, installing..."
+            # Try to install docker.io, but handle conflicts gracefully
+            sudo apt-get install -y docker.io || {
+              echo "docker.io installation failed, trying alternative method..."
+              # Remove conflicting packages if needed
+              sudo apt-get remove -y docker docker-engine docker.io containerd runc 2>/dev/null || true
+              sudo apt-get install -y docker.io
+            }
+          fi
 
       - name: Start Docker service
         run: |
-          sudo systemctl start docker
-          sudo usermod -aG docker $USER || true
+          # Start Docker service
+          sudo systemctl start docker || sudo service docker start
+          # Add current user to docker group (may require logout/login, but try anyway)
+          sudo usermod -aG docker $USER || sudo usermod -aG docker runner || true
           # Wait for Docker to be ready
+          sleep 2
           sudo docker ps
           # Verify Docker is working
           sudo docker run --rm hello-world
@@ -126,12 +137,8 @@ jobs:
         run: |
           # Run Docker-based integration tests
           # Use --ignored to run tests marked with #[ignore]
-          cargo test --test docker_integration_test --features integration-test -- --ignored --nocapture || {
-            echo "Docker integration tests failed or Docker is not available"
-            echo "Checking Docker status..."
-            sudo docker ps || echo "Docker is not running"
-            exit 1
-          }
+          # Ensure tests run and fail if they fail (don't skip)
+          cargo test --test docker_integration_test --features integration-test -- --ignored --nocapture
 
   build:
     name: Build
