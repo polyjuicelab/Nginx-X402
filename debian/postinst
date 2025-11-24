@@ -8,16 +8,37 @@ MODULE_DIR="/usr/lib/nginx/modules"
 
 echo "Building nginx-x402 module for your system..."
 
-# Detect nginx version
+# Detect nginx version - try multiple methods for accuracy
 NGINX_VERSION=""
+NGINX_VERSION_FULL=""
+
+# Method 1: Use nginx -V to get detailed version info
 if command -v nginx >/dev/null 2>&1; then
-    NGINX_VERSION=$(nginx -v 2>&1 | sed -n 's/.*nginx\/\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/p' || echo "")
-elif dpkg -l nginx 2>/dev/null | grep -q "^ii"; then
+    NGINX_VERSION_FULL=$(nginx -v 2>&1)
+    echo "Nginx version output: $NGINX_VERSION_FULL"
+    NGINX_VERSION=$(echo "$NGINX_VERSION_FULL" | sed -n 's/.*nginx\/\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/p' | head -1)
+    
+    # If still not found, try -V output
+    if [ -z "$NGINX_VERSION" ]; then
+        NGINX_VERSION=$(nginx -V 2>&1 | sed -n 's/.*nginx\/\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/p' | head -1)
+    fi
+fi
+
+# Method 2: Check dpkg if nginx command didn't work
+if [ -z "$NGINX_VERSION" ] && dpkg -l nginx 2>/dev/null | grep -q "^ii"; then
     NGINX_VERSION=$(dpkg -l nginx | grep "^ii" | awk '{print $3}' | cut -d'-' -f1 | cut -d':' -f2 || echo "")
+    echo "Detected nginx version from dpkg: $NGINX_VERSION"
+fi
+
+# Method 3: Try to read from nginx binary directly
+if [ -z "$NGINX_VERSION" ] && [ -f "/usr/sbin/nginx" ]; then
+    NGINX_VERSION=$(strings /usr/sbin/nginx 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || echo "")
+    echo "Detected nginx version from binary: $NGINX_VERSION"
 fi
 
 if [ -z "$NGINX_VERSION" ]; then
     echo "ERROR: Could not detect nginx version. Please ensure nginx is installed."
+    echo "Tried methods: nginx -v, dpkg -l, reading binary"
     exit 1
 fi
 
@@ -53,6 +74,18 @@ if [ -z "$NGINX_SOURCE_DIR" ] || [ ! -d "$NGINX_SOURCE_DIR/objs" ]; then
 fi
 
 echo "Using nginx source: $NGINX_SOURCE_DIR"
+
+# Verify nginx source version matches system version
+if [ -f "$NGINX_SOURCE_DIR/src/core/nginx.h" ]; then
+    NGINX_SOURCE_VERSION=$(grep -E 'NGINX_VERSION' "$NGINX_SOURCE_DIR/src/core/nginx.h" | head -1 | sed -n 's/.*"\(.*\)".*/\1/p' || echo "")
+    if [ -n "$NGINX_SOURCE_VERSION" ]; then
+        echo "Nginx source version: $NGINX_SOURCE_VERSION"
+        if [ "$NGINX_SOURCE_VERSION" != "$NGINX_VERSION" ]; then
+            echo "WARNING: Nginx source version ($NGINX_SOURCE_VERSION) does not match system version ($NGINX_VERSION)"
+            echo "This may cause binary compatibility issues"
+        fi
+    fi
+fi
 
 # Set up build environment
 export NGINX_SOURCE_DIR="$NGINX_SOURCE_DIR"
