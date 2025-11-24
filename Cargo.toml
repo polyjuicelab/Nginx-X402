@@ -26,8 +26,10 @@ prometheus = "0.14"
 log = "0.4"
 
 [features]
-default = ["vendored"]
-vendored = ["ngx/vendored"]
+default = []
+# Note: We don't use ngx's vendored feature anymore.
+# Instead, we implement our own vendored-like functionality in build scripts
+# that automatically detects system nginx version and downloads matching source.
 integration-test = []  # Feature for integration tests (requires Docker)
 
 [dev-dependencies]

@@ -40,10 +40,10 @@ Features:
 %setup -q
 
 %build
-# Detect system nginx version and use it for building if available
+# Auto-detect system nginx version and download matching source
+# This implements our own "vendored" functionality that matches system nginx version
 NGINX_VERSION=""
 NGINX_SOURCE_DIR=""
-USE_VENDORED=1
 
 # Try to detect nginx version from installed package
 if command -v nginx >/dev/null 2>&1; then
@@ -52,31 +52,55 @@ elif rpm -q nginx >/dev/null 2>&1; then
     NGINX_VERSION=$(rpm -q --qf '%{VERSION}' nginx 2>/dev/null | cut -d'-' -f1 || echo "")
 fi
 
-# If nginx version detected, try to use system nginx source
+# If nginx version detected, find or download matching source
 if [ -n "$NGINX_VERSION" ]; then
     echo "Detected system nginx version: $NGINX_VERSION"
-    if [ -d /usr/src/nginx-$NGINX_VERSION ]; then
+    if [ -d /usr/src/nginx-$NGINX_VERSION ] && [ -d /usr/src/nginx-$NGINX_VERSION/objs ]; then
         NGINX_SOURCE_DIR=/usr/src/nginx-$NGINX_VERSION
-        USE_VENDORED=0
         echo "Using nginx source from /usr/src/nginx-$NGINX_VERSION"
-    elif [ -d /usr/share/nginx-$NGINX_VERSION ]; then
+    elif [ -d /usr/share/nginx-$NGINX_VERSION ] && [ -d /usr/share/nginx-$NGINX_VERSION/objs ]; then
         NGINX_SOURCE_DIR=/usr/share/nginx-$NGINX_VERSION
-        USE_VENDORED=0
         echo "Using nginx source from /usr/share/nginx-$NGINX_VERSION"
+    elif [ -d /tmp/nginx-$NGINX_VERSION ] && [ -d /tmp/nginx-$NGINX_VERSION/objs ]; then
+        NGINX_SOURCE_DIR=/tmp/nginx-$NGINX_VERSION
+        echo "Using cached nginx source from /tmp/nginx-$NGINX_VERSION"
     else
-        echo "System nginx source not found, using vendored feature"
-        USE_VENDORED=1
+        echo "System nginx source not found, attempting to download nginx-$NGINX_VERSION..."
+        if wget -q -O /tmp/nginx-$NGINX_VERSION.tar.gz "http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz" 2>/dev/null; then
+            (cd /tmp && tar -xzf nginx-$NGINX_VERSION.tar.gz && rm nginx-$NGINX_VERSION.tar.gz)
+            if [ -d /tmp/nginx-$NGINX_VERSION ]; then
+                echo "Downloaded nginx-$NGINX_VERSION source, configuring..."
+                cd /tmp/nginx-$NGINX_VERSION && ./configure --without-http_rewrite_module >/dev/null 2>&1 || \
+                ./configure --without-http_rewrite_module --with-cc-opt="-fPIC" >/dev/null 2>&1 || true
+                if [ -d /tmp/nginx-$NGINX_VERSION/objs ]; then
+                    NGINX_SOURCE_DIR=/tmp/nginx-$NGINX_VERSION
+                    echo "Successfully configured nginx-$NGINX_VERSION source"
+                else
+                    echo "ERROR: Failed to configure nginx source"
+                    exit 1
+                fi
+            else
+                echo "ERROR: Failed to extract nginx source"
+                exit 1
+            fi
+        else
+            echo "ERROR: Failed to download nginx source"
+            exit 1
+        fi
     fi
+else
+    echo "ERROR: Could not detect nginx version. Please ensure nginx is installed."
+    exit 1
 fi
 
-# Set environment variables based on detection result
-if [ "$USE_VENDORED" = "0" ] && [ -n "$NGINX_SOURCE_DIR" ]; then
+# Set environment variables - we always use NGINX_SOURCE_DIR (no vendored feature)
+if [ -n "$NGINX_SOURCE_DIR" ]; then
     export NGINX_SOURCE_DIR=$NGINX_SOURCE_DIR
     export CARGO_FEATURES="--no-default-features"
-    echo "Building with system nginx source: $NGINX_SOURCE_DIR"
+    echo "Building with nginx source: $NGINX_SOURCE_DIR"
 else
-    export CARGO_FEATURES=""
-    echo "Building with vendored nginx (default)"
+    echo "ERROR: NGINX_SOURCE_DIR is not set"
+    exit 1
 fi
 
 # Set libclang path if available
