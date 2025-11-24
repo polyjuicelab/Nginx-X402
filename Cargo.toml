@@ -1,6 +1,6 @@
 [package]
 name = "nginx-x402"
-version = "0.1.4"
+version = "1.0"
 edition = "2021"
 description = "Pure Rust Nginx module for x402 HTTP micropayment protocol"
 authors = ["Ryan Kung <ryan@polyjuice.io>"]
