@@ -265,6 +265,14 @@ if [ -z "$MODULE_FILE" ]; then
     exit 1
 fi
 
+# Ensure module directory exists
+mkdir -p "$MODULE_DIR"
+if [ ! -d "$MODULE_DIR" ]; then
+    echo "ERROR: Failed to create module directory: $MODULE_DIR"
+    rm -rf "$BUILD_DIR"
+    exit 1
+fi
+
 cp "$MODULE_FILE" "$MODULE_DIR/libnginx_x402.so"
 chmod 644 "$MODULE_DIR/libnginx_x402.so"
 
