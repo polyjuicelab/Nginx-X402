@@ -74,6 +74,10 @@ cp nginx/example.conf %{buildroot}%{_docdir}/%{name}/example.conf
 # Create module configuration snippet
 echo "load_module %{moduledir}/libnginx_x402.so;" > %{buildroot}%{_sysconfdir}/nginx/modules-available/x402.conf
 
+# Create placeholder file for module (will be replaced in %post)
+# This is needed because %files section requires the file to exist
+touch %{buildroot}%{moduledir}/libnginx_x402.so
+
 %post
 # Build the module during package installation to match system nginx version
 SRC_DIR="%{_datadir}/%{name}"
@@ -204,7 +208,7 @@ fi
 
 %files
 %defattr(-,root,root,-)
-%{moduledir}/libnginx_x402.so
+%ghost %{moduledir}/libnginx_x402.so
 %config(noreplace) %{_sysconfdir}/nginx/modules-available/x402.conf
 %doc %{_docdir}/%{name}/README.md
 %doc %{_docdir}/%{name}/LICENSE
