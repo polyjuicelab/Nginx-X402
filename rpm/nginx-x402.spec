@@ -2,7 +2,7 @@
 %define moduledir %{_libdir}/nginx/modules
 
 Name:           nginx-x402
-Version:        0.1.4
+Version:        1.0.0
 Release:        1%{?dist}
 Summary:        Pure Rust Nginx module for x402 HTTP micropayment protocol
 License:        AGPL-3.0
@@ -149,8 +149,8 @@ echo "load_module %{moduledir}/libnginx_x402.so;" > %{buildroot}%{_sysconfdir}/n
 %doc %{_docdir}/%{name}/example.conf
 
 %changelog
-* Mon Jan 20 2025 Ryan Kung <ryan@polyjuice.io> - 0.1.4-1
-- Initial RPM package release
-- Supports automatic detection of system nginx version
-- Falls back to vendored nginx if system nginx source not available
-- Uses RPM macros for better portability
+* Mon Nov 24 2025 Ryan Kung <ryan@polyjuice.io> - 1.0.0-1
+- Implement custom auto-detect nginx version functionality
+- Automatically downloads matching nginx source during build
+- Removed vendored feature dependency
+- Ensures module version matches system nginx version
