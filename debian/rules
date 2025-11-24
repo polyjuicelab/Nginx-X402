@@ -22,7 +22,8 @@ override_dh_auto_install:
 	cp -r src debian/nginx-x402/usr/share/nginx-x402/
 	cp -r build.rs debian/nginx-x402/usr/share/nginx-x402/ 2>/dev/null || true
 	cp Cargo.toml debian/nginx-x402/usr/share/nginx-x402/
-	cp Cargo.lock debian/nginx-x402/usr/share/nginx-x402/ 2>/dev/null || true
+	# Don't copy Cargo.lock - let cargo regenerate it during installation
+	# This avoids lock file version compatibility issues
 	# Copy documentation
 	cp README.md debian/nginx-x402/usr/share/doc/nginx-x402/
 	cp LICENSE debian/nginx-x402/usr/share/doc/nginx-x402/

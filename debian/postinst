@@ -96,6 +96,16 @@ if [ ! -f "Cargo.toml" ]; then
     exit 1
 fi
 
+# Remove Cargo.lock if it exists (let cargo regenerate it)
+# This avoids lock file version compatibility issues
+rm -f Cargo.lock
+
+# Generate fresh Cargo.lock
+echo "Generating Cargo.lock..."
+cargo generate-lockfile || {
+    echo "WARNING: Failed to generate Cargo.lock, continuing anyway..."
+}
+
 cargo build --release $CARGO_FEATURES || {
     echo "ERROR: Failed to build module"
     echo "Build logs:"

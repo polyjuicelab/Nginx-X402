@@ -64,7 +64,8 @@ mkdir -p %{buildroot}%{_datadir}/%{name}/src
 cp -r src %{buildroot}%{_datadir}/%{name}/
 cp build.rs %{buildroot}%{_datadir}/%{name}/ 2>/dev/null || true
 cp Cargo.toml %{buildroot}%{_datadir}/%{name}/
-cp Cargo.lock %{buildroot}%{_datadir}/%{name}/ 2>/dev/null || true
+# Don't copy Cargo.lock - let cargo regenerate it during installation
+# This avoids lock file version compatibility issues
 
 # Install documentation
 cp README.md %{buildroot}%{_docdir}/%{name}/
@@ -173,6 +174,16 @@ if [ ! -f "Cargo.toml" ]; then
     rm -rf "$BUILD_DIR"
     exit 1
 fi
+
+# Remove Cargo.lock if it exists (let cargo regenerate it)
+# This avoids lock file version compatibility issues
+rm -f Cargo.lock
+
+# Generate fresh Cargo.lock
+echo "Generating Cargo.lock..."
+cargo generate-lockfile || {
+    echo "WARNING: Failed to generate Cargo.lock, continuing anyway..."
+}
 
 cargo build --release $CARGO_FEATURES || {
     echo "ERROR: Failed to build module"
