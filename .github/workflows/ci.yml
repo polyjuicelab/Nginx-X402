@@ -491,6 +491,103 @@ jobs:
           # Build RPM for native architecture (x86_64)
           rpmbuild -ba rpm/nginx-x402.spec --nodeps
 
+      - name: Install nginx for testing
+        run: |
+          sudo apt-get update
+          # Install nginx from Ubuntu repos (for testing)
+          sudo apt-get install -y nginx || {
+            # If nginx not available, try installing from nginx.org repo
+            sudo apt-get install -y curl gnupg2 ca-certificates lsb-release
+            echo "deb http://nginx.org/packages/ubuntu $(lsb_release -cs) nginx" | sudo tee /etc/apt/sources.list.d/nginx.list
+            curl -fsSL https://nginx.org/keys/nginx_signing.key | sudo apt-key add -
+            sudo apt-get update
+            sudo apt-get install -y nginx
+          }
+          nginx -v
+
+      - name: Test RPM package installation
+        run: |
+          # Find the built RPM package
+          RPM_FILE=$(find ~/rpmbuild/RPMS -name "nginx-x402-*.rpm" -type f | head -1)
+          if [ -z "$RPM_FILE" ]; then
+            echo "ERROR: RPM package not found"
+            find ~/rpmbuild -name "*.rpm" -type f || true
+            exit 1
+          fi
+          echo "Found RPM package: $RPM_FILE"
+          
+          # Convert RPM to DEB for testing on Ubuntu (or use alien if available)
+          # Since we're on Ubuntu, we'll use alien or install directly if rpm supports it
+          if command -v alien >/dev/null 2>&1; then
+            echo "Converting RPM to DEB using alien..."
+            sudo apt-get install -y alien
+            DEB_FILE="/tmp/nginx-x402-test.deb"
+            sudo alien -d "$RPM_FILE" -o "$DEB_FILE"
+            if [ -f "$DEB_FILE" ]; then
+              echo "Converted to DEB: $DEB_FILE"
+              # Install the converted package
+              echo "Installing converted DEB package..."
+              sudo dpkg -i "$DEB_FILE" || {
+                echo "Installation failed, checking dependencies..."
+                sudo apt-get install -f -y
+                sudo dpkg -i "$DEB_FILE"
+              }
+            else
+              echo "ERROR: Failed to convert RPM to DEB"
+              exit 1
+            fi
+          else
+            # Try to install RPM directly using rpm (if available)
+            echo "Attempting to install RPM directly..."
+            sudo apt-get install -y rpm
+            sudo rpm -i --nodeps "$RPM_FILE" || {
+              echo "Direct RPM installation failed, trying with dependencies..."
+              sudo rpm -i "$RPM_FILE" || {
+                echo "ERROR: Failed to install RPM package"
+                exit 1
+              }
+            }
+          fi
+          
+          # Verify module file exists (RPM installs to same location)
+          if [ ! -f "/usr/lib64/nginx/modules/libnginx_x402.so" ] && [ ! -f "/usr/lib/nginx/modules/libnginx_x402.so" ]; then
+            echo "ERROR: Module file not found after installation"
+            echo "Checking common locations:"
+            find /usr -name "libnginx_x402.so" 2>/dev/null || true
+            exit 1
+          fi
+          
+          # Find the actual module location
+          MODULE_FILE=$(find /usr -name "libnginx_x402.so" -type f 2>/dev/null | head -1)
+          if [ -z "$MODULE_FILE" ]; then
+            echo "ERROR: Module file not found"
+            exit 1
+          fi
+          echo "✓ Module file exists: $MODULE_FILE"
+          
+          # Verify module file is not empty
+          MODULE_SIZE=$(stat -c%s "$MODULE_FILE")
+          if [ "$MODULE_SIZE" -lt 1000 ]; then
+            echo "ERROR: Module file seems too small ($MODULE_SIZE bytes)"
+            exit 1
+          fi
+          echo "✓ Module file size: $MODULE_SIZE bytes"
+          
+          # Verify module can be loaded by nginx (test configuration)
+          echo "Testing nginx module loading..."
+          # Create modules-enabled directory if it doesn't exist
+          sudo mkdir -p /etc/nginx/modules-enabled
+          echo "load_module $MODULE_FILE;" | sudo tee /etc/nginx/modules-enabled/x402.conf > /dev/null
+          sudo nginx -t || {
+            echo "ERROR: Nginx configuration test failed"
+            sudo nginx -t 2>&1
+            exit 1
+          }
+          echo "✓ Nginx configuration test passed"
+          
+          # Clean up test configuration
+          sudo rm -f /etc/nginx/modules-enabled/x402.conf
+
       - name: Copy RPM package to workspace
         run: |
           echo "Looking for RPM package"
