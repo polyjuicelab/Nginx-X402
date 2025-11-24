@@ -81,6 +81,7 @@ echo "load_module %{moduledir}/libnginx_x402.so;" > %{buildroot}%{_sysconfdir}/n
 touch %{buildroot}%{moduledir}/libnginx_x402.so
 
 %post
+#!/bin/bash
 # Build the module during package installation to match system nginx version
 SRC_DIR="%{_datadir}/%{name}"
 BUILD_DIR="/tmp/%{name}-build"
