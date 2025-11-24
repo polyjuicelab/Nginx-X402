@@ -21,6 +21,11 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libclang-dev
+
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
@@ -38,7 +43,9 @@ jobs:
         run: cargo fmt --check --all
 
       - name: Run clippy
-        run: cargo clippy -- -D warnings
+        env:
+          NGX_CONFIGURE_ARGS: "--without-http_rewrite_module"
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
   test:
     name: Run Tests
