@@ -3,8 +3,8 @@
 //! This module provides logging functionality for the x402 module.
 //! Uses Rust's standard `log` crate with a custom logger that writes to stderr.
 
-use ngx::http::Request;
 use log::{Log, Metadata, Record};
+use ngx::http::Request;
 use std::sync::Once;
 
 /// Simple logger that writes to stderr (appears in Docker logs and Nginx error log)
@@ -14,7 +14,7 @@ impl Log for NginxLogger {
     fn enabled(&self, _metadata: &Metadata) -> bool {
         true
     }
-    
+
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
             // Use eprintln! to write to stderr
@@ -22,7 +22,7 @@ impl Log for NginxLogger {
             eprintln!("[x402][{}] {}", record.level(), record.args());
         }
     }
-    
+
     fn flush(&self) {}
 }
 
@@ -43,7 +43,7 @@ pub fn init() {
 pub fn log_message(_r: Option<&Request>, level: &str, message: &str) {
     // Initialize logger if not already done
     init();
-    
+
     // Use Rust's log crate
     match level {
         "error" => log::error!("{}", message),

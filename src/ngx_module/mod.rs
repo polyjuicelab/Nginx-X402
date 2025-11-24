@@ -57,15 +57,18 @@ pub use runtime::{
 /// It converts the raw nginx request pointer to a Request object and calls
 /// the implementation function.
 #[no_mangle]
-pub unsafe extern "C" fn x402_metrics_handler(r: *mut ngx::ffi::ngx_http_request_t) -> ngx::ffi::ngx_int_t {
+pub unsafe extern "C" fn x402_metrics_handler(
+    r: *mut ngx::ffi::ngx_http_request_t,
+) -> ngx::ffi::ngx_int_t {
     use std::mem;
     let req_ptr: *mut ngx::http::Request = mem::transmute(r);
     let req_mut = &mut *req_ptr;
-    
+
     match x402_metrics_handler_impl(req_mut) {
         ngx::core::Status::NGX_OK => ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t,
         ngx::core::Status::NGX_ERROR => ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t,
         ngx::core::Status::NGX_DECLINED => ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t,
+        _ => ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t,
     }
 }
 
@@ -85,24 +88,29 @@ pub unsafe extern "C" fn x402_metrics_handler(r: *mut ngx::ffi::ngx_http_request
 /// This function is marked `unsafe` because it performs raw pointer operations
 /// to convert the nginx request pointer to a Rust Request object.
 #[no_mangle]
-pub unsafe extern "C" fn x402_phase_handler(r: *mut ngx::ffi::ngx_http_request_t) -> ngx::ffi::ngx_int_t {
+pub unsafe extern "C" fn x402_phase_handler(
+    r: *mut ngx::ffi::ngx_http_request_t,
+) -> ngx::ffi::ngx_int_t {
     unsafe {
         use std::mem;
         let req_ptr: *mut ngx::http::Request = mem::transmute(r);
         let req_mut = &mut *req_ptr;
-        
+
         use crate::ngx_module::logging::log_debug;
         use crate::ngx_module::module::get_module_config;
-        
+
         let r_raw = req_mut.as_ref();
-        
+
         // Phase handler should only be called if content_handler is NOT set
         // If content_handler is already set, decline and let nginx call the content handler
         if r_raw.content_handler.is_some() {
-            log_debug(Some(req_mut), "[x402] Phase handler: content_handler already set, declining");
+            log_debug(
+                Some(req_mut),
+                "[x402] Phase handler: content_handler already set, declining",
+            );
             return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
         }
-        
+
         // Check if module is enabled for this location
         let conf = match get_module_config(req_mut) {
             Ok(c) => c,
@@ -111,12 +119,12 @@ pub unsafe extern "C" fn x402_phase_handler(r: *mut ngx::ffi::ngx_http_request_t
                 return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
             }
         };
-        
+
         // Check if module is enabled
         if conf.enabled == 0 {
             return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
         }
-        
+
         // Module is enabled but content_handler is not set (fallback case)
         // Call the handler directly as a fallback
         x402_ngx_handler(r)
@@ -135,12 +143,14 @@ pub unsafe extern "C" fn x402_phase_handler(r: *mut ngx::ffi::ngx_http_request_t
 /// to convert the nginx request pointer to a Rust Request object. The caller must
 /// ensure that the pointer is valid and points to a valid `ngx_http_request_t`.
 #[no_mangle]
-pub unsafe extern "C" fn x402_ngx_handler(r: *mut ngx::ffi::ngx_http_request_t) -> ngx::ffi::ngx_int_t {
+pub unsafe extern "C" fn x402_ngx_handler(
+    r: *mut ngx::ffi::ngx_http_request_t,
+) -> ngx::ffi::ngx_int_t {
     unsafe {
         use std::mem;
         let req_ptr: *mut ngx::http::Request = mem::transmute(r);
         let req_mut = &mut *req_ptr;
-        
+
         match x402_ngx_handler_impl(req_mut) {
             ngx::core::Status::NGX_OK => ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t,
             ngx::core::Status::NGX_ERROR => ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t,
