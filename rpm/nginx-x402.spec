@@ -162,8 +162,8 @@ else
                 CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/--with-mail=dynamic//g')
                 CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/--with-stream=dynamic//g')
                 CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/--with-stream_geoip_module=dynamic//g')
-                # Remove --with-debug if present (may cause issues)
-                CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/--with-debug//g')
+                # Keep --with-debug if present (needed for binary compatibility)
+                # Don't remove it - it affects module signature
                 # Clean up multiple spaces
                 CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/  */ /g' | sed 's/^ *//' | sed 's/ *$//')
                 # Add --without-http_rewrite_module if not already present
@@ -269,7 +269,7 @@ if [ ! -f "$NGINX_SOURCE_DIR/objs/ngx_modules.c" ]; then
     exit 1
 fi
 
-# Check nginx version in objs/ngx_auto_config.h
+# Check nginx version and key configuration values in objs/ngx_auto_config.h
 if [ -f "$NGINX_SOURCE_DIR/objs/ngx_auto_config.h" ]; then
     echo "Nginx auto config found, checking version compatibility..."
     NGINX_BUILD_VERSION=$(grep -E 'NGINX_VER' "$NGINX_SOURCE_DIR/objs/ngx_auto_config.h" 2>/dev/null | head -1 | sed -n 's/.*"\(.*\)".*/\1/p' || echo "")
@@ -278,6 +278,16 @@ if [ -f "$NGINX_SOURCE_DIR/objs/ngx_auto_config.h" ]; then
         if [ "$NGINX_BUILD_VERSION" != "$NGINX_VERSION" ]; then
             echo "WARNING: Build version ($NGINX_BUILD_VERSION) != System version ($NGINX_VERSION)"
         fi
+    fi
+    
+    # Check key configuration values that affect binary compatibility
+    echo "Checking key configuration values for binary compatibility:"
+    grep -E "NGX_PTR_SIZE|NGX_SIG_ATOMIC_T_SIZE|NGX_TIME_T_SIZE|NGX_HAVE_DEBUG_MALLOC" "$NGINX_SOURCE_DIR/objs/ngx_auto_config.h" 2>/dev/null | head -10 || true
+    
+    # Compare with system nginx if possible
+    if command -v nginx >/dev/null 2>&1; then
+        echo "System nginx configuration (from nginx -V):"
+        nginx -V 2>&1 | grep -E "configure arguments" || true
     fi
 fi
 

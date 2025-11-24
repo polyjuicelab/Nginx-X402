@@ -79,8 +79,8 @@ else
                 CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/--with-mail=dynamic//g')
                 CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/--with-stream=dynamic//g')
                 CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/--with-stream_geoip_module=dynamic//g')
-                # Remove --with-debug if present (may cause issues)
-                CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/--with-debug//g')
+                # Keep --with-debug if present (needed for binary compatibility)
+                # Don't remove it - it affects module signature
                 # Clean up multiple spaces
                 CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/  */ /g' | sed 's/^ *//' | sed 's/ *$//')
                 # Add --without-http_rewrite_module if not already present
