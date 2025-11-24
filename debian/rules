@@ -18,6 +18,12 @@ override_dh_auto_build:
 	elif dpkg -l nginx 2>/dev/null | grep -q "^ii"; then \
 		NGINX_VERSION=$$(dpkg -l nginx | grep "^ii" | awk '{print $$3}' | cut -d'-' -f1 | cut -d':' -f2 || echo ""); \
 	fi; \
+	# If nginx version not detected, use default version for CI builds
+	if [ -z "$$NGINX_VERSION" ]; then 
+		NGINX_VERSION="1.28.0"; 
+		echo "No nginx detected, using default version: $$NGINX_VERSION"; 
+	fi; 
+
 	# If nginx version detected, find or download matching source
 	if [ -n "$$NGINX_VERSION" ]; then \
 		echo "Detected system nginx version: $$NGINX_VERSION"; \
