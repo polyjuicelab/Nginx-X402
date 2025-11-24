@@ -15,8 +15,12 @@ override_dh_auto_build:
 	# Try to detect nginx version from installed package
 	if command -v nginx >/dev/null 2>&1; then \
 		NGINX_VERSION=$$(nginx -v 2>&1 | sed -n 's/.*nginx\/\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/p' || echo ""); \
-	elif dpkg -l nginx 2>/dev/null | grep -q "^ii"; then \
+	fi; \
+	if [ -z "$$NGINX_VERSION" ] && dpkg -l nginx 2>/dev/null | grep -q "^ii"; then \
 		NGINX_VERSION=$$(dpkg -l nginx | grep "^ii" | awk '{print $$3}' | cut -d'-' -f1 | cut -d':' -f2 || echo ""); \
+	fi; \
+	if [ -z "$$NGINX_VERSION" ] && dpkg -l 2>/dev/null | grep -q "^ii.*nginx"; then \
+		NGINX_VERSION=$$(dpkg -l | grep "^ii.*nginx" | head -1 | awk '{print $$3}' | cut -d'-' -f1 | cut -d':' -f2 || echo ""); \
 	fi; \
 	# If nginx version detected, find or download matching source
 	if [ -n "$$NGINX_VERSION" ]; then \
