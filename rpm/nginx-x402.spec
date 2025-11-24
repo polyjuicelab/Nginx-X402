@@ -20,8 +20,8 @@ BuildRequires:  gcc
 BuildRequires:  make
 
 Requires:       nginx >= 1.18.0
-Requires:       cargo
-Requires:       rustc
+Requires:       cargo >= 1.80
+Requires:       rustc >= 1.80
 Requires:       clang-devel
 Requires:       openssl-devel
 Requires:       pkgconfig
