@@ -343,6 +343,10 @@ jobs:
         run: |
           mkdir -p ~/rpmbuild/SOURCES
           VERSION=$(grep '^version' Cargo.toml | cut -d'"' -f2)
+          echo "Detected version from Cargo.toml: $VERSION"
+          # Update RPM spec version to match Cargo.toml
+          sed -i "s/^Version:.*/Version:        ${VERSION}/" rpm/nginx-x402.spec
+          # Create tarball
           tar -czf ~/rpmbuild/SOURCES/nginx-x402-${VERSION}.tar.gz \
             --exclude='.git' \
             --exclude='target' \
