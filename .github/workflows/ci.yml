@@ -294,7 +294,8 @@ jobs:
             libssl-dev \
             pkg-config \
             libclang-dev \
-            build-essential
+            build-essential \
+            nginx
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -375,7 +376,8 @@ jobs:
             libssl-dev \
             pkg-config \
             libclang-dev \
-            build-essential
+            build-essential \
+            nginx
 
       - name: Cache cargo registry
         uses: actions/cache@v4
