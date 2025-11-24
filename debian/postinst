@@ -253,13 +253,20 @@ cargo generate-lockfile || {
     echo "WARNING: Failed to generate Cargo.lock, continuing anyway..."
 }
 
-cargo build --release $CARGO_FEATURES || {
+# Build with verbose output to see what's happening
+echo "Building module with cargo..."
+echo "Command: cargo build --release $CARGO_FEATURES"
+echo "NGINX_SOURCE_DIR=$NGINX_SOURCE_DIR"
+
+cargo build --release $CARGO_FEATURES 2>&1 | tee /tmp/cargo-build.log || {
     echo "ERROR: Failed to build module"
     echo "Build logs:"
-    cargo build --release $CARGO_FEATURES 2>&1 | tail -50
+    tail -100 /tmp/cargo-build.log
     rm -rf "$BUILD_DIR"
     exit 1
 }
+
+echo "Build completed successfully"
 
 # Find and copy the built module
 MODULE_FILE=$(find target -name "libnginx_x402.so" -type f | head -1)
