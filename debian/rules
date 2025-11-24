@@ -12,7 +12,9 @@ override_dh_auto_build:
 	# This implements our own "vendored" functionality that matches system nginx version
 	NGINX_VERSION=; \
 	NGINX_SOURCE_DIR=; \
-	# Try to detect nginx version from installed package
+	# For package building, use a default nginx version
+	# The actual system nginx version will be checked during package installation (postinst)
+	# Try to detect nginx version if available (for local builds), otherwise use default
 	if command -v nginx >/dev/null 2>&1; then \
 		NGINX_VERSION=$$(nginx -v 2>&1 | sed -n 's/.*nginx\/\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/p' || echo ""); \
 	fi; \
@@ -21,6 +23,12 @@ override_dh_auto_build:
 	fi; \
 	if [ -z "$$NGINX_VERSION" ] && dpkg -l 2>/dev/null | grep -q "^ii.*nginx"; then \
 		NGINX_VERSION=$$(dpkg -l | grep "^ii.*nginx" | head -1 | awk '{print $$3}' | cut -d'-' -f1 | cut -d':' -f2 || echo ""); \
+	fi; \
+	# Use default version if not detected (for CI builds without nginx installed)
+	if [ -z "$$NGINX_VERSION" ]; then \
+		NGINX_VERSION="1.28.0"; \
+		echo "No nginx detected, using default version for build: $$NGINX_VERSION"; \
+		echo "Note: Package installation will verify version compatibility with system nginx"; \
 	fi; \
 	# If nginx version detected, find or download matching source
 	if [ -n "$$NGINX_VERSION" ]; then \
@@ -58,9 +66,6 @@ override_dh_auto_build:
 				exit 1; \
 			fi; \
 		fi; \
-	else \
-		echo "ERROR: Could not detect nginx version. Please ensure nginx is installed."; \
-		exit 1; \
 	fi; \
 	# Set environment variables - we always use NGINX_SOURCE_DIR (no vendored feature)
 	if [ -n "$$NGINX_SOURCE_DIR" ]; then \
