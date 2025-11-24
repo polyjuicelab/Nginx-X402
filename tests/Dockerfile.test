@@ -1,0 +1,100 @@
+# Single-stage Dockerfile for integration testing
+# Builds nginx and module in the same environment to ensure compatibility
+# Optimized for fast iteration: dependencies are cached separately from code
+
+FROM ubuntu:22.04
+
+# Avoid interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install all dependencies in a single layer for better caching
+# This layer will be cached unless dependencies change
+RUN apt-get update && apt-get install -y \
+    curl \
+    ca-certificates \
+    clang \
+    libclang-dev \
+    pkg-config \
+    libssl-dev \
+    build-essential \
+    libpcre3-dev \
+    zlib1g-dev \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust toolchain (cached separately from system packages)
+# This layer will be cached unless Rust version changes
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Download and configure nginx (cached separately from code)
+# This layer will be cached unless nginx version changes
+RUN cd /tmp \
+    && wget -q http://nginx.org/download/nginx-1.28.0.tar.gz \
+    && tar -xzf nginx-1.28.0.tar.gz \
+    && cd nginx-1.28.0 \
+    && ./configure --prefix=/etc/nginx \
+        --sbin-path=/usr/sbin/nginx \
+        --modules-path=/usr/lib/nginx/modules \
+        --conf-path=/etc/nginx/nginx.conf \
+        --error-log-path=/var/log/nginx/error.log \
+        --http-log-path=/var/log/nginx/access.log \
+        --pid-path=/var/run/nginx.pid \
+        --lock-path=/var/run/nginx.lock \
+        --with-http_ssl_module \
+        --with-http_realip_module \
+        --with-http_gzip_static_module \
+        --with-threads \
+        --with-file-aio \
+    && echo "Nginx configured successfully"
+
+# Build and install nginx (cached separately from module code)
+# This layer will be cached unless nginx source or build config changes
+RUN cd /tmp/nginx-1.28.0 \
+    && make -j$(nproc) \
+    && make install \
+    && mkdir -p /var/cache/nginx /var/log/nginx \
+    && useradd -r -s /bin/false nginx 2>/dev/null || true
+
+# Set working directory
+WORKDIR /build
+
+# Copy dependency files first (for better caching)
+# This layer will be cached unless Cargo.toml changes
+COPY Cargo.toml ./
+COPY README.md ./
+
+# Copy source code (this layer changes most frequently)
+COPY src ./src
+COPY nginx ./nginx
+
+# Set environment variables for module build
+# Use the nginx source directory we just configured
+ENV NGINX_SOURCE_DIR=/tmp/nginx-1.28.0
+ENV NGX_CONFIGURE_ARGS="--without-http_rewrite_module"
+ENV RUST_BACKTRACE=1
+
+# Build the module using the same nginx source (no vendored feature)
+# This ensures exact version and compilation environment match
+# Cargo will cache dependencies automatically, so only source changes trigger rebuild
+RUN cargo build --release --no-default-features
+
+# Copy the built module
+RUN mkdir -p /usr/lib/nginx/modules \
+    && cp /build/target/release/libnginx_x402.so /usr/lib/nginx/modules/libnginx_x402.so
+
+# Copy test nginx configuration
+COPY tests/nginx.test.conf /etc/nginx/nginx.conf
+
+# Create test directories
+RUN mkdir -p /var/www/html /var/log/nginx
+
+# Expose port
+EXPOSE 80
+
+# Health check
+HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost/health || exit 1
+
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]

@@ -22,11 +22,13 @@ rust_decimal = "1.36"
 serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "1.0", features = ["rt", "rt-multi-thread"] }
 ngx = "0.5"
-prometheus = "0.13"
+prometheus = "0.14"
+log = "0.4"
 
 [features]
 default = ["vendored"]
 vendored = ["ngx/vendored"]
+integration-test = []  # Feature for integration tests (requires Docker)
 
 [dev-dependencies]
 rust-x402 = "0.2.2"

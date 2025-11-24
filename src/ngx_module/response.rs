@@ -117,17 +117,39 @@ pub fn send_response_body(r: &mut Request, body: &[u8]) -> Result<()> {
     // Set content length
     r.set_content_length_n(body_len);
 
-    // Send header
+    // CRITICAL: In Nginx content handler, send_header() may fail if:
+    // 1. Request headers_out.status is not set (we set it in send_402_response)
+    // 2. Request is already finalized
+    // 3. Header was already sent
+    // 4. Request is not in correct state
+    
+    // Check if header was already sent by checking request state
+    unsafe {
+        let r_raw = r.as_ref();
+        // In Nginx, r->header_sent is a flag indicating if header was sent
+        // But ngx-rust may wrap this differently, so we'll try to send header anyway
+        // If it fails, we'll handle the error
+    }
+    
+    // Send header using ngx-rust's method
+    // This should handle request state correctly
     let status = r.send_header();
     if !status.is_ok() {
-        return Err(ConfigError::from("Failed to send header"));
+        // send_header failed - check if we can use alternative approach
+        // In Nginx, we can use ngx_http_send_special_response for error responses
+        // But for now, let's try to understand why it fails
+        // The issue might be that we're calling send_header from a phase handler context
+        // instead of a content handler context
+        let error_msg = format!("Failed to send header: status={:?}. Request state may be incorrect.", status);
+        return Err(ConfigError::from(error_msg));
     }
 
-    // Send body
+    // Send body using output filter
     let chain_mut = unsafe { &mut *chain };
     let status = r.output_filter(chain_mut);
     if !status.is_ok() {
-        return Err(ConfigError::from("Failed to send body"));
+        let error_msg = format!("Failed to send body: status={:?}", status);
+        return Err(ConfigError::from(error_msg));
     }
 
     Ok(())

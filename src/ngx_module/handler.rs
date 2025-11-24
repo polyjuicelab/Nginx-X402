@@ -15,35 +15,35 @@ use ngx::http::{HTTPStatus, Request};
 use rust_decimal::prelude::ToPrimitive;
 use std::time::Instant;
 
-/// Request handler - core payment verification logic
-///
-/// This function contains the main payment verification logic for the ngx-rust module.
-/// It handles the complete flow:
-/// 1. Check if module is enabled
-/// 2. Create payment requirements from config
-/// 3. Check for X-PAYMENT header
-/// 4. If present, verify payment with facilitator
-/// 5. If valid, allow request; if invalid or missing, send 402 response
-///
-/// # Arguments
-/// - `r`: Nginx request object
-/// - `config`: Parsed module configuration
-///
-/// # Returns
-/// - `Ok(())` if request should proceed (payment valid or module disabled)
-/// - `Ok(())` if 402 response was sent (payment invalid or missing)
-/// - `Err` if an error occurs during processing
-///
 /// Core payment verification handler implementation
 ///
 /// This function contains the main business logic for payment verification.
-/// It is called by `x402_ngx_handler_impl` after configuration parsing.
+/// It handles the complete payment verification flow:
+///
+/// 1. Check if module is enabled for this location
+/// 2. Create payment requirements from configuration
+/// 3. Check for X-PAYMENT header in the request
+/// 4. If present, validate and verify payment with facilitator
+/// 5. If valid, allow request to proceed; if invalid or missing, send 402 response
+///
+/// # Arguments
+///
+/// * `r` - Nginx request object
+/// * `config` - Parsed module configuration for the current location
+///
+/// # Returns
+///
+/// * `Ok(())` - Request should proceed (payment valid or module disabled)
+/// * `Ok(())` - 402 response was sent (payment invalid or missing)
+/// * `Err` - Error occurred during processing
 ///
 /// # Errors
-/// - Returns error if payment requirements cannot be created
-/// - Returns error if facilitator URL is not configured
-/// - Returns error if payment verification fails
-/// - Returns error if 402 response cannot be sent
+///
+/// This function will return an error if:
+/// * Payment requirements cannot be created from configuration
+/// * Facilitator URL is not configured
+/// * Payment verification fails (depending on fallback mode)
+/// * 402 response cannot be sent
 pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<()> {
     // Record request metric
     let metrics = X402Metrics::get();
@@ -181,14 +181,15 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<(
 /// Request handler wrapper for ngx-rust
 ///
 /// This function wraps the core payment verification logic and adapts it
-/// to ngx-rust's request handler interface.
+/// to ngx-rust's request handler interface. It retrieves the module configuration
+/// from the request context and delegates to the core handler implementation.
 ///
-/// # Configuration Access
+/// This function is called by the exported `x402_ngx_handler` C function.
 ///
-/// This implementation attempts to get module configuration from the request.
-/// The exact API depends on ngx-rust 0.5's actual implementation.
+/// # Returns
 ///
-/// This function is called by the `http_request_handler!` macro-generated `x402_ngx_handler`.
+/// * `Status::NGX_OK` - Handler completed successfully
+/// * `Status::NGX_ERROR` - Error occurred (configuration error or handler failure)
 pub fn x402_ngx_handler_impl(req: &mut Request) -> Status {
     // Get module configuration from request
     let conf = match get_module_config(req) {
@@ -220,7 +221,8 @@ pub fn x402_ngx_handler_impl(req: &mut Request) -> Status {
 /// Metrics handler for exposing Prometheus metrics
 ///
 /// This handler exposes Prometheus metrics via a `/metrics` endpoint.
-/// It should be registered as a separate handler for a dedicated location.
+/// It collects metrics from the module's metrics registry and returns them
+/// in Prometheus text format.
 ///
 /// # Usage
 ///
@@ -230,6 +232,11 @@ pub fn x402_ngx_handler_impl(req: &mut Request) -> Status {
 ///     x402_metrics on;
 /// }
 /// ```
+///
+/// # Returns
+///
+/// * `Status::NGX_OK` - Metrics successfully sent
+/// * `Status::NGX_ERROR` - Error occurred (header setting or body sending failed)
 pub fn x402_metrics_handler_impl(req: &mut Request) -> Status {
     use crate::ngx_module::metrics::collect_metrics;
 
