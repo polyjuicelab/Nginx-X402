@@ -3,8 +3,7 @@
 use crate::ngx_module::commands::ngx_http_x402_commands;
 use crate::ngx_module::config::X402Config;
 use crate::ngx_module::error::{ConfigError, Result};
-use ngx::core::Pool;
-use ngx::ffi::{ngx_http_conf_ctx_t, ngx_http_core_loc_conf_t, ngx_http_core_main_conf_t};
+use ngx::ffi::ngx_http_core_main_conf_t;
 use ngx::http::Request;
 use std::ffi::c_char;
 use std::ptr;
@@ -13,6 +12,7 @@ use std::ptr;
 ///
 /// This is equivalent to ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module)
 /// Returns None if not in location context or if clcf is null
+#[allow(dead_code)]
 unsafe fn get_core_loc_conf(
     cf: *mut ngx::ffi::ngx_conf_t,
 ) -> Option<*mut ngx::ffi::ngx_http_core_loc_conf_t> {
@@ -30,7 +30,7 @@ unsafe fn get_core_loc_conf(
     // loc_conf is *mut *mut c_void (array of pointers)
     // Use loc_conf.add() directly, not (*loc_conf).add()
     let core_ctx_index = ngx::ffi::ngx_http_core_module.ctx_index;
-    let ptr_to_ptr = loc_conf.add(core_ctx_index as usize);
+    let ptr_to_ptr = loc_conf.add(core_ctx_index);
     if ptr_to_ptr.is_null() {
         return None;
     }
@@ -41,7 +41,10 @@ unsafe fn get_core_loc_conf(
         return None;
     }
 
-    Some(core::mem::transmute(clcf_void))
+    Some(core::mem::transmute::<
+        *mut core::ffi::c_void,
+        *mut ngx::ffi::ngx_http_core_loc_conf_t,
+    >(clcf_void))
 }
 
 /// Helper function to get ngx_http_core_main_conf_t from ngx_conf_t
@@ -68,7 +71,7 @@ unsafe fn get_core_main_conf(
     // main_conf is *mut *mut c_void (pointer to array of pointers)
     // Use main_conf.add() directly, not (*main_conf).add()
     let core_ctx_index = ngx::ffi::ngx_http_core_module.ctx_index;
-    let ptr_to_ptr = main_conf.add(core_ctx_index as usize);
+    let ptr_to_ptr = main_conf.add(core_ctx_index);
     if ptr_to_ptr.is_null() {
         return None;
     }
@@ -79,7 +82,10 @@ unsafe fn get_core_main_conf(
         return None;
     }
 
-    Some(core::mem::transmute(cmcf_void))
+    Some(core::mem::transmute::<
+        *mut core::ffi::c_void,
+        *mut ngx_http_core_main_conf_t,
+    >(cmcf_void))
 }
 
 /// Postconfiguration hook
@@ -129,6 +135,7 @@ unsafe extern "C" fn postconfiguration(cf: *mut ngx::ffi::ngx_conf_t) -> ngx::ff
 ///
 /// This structure defines the callbacks for creating and merging configuration
 /// at different levels (main, server, location).
+#[allow(non_upper_case_globals)]
 static mut ngx_http_x402_module_ctx: ngx::ffi::ngx_http_module_t = ngx::ffi::ngx_http_module_t {
     preconfiguration: None,
     postconfiguration: Some(postconfiguration),
@@ -164,7 +171,7 @@ unsafe extern "C" fn create_loc_conf(cf: *mut ngx::ffi::ngx_conf_t) -> *mut core
 /// We cannot set handler here because it causes segmentation faults.
 /// However, we can verify that handler is still set after merging.
 unsafe extern "C" fn merge_loc_conf(
-    cf: *mut ngx::ffi::ngx_conf_t,
+    _cf: *mut ngx::ffi::ngx_conf_t,
     prev: *mut core::ffi::c_void,
     conf: *mut core::ffi::c_void,
 ) -> *mut c_char {
@@ -238,27 +245,10 @@ unsafe extern "C" fn merge_loc_conf(
 /// the nginx binary built with the same source.
 macro_rules! build_module_signature {
     () => {{
-        // Get sizes from ngx::ffi constants (available at compile time)
-        let ptr_size = ngx::ffi::NGX_PTR_SIZE;
-        let sig_atomic_size = ngx::ffi::NGX_SIG_ATOMIC_T_SIZE;
-        let time_size = ngx::ffi::NGX_TIME_T_SIZE;
-
-        // Build feature flags string from NGX_MODULE_SIGNATURE_1 through NGX_MODULE_SIGNATURE_N
-        // Since these are CStr constants, we need to read them at runtime or use a different approach
-        // For now, we'll construct the signature using format! macro in a const context
-        // This requires the signature to be known at compile time
-
-        // Format: "{ptr_size},{sig_atomic_size},{time_size},{flags}"
-        // The flags part is constructed from NGX_MODULE_SIGNATURE_1..N constants
-        // Since we can't easily concatenate CStr values in const context,
-        // we use a workaround: build the signature string using the known format
-
-        // TODO: Ideally, we would extract feature flags from NGX_MODULE_SIGNATURE_1..N
-        // at compile time, but Rust's const fn limitations make this challenging.
-        // For now, we use the signature format with values from ngx::ffi constants.
-
         // Fallback: Use hardcoded signature matching vendored nginx version
         // This ensures compatibility when the dynamic approach isn't feasible
+        // Format: "{ptr_size},{sig_atomic_size},{time_size},{flags}"
+        // The signature is hardcoded to match the vendored nginx version
         b"8,4,8,0010111111010111001111111111100110\0"
     }};
 }
@@ -315,9 +305,9 @@ pub static mut ngx_http_x402_module: ngx::ffi::ngx_module_t = ngx::ffi::ngx_modu
     // 2. Using build.rs to extract signature from nginx-sys bindings after compilation
     // 3. Runtime initialization (not ideal for static initialization)
     signature: MODULE_SIGNATURE.as_ptr() as *const c_char,
-    name: b"ngx_http_x402_module\0".as_ptr() as *mut c_char,
-    ctx: unsafe { &ngx_http_x402_module_ctx as *const _ as *mut _ },
-    commands: unsafe { ngx_http_x402_commands.as_mut_ptr() },
+    name: c"ngx_http_x402_module".as_ptr() as *mut c_char,
+    ctx: &raw const ngx_http_x402_module_ctx as *mut _,
+    commands: unsafe { &raw mut ngx_http_x402_commands[0] as *mut _ },
     type_: ngx::ffi::NGX_HTTP_MODULE as usize,
     init_master: None,
     init_module: None,
@@ -344,17 +334,13 @@ pub static mut ngx_http_x402_module: ngx::ffi::ngx_module_t = ngx::ffi::ngx_modu
 /// NOTE: This should ideally use ngx::ngx_modules! macro, but we need to fix
 /// the module structure first (commands, ctx, etc.)
 #[no_mangle]
-pub static mut ngx_modules: [*const ngx::ffi::ngx_module_t; 2] = [
-    unsafe { &ngx_http_x402_module as *const _ },
-    core::ptr::null(),
-];
+pub static mut ngx_modules: [*const ngx::ffi::ngx_module_t; 2] =
+    [&raw const ngx_http_x402_module, core::ptr::null()];
 
 /// Module names array (required for dynamic modules)
 #[no_mangle]
-pub static mut ngx_module_names: [*const core::ffi::c_char; 2] = [
-    b"ngx_http_x402_module\0".as_ptr() as *const core::ffi::c_char,
-    core::ptr::null(),
-];
+pub static mut ngx_module_names: [*const core::ffi::c_char; 2] =
+    [c"ngx_http_x402_module".as_ptr(), core::ptr::null()];
 
 /// Module order array (required for dynamic modules)
 #[no_mangle]

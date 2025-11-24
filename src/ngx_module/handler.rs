@@ -241,7 +241,13 @@ pub fn x402_metrics_handler_impl(req: &mut Request) -> Status {
     use crate::ngx_module::metrics::collect_metrics;
 
     // Collect metrics in Prometheus text format
-    let metrics_text = collect_metrics();
+    let mut metrics_text = collect_metrics();
+    
+    // Ensure metrics text is not empty (Prometheus format requires at least a newline)
+    // If no metrics are registered yet, return a minimal valid Prometheus response
+    if metrics_text.trim().is_empty() {
+        metrics_text = "# HELP x402_module_info Module information\n# TYPE x402_module_info gauge\nx402_module_info 1\n".to_string();
+    }
 
     // Set response headers
     if req

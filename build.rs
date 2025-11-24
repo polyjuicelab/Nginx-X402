@@ -10,4 +10,18 @@ fn main() {
     // the nginx binary built with the same source, without hardcoding.
     //
     // See src/ngx_module/module.rs for the implementation.
+
+    // For dynamic nginx modules, we need to allow undefined symbols
+    // because nginx symbols will be resolved at runtime when the module is loaded by nginx
+    // 
+    // macOS requires explicit flags to allow undefined symbols
+    // Linux shared libraries (.so) allow undefined symbols by default
+    #[cfg(target_os = "macos")]
+    {
+        println!("cargo:rustc-link-arg=-undefined");
+        println!("cargo:rustc-link-arg=dynamic_lookup");
+    }
+    
+    // Linux doesn't need special flags - shared libraries allow undefined symbols by default
+    // The symbols will be resolved when nginx loads the module at runtime
 }

@@ -17,7 +17,7 @@ mod tests {
     /// Test helper to check if nginx is running
     fn nginx_is_running() -> bool {
         Command::new("curl")
-            .args(&[
+            .args([
                 "-s",
                 "-o",
                 "/dev/null",
@@ -73,7 +73,7 @@ mod tests {
         }
 
         let output = Command::new("curl")
-            .args(&[
+            .args([
                 "-s",
                 "-o",
                 "/dev/null",
@@ -103,7 +103,7 @@ mod tests {
         }
 
         let output = Command::new("curl")
-            .args(&[
+            .args([
                 "-s",
                 "-o",
                 "/dev/null",
@@ -133,7 +133,7 @@ mod tests {
         }
 
         let output = Command::new("curl")
-            .args(&["-s", "http://localhost:8080/metrics"])
+            .args(["-s", "http://localhost:8080/metrics"])
             .output()
             .expect("Failed to run curl");
 

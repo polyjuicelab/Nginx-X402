@@ -457,7 +457,7 @@ mod tests {
             "All valid configuration should parse successfully"
         );
         let parsed = result.unwrap();
-        assert_eq!(parsed.enabled, true);
+        assert!(parsed.enabled);
         assert!(parsed.amount.is_some());
         assert!(parsed.pay_to.is_some());
         assert!(parsed.facilitator_url.is_some());
