@@ -34,20 +34,15 @@ override_dh_auto_build:
 			USE_VENDORED=0; \
 			echo "Using nginx source from /usr/share/nginx-$$NGINX_VERSION"; \
 		# Try to download nginx source matching system version
-		elif [ ! -d /tmp/nginx-$$NGINX_VERSION ]; then \
-			echo "Attempting to download nginx-$$NGINX_VERSION source..."; \
-			if wget -q -O /tmp/nginx-$$NGINX_VERSION.tar.gz "http://nginx.org/download/nginx-$$NGINX_VERSION.tar.gz" 2>/dev/null; then \
-				(cd /tmp && tar -xzf nginx-$$NGINX_VERSION.tar.gz && rm nginx-$$NGINX_VERSION.tar.gz); \
-				if [ -d /tmp/nginx-$$NGINX_VERSION ]; then \
-					NGINX_SOURCE_DIR=/tmp/nginx-$$NGINX_VERSION; \
-					USE_VENDORED=0; \
-					echo "Downloaded and extracted nginx-$$NGINX_VERSION source"; \
-				fi; \
-			fi; \
-		elif [ -d /tmp/nginx-$$NGINX_VERSION ]; then \
-			NGINX_SOURCE_DIR=/tmp/nginx-$$NGINX_VERSION; \
-			USE_VENDORED=0; \
-			echo "Using cached nginx source from /tmp/nginx-$$NGINX_VERSION"; \
+		# Note: nginx-sys requires a configured nginx build (with objs directory)
+		# So we should use vendored feature instead of downloading source
+		# Downloading and configuring nginx would require additional dependencies
+		# and is not practical in Debian build environment
+		# Fall back to vendored feature
+		else \
+			echo "System nginx source not found in standard locations"; \
+			echo "Using vendored nginx feature (recommended for Debian builds)"; \
+			USE_VENDORED=1; \
 		fi; \
 	fi; \
 	# Set environment variables based on detection result
