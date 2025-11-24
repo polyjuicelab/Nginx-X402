@@ -67,24 +67,42 @@ else
             fi
             
             # Configure nginx source with similar arguments
-            CONFIGURE_CMD="./configure"
             if [ -n "$NGINX_CONFIGURE_ARGS_SYSTEM" ]; then
-                # Use system configure args but ensure --without-http_rewrite_module
                 # Remove any existing --with-http_rewrite_module
                 CONFIGURE_ARGS_CLEAN=$(echo "$NGINX_CONFIGURE_ARGS_SYSTEM" | sed 's/--with-http_rewrite_module//g')
-                CONFIGURE_CMD="./configure $CONFIGURE_ARGS_CLEAN --without-http_rewrite_module"
+                # Add --without-http_rewrite_module if not already present
+                if echo "$CONFIGURE_ARGS_CLEAN" | grep -qv -- "--without-http_rewrite_module"; then
+                    CONFIGURE_ARGS_CLEAN="$CONFIGURE_ARGS_CLEAN --without-http_rewrite_module"
+                fi
+                
+                echo "Running configure with system arguments..."
+                # Use eval to properly handle quoted arguments
+                (cd "/tmp/nginx-$NGINX_VERSION" && eval "./configure $CONFIGURE_ARGS_CLEAN" >/tmp/nginx-configure.log 2>&1 || {
+                    echo "Configure with system args failed, checking log..."
+                    if [ -f /tmp/nginx-configure.log ]; then
+                        echo "Last 30 lines of configure log:"
+                        tail -30 /tmp/nginx-configure.log || true
+                    fi
+                    echo "Trying minimal configuration with -fPIC..."
+                    ./configure --without-http_rewrite_module --with-cc-opt="-fPIC" >/tmp/nginx-configure.log 2>&1 || {
+                        echo "Minimal configure also failed"
+                        if [ -f /tmp/nginx-configure.log ]; then
+                            tail -30 /tmp/nginx-configure.log || true
+                        fi
+                        exit 1
+                    }
+                })
             else
                 # Fallback to minimal configuration
-                CONFIGURE_CMD="./configure --without-http_rewrite_module"
+                echo "No system configure args found, using minimal configuration..."
+                (cd "/tmp/nginx-$NGINX_VERSION" && ./configure --without-http_rewrite_module --with-cc-opt="-fPIC" >/tmp/nginx-configure.log 2>&1 || {
+                    echo "Minimal configure failed"
+                    if [ -f /tmp/nginx-configure.log ]; then
+                        tail -30 /tmp/nginx-configure.log || true
+                    fi
+                    exit 1
+                })
             fi
-            
-            echo "Running: $CONFIGURE_CMD"
-            (cd "/tmp/nginx-$NGINX_VERSION" && $CONFIGURE_CMD >/tmp/nginx-configure.log 2>&1 || {
-                echo "First configure attempt failed, trying with -fPIC..."
-                echo "Configure log:"
-                tail -20 /tmp/nginx-configure.log || true
-                ./configure --without-http_rewrite_module --with-cc-opt="-fPIC" >/tmp/nginx-configure.log 2>&1 || true
-            })
             
             if [ -d "/tmp/nginx-$NGINX_VERSION/objs" ]; then
                 NGINX_SOURCE_DIR="/tmp/nginx-$NGINX_VERSION"
