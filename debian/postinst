@@ -1,0 +1,27 @@
+#!/bin/bash
+set -e
+
+# Check nginx version compatibility during package installation
+NGINX_VERSION=""
+if command -v nginx >/dev/null 2>&1; then
+    NGINX_VERSION=$(nginx -v 2>&1 | sed -n 's/.*nginx\/\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/p' || echo "")
+elif dpkg -l nginx 2>/dev/null | grep -q "^ii"; then
+    NGINX_VERSION=$(dpkg -l nginx | grep "^ii" | awk '{print $3}' | cut -d'-' -f1 | cut -d':' -f2 || echo "")
+fi
+fi
+
+if [ -z "$NGINX_VERSION" ]; then
+    echo "WARNING: Could not detect nginx version. The module may not be compatible with your nginx installation."
+    echo "Please ensure nginx is installed and the module version matches your nginx version."
+    exit 0  # Don't fail installation, just warn
+fi
+
+echo "Detected system nginx version: $NGINX_VERSION"
+echo "nginx-x402 module built for nginx 1.28.0"
+echo "Note: If versions don't match, the module may fail to load."
+
+# Version checking logic can be added here if needed
+# For now, we just warn the user
+
+exit 0
+
