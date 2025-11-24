@@ -121,10 +121,60 @@ else
         (cd /tmp && tar -xzf "nginx-$NGINX_VERSION.tar.gz" && rm "nginx-$NGINX_VERSION.tar.gz")
         if [ -d "/tmp/nginx-$NGINX_VERSION" ]; then
             echo "Configuring nginx source..."
-            (cd "/tmp/nginx-$NGINX_VERSION" && ./configure --without-http_rewrite_module >/dev/null 2>&1 || \
-            ./configure --without-http_rewrite_module --with-cc-opt="-fPIC" >/dev/null 2>&1 || true)
+            # Get nginx configure arguments from system nginx
+            NGINX_CONFIGURE_ARGS_SYSTEM=""
+            if command -v nginx >/dev/null 2>&1; then
+                NGINX_CONFIGURE_ARGS_SYSTEM=$(nginx -V 2>&1 | grep -oE 'configure arguments:.*' | sed 's/configure arguments://' || echo "")
+                echo "System nginx configure args: $NGINX_CONFIGURE_ARGS_SYSTEM"
+            fi
+            
+            # Configure nginx source with similar arguments
+            if [ -n "$NGINX_CONFIGURE_ARGS_SYSTEM" ]; then
+                # Remove any existing --with-http_rewrite_module
+                CONFIGURE_ARGS_CLEAN=$(echo "$NGINX_CONFIGURE_ARGS_SYSTEM" | sed 's/--with-http_rewrite_module//g')
+                # Add --without-http_rewrite_module if not already present
+                if echo "$CONFIGURE_ARGS_CLEAN" | grep -qv -- "--without-http_rewrite_module"; then
+                    CONFIGURE_ARGS_CLEAN="$CONFIGURE_ARGS_CLEAN --without-http_rewrite_module"
+                fi
+                
+                echo "Running configure with system arguments..."
+                # Use eval to properly handle quoted arguments
+                (cd "/tmp/nginx-$NGINX_VERSION" && eval "./configure $CONFIGURE_ARGS_CLEAN" >/tmp/nginx-configure.log 2>&1 || {
+                    echo "Configure with system args failed, checking log..."
+                    if [ -f /tmp/nginx-configure.log ]; then
+                        echo "Last 30 lines of configure log:"
+                        tail -30 /tmp/nginx-configure.log || true
+                    fi
+                    echo "Trying minimal configuration with -fPIC..."
+                    ./configure --without-http_rewrite_module --with-cc-opt="-fPIC" >/tmp/nginx-configure.log 2>&1 || {
+                        echo "Minimal configure also failed"
+                        if [ -f /tmp/nginx-configure.log ]; then
+                            tail -30 /tmp/nginx-configure.log || true
+                        fi
+                        exit 1
+                    }
+                })
+            else
+                # Fallback to minimal configuration
+                echo "No system configure args found, using minimal configuration..."
+                (cd "/tmp/nginx-$NGINX_VERSION" && ./configure --without-http_rewrite_module --with-cc-opt="-fPIC" >/tmp/nginx-configure.log 2>&1 || {
+                    echo "Minimal configure failed"
+                    if [ -f /tmp/nginx-configure.log ]; then
+                        tail -30 /tmp/nginx-configure.log || true
+                    fi
+                    exit 1
+                })
+            fi
+            
             if [ -d "/tmp/nginx-$NGINX_VERSION/objs" ]; then
                 NGINX_SOURCE_DIR="/tmp/nginx-$NGINX_VERSION"
+                echo "Nginx source configured successfully"
+            else
+                echo "WARNING: Nginx configure may have failed. Check /tmp/nginx-configure.log"
+                if [ -f /tmp/nginx-configure.log ]; then
+                    echo "Last 30 lines of configure log:"
+                    tail -30 /tmp/nginx-configure.log || true
+                fi
             fi
         fi
     fi
@@ -137,10 +187,47 @@ fi
 
 echo "Using nginx source: $NGINX_SOURCE_DIR"
 
+# Verify nginx source version matches system version
+if [ -f "$NGINX_SOURCE_DIR/src/core/nginx.h" ]; then
+    NGINX_SOURCE_VERSION=$(grep -E 'NGINX_VERSION' "$NGINX_SOURCE_DIR/src/core/nginx.h" | head -1 | sed -n 's/.*"\(.*\)".*/\1/p' || echo "")
+    if [ -n "$NGINX_SOURCE_VERSION" ]; then
+        echo "Nginx source version: $NGINX_SOURCE_VERSION"
+        if [ "$NGINX_SOURCE_VERSION" != "$NGINX_VERSION" ]; then
+            echo "WARNING: Nginx source version ($NGINX_SOURCE_VERSION) does not match system version ($NGINX_VERSION)"
+            echo "This may cause binary compatibility issues"
+        fi
+    fi
+fi
+
 # Set up build environment
 export NGINX_SOURCE_DIR="$NGINX_SOURCE_DIR"
 export CARGO_FEATURES="--no-default-features"
 export NGX_CONFIGURE_ARGS="--without-http_rewrite_module"
+
+# Verify NGINX_SOURCE_DIR is set correctly
+echo "Build environment:"
+echo "  NGINX_SOURCE_DIR=$NGINX_SOURCE_DIR"
+echo "  CARGO_FEATURES=$CARGO_FEATURES"
+echo "  NGX_CONFIGURE_ARGS=$NGX_CONFIGURE_ARGS"
+
+# Verify nginx source has been configured correctly
+if [ ! -f "$NGINX_SOURCE_DIR/objs/ngx_modules.c" ]; then
+    echo "ERROR: Nginx source appears to be not configured properly"
+    echo "Missing: $NGINX_SOURCE_DIR/objs/ngx_modules.c"
+    exit 1
+fi
+
+# Check nginx version in objs/ngx_auto_config.h
+if [ -f "$NGINX_SOURCE_DIR/objs/ngx_auto_config.h" ]; then
+    echo "Nginx auto config found, checking version compatibility..."
+    NGINX_BUILD_VERSION=$(grep -E 'NGINX_VER' "$NGINX_SOURCE_DIR/objs/ngx_auto_config.h" 2>/dev/null | head -1 | sed -n 's/.*"\(.*\)".*/\1/p' || echo "")
+    if [ -n "$NGINX_BUILD_VERSION" ]; then
+        echo "Nginx build version: $NGINX_BUILD_VERSION"
+        if [ "$NGINX_BUILD_VERSION" != "$NGINX_VERSION" ]; then
+            echo "WARNING: Build version ($NGINX_BUILD_VERSION) != System version ($NGINX_VERSION)"
+        fi
+    fi
+fi
 
 # Set libclang path
 if [ -z "$LIBCLANG_PATH" ]; then
