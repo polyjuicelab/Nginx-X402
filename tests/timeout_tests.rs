@@ -9,6 +9,7 @@ mod tests {
     use rust_x402::types::{FacilitatorConfig, PaymentRequirements};
     use std::time::Duration;
 
+    #[allow(dead_code)]
     fn create_test_requirements() -> PaymentRequirements {
         PaymentRequirements::new(
             "exact",

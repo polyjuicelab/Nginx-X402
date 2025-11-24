@@ -88,6 +88,11 @@ pub fn send_response_body(r: &mut Request, body: &[u8]) -> Result<()> {
 
     let pool = r.pool();
     let body_len = body.len();
+    
+    // Ensure body is not empty - nginx requires non-zero buffer size
+    if body_len == 0 {
+        return Err(ConfigError::from("Cannot send empty response body"));
+    }
 
     // Create temporary buffer
     let buf = unsafe { ngx_create_temp_buf(pool.as_ptr(), body_len) };
@@ -123,14 +128,10 @@ pub fn send_response_body(r: &mut Request, body: &[u8]) -> Result<()> {
     // 2. Request is already finalized
     // 3. Header was already sent
     // 4. Request is not in correct state
-
-    // Check if header was already sent by checking request state
-    unsafe {
-        let r_raw = r.as_ref();
-        // In Nginx, r->header_sent is a flag indicating if header was sent
-        // But ngx-rust may wrap this differently, so we'll try to send header anyway
-        // If it fails, we'll handle the error
-    }
+    //
+    // In Nginx, r->header_sent is a flag indicating if header was sent
+    // But ngx-rust may wrap this differently, so we'll try to send header anyway
+    // If it fails, we'll handle the error
 
     // Send header using ngx-rust's method
     // This should handle request state correctly

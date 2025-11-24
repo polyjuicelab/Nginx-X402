@@ -15,8 +15,7 @@
 use crate::ngx_module::config::X402Config;
 use ngx::core::{NgxStr, Pool};
 use ngx::ffi::{
-    ngx_command_t, ngx_conf_t, ngx_http_conf_ctx_t, ngx_http_core_loc_conf_t, ngx_http_handler_pt,
-    ngx_str_t,
+    ngx_command_t, ngx_conf_t, ngx_http_core_loc_conf_t, ngx_http_handler_pt, ngx_str_t,
 };
 use std::ffi::c_char;
 use std::ptr;
@@ -113,7 +112,7 @@ unsafe extern "C" fn ngx_http_x402(
     let elts = (*args).elts as *mut ngx_str_t;
     let value_str = NgxStr::from_ngx_str(*elts.add(1));
 
-    match value_str.to_str().ok().and_then(|s| Some(s.to_lowercase())) {
+    match value_str.to_str().ok().map(|s| s.to_lowercase()) {
         Some(ref s) if s == "on" => {
             (*conf).enabled = 1;
 
@@ -152,7 +151,7 @@ unsafe extern "C" fn ngx_http_x402(
             // Use loc_conf.add() directly, not (*loc_conf).add()
             let core_ctx_index = ngx::ffi::ngx_http_core_module.ctx_index;
             unsafe {
-                let ptr_to_ptr = loc_conf.add(core_ctx_index as usize);
+                let ptr_to_ptr = loc_conf.add(core_ctx_index);
                 if !ptr_to_ptr.is_null() {
                     // Read the pointer value
                     let clcf_void: *mut core::ffi::c_void =
@@ -194,7 +193,7 @@ unsafe extern "C" fn ngx_http_x402(
                 if !loc_conf.is_null() {
                     let core_ctx_index = ngx::ffi::ngx_http_core_module.ctx_index;
                     unsafe {
-                        let ptr_to_ptr = loc_conf.add(core_ctx_index as usize);
+                        let ptr_to_ptr = loc_conf.add(core_ctx_index);
                         if !ptr_to_ptr.is_null() {
                             // Dereference to get *mut c_void
                             let clcf_void: *mut core::ffi::c_void =
@@ -506,7 +505,7 @@ unsafe extern "C" fn ngx_http_x402_metrics(
     // We're in location context - proceed to set metrics handler
     let core_ctx_index = ngx::ffi::ngx_http_core_module.ctx_index;
     unsafe {
-        let ptr_to_ptr = loc_conf.add(core_ctx_index as usize);
+        let ptr_to_ptr = loc_conf.add(core_ctx_index);
         if !ptr_to_ptr.is_null() {
             let clcf_void: *mut core::ffi::c_void =
                 ptr::read(ptr_to_ptr as *const *mut core::ffi::c_void);

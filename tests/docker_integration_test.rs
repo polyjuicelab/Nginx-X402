@@ -10,8 +10,6 @@
 
 #[cfg(feature = "integration-test")]
 mod tests {
-    use std::fs;
-    use std::path::Path;
     use std::process::Command;
     use std::thread;
     use std::time::Duration;
@@ -24,7 +22,7 @@ mod tests {
     fn build_docker_image() -> bool {
         println!("Building Docker test image...");
         let output = Command::new("docker")
-            .args(&[
+            .args([
                 "build",
                 "-t",
                 DOCKER_IMAGE,
@@ -57,7 +55,7 @@ mod tests {
     fn start_container() -> bool {
         println!("Starting Docker container...");
         let output = Command::new("docker")
-            .args(&[
+            .args([
                 "run",
                 "-d",
                 "--name",
@@ -80,7 +78,7 @@ mod tests {
                 if stderr.contains("already in use") {
                     // Container already exists, try to start it
                     Command::new("docker")
-                        .args(&["start", CONTAINER_NAME])
+                        .args(["start", CONTAINER_NAME])
                         .output()
                         .ok();
                     thread::sleep(Duration::from_secs(2));
@@ -100,17 +98,17 @@ mod tests {
     /// Stop and remove the Docker container
     fn cleanup_container() {
         let _ = Command::new("docker")
-            .args(&["stop", CONTAINER_NAME])
+            .args(["stop", CONTAINER_NAME])
             .output();
         let _ = Command::new("docker")
-            .args(&["rm", CONTAINER_NAME])
+            .args(["rm", CONTAINER_NAME])
             .output();
     }
 
     /// Check if nginx is responding
     fn nginx_is_ready() -> bool {
         Command::new("curl")
-            .args(&[
+            .args([
                 "-s",
                 "-o",
                 "/dev/null",
@@ -138,7 +136,7 @@ mod tests {
     /// Make HTTP request and return status code
     fn http_request(path: &str) -> Option<String> {
         Command::new("curl")
-            .args(&[
+            .args([
                 "-s",
                 "-o",
                 "/dev/null",
@@ -154,10 +152,41 @@ mod tests {
     /// Get HTTP response body
     fn http_get(path: &str) -> Option<String> {
         Command::new("curl")
-            .args(&["-s", &format!("http://localhost:{}{}", NGINX_PORT, path)])
+            .args(["-s", &format!("http://localhost:{}{}", NGINX_PORT, path)])
             .output()
             .ok()
-            .map(|output| String::from_utf8_lossy(&output.stdout))
+            .map(|output| String::from_utf8_lossy(&output.stdout).to_string())
+    }
+
+    /// Ensure container is running, start it if needed
+    fn ensure_container_running() -> bool {
+        // Check if container is already running
+        if nginx_is_ready() {
+            return true;
+        }
+
+        // Check if container exists but is stopped
+        let check_output = Command::new("docker")
+            .args(["ps", "-a", "--filter", &format!("name={}", CONTAINER_NAME), "--format", "{{.Status}}"])
+            .output();
+
+        if let Ok(output) = check_output {
+            let status = String::from_utf8_lossy(&output.stdout);
+            if status.contains("Up") {
+                // Container is running, wait for nginx
+                return wait_for_nginx(Duration::from_secs(10));
+            } else if !status.is_empty() {
+                // Container exists but is stopped, start it
+                let _ = Command::new("docker")
+                    .args(["start", CONTAINER_NAME])
+                    .output();
+                return wait_for_nginx(Duration::from_secs(10));
+            }
+        }
+
+        // Container doesn't exist, build and start it
+        cleanup_container();
+        build_docker_image() && start_container() && wait_for_nginx(Duration::from_secs(10))
     }
 
     #[test]
@@ -182,15 +211,15 @@ mod tests {
             "Nginx did not become ready in time"
         );
 
-        // Cleanup
-        cleanup_container();
+        // Don't cleanup here - let other tests use the container
+        // Cleanup will happen when tests finish or manually
     }
 
     #[test]
     #[ignore]
     fn test_402_response() {
-        if !wait_for_nginx(Duration::from_secs(5)) {
-            eprintln!("Nginx is not ready. Skipping test.");
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
             return;
         }
 
@@ -202,8 +231,8 @@ mod tests {
     #[test]
     #[ignore]
     fn test_health_endpoint() {
-        if !wait_for_nginx(Duration::from_secs(5)) {
-            eprintln!("Nginx is not ready. Skipping test.");
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
             return;
         }
 
@@ -215,8 +244,8 @@ mod tests {
     #[test]
     #[ignore]
     fn test_metrics_endpoint() {
-        if !wait_for_nginx(Duration::from_secs(5)) {
-            eprintln!("Nginx is not ready. Skipping test.");
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
             return;
         }
 
