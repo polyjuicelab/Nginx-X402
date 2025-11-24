@@ -156,7 +156,19 @@ export NGINX_SOURCE_DIR=/path/to/nginx-1.29.1
 cargo build --release
 ```
 
-**macOS:**
+**macOS (Recommended - using setup script):**
+```bash
+# Ensure Xcode Command Line Tools are installed
+xcode-select --install
+
+# Use the setup script to automatically configure environment
+eval $(./setup-build-env.sh)
+
+# Build
+cargo build --release --no-default-features
+```
+
+**macOS (Manual setup):**
 ```bash
 # Ensure Xcode Command Line Tools are installed
 xcode-select --install
@@ -171,12 +183,24 @@ export LIBCLANG_PATH="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr
 export SDKROOT=$(xcrun --show-sdk-path)
 
 # Build
-cargo build --release
+cargo build --release --no-default-features
 ```
 
 **Using vendored feature (recommended for plugin builds):**
 
-**macOS:**
+**macOS (Recommended - using setup script):**
+```bash
+# Ensure Xcode Command Line Tools are installed
+xcode-select --install
+
+# Use the setup script to automatically configure environment
+eval $(./setup-build-env.sh)
+
+# Build with vendored feature
+cargo build --release
+```
+
+**macOS (Manual setup):**
 ```bash
 # Ensure Xcode Command Line Tools are installed
 xcode-select --install
@@ -226,14 +250,37 @@ cargo build --release
 
 ## Building
 
+### Quick Start (macOS/Linux)
+
+The easiest way to build locally is using the setup script:
+
+```bash
+# macOS: Automatically sets NGINX_SOURCE_DIR, LIBCLANG_PATH, and SDKROOT
+# Linux: Automatically sets NGINX_SOURCE_DIR
+eval $(./setup-build-env.sh)
+
+# Build
+cargo build --release --no-default-features
+```
+
+The `setup-build-env.sh` script will:
+- Detect your system nginx version
+- Download matching nginx source if needed
+- Configure nginx source with compatible flags
+- Set all required environment variables (macOS: `LIBCLANG_PATH`, `SDKROOT`)
+
 ### Method A: With Nginx Source (Recommended for Production)
 
 ```bash
 # Set Nginx source directory (use same version as production)
 export NGINX_SOURCE_DIR=/path/to/nginx-1.29.1
 
+# macOS: Also set libclang and SDK paths
+export LIBCLANG_PATH="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib"
+export SDKROOT=$(xcrun --show-sdk-path)
+
 # Build (requires Nginx source or vendored feature)
-cargo build --release
+cargo build --release --no-default-features
 
 # The module will be at:
 # target/aarch64-apple-darwin/release/libnginx_x402.dylib (macOS)
