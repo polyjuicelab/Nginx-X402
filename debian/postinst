@@ -77,6 +77,10 @@ else
             
             # Configure nginx source with similar arguments
             if [ -n "$NGINX_CONFIGURE_ARGS_SYSTEM" ]; then
+                # IMPORTANT: Only remove modules that cause build failures
+                # DO NOT remove --with-cc-opt, --with-ld-opt, --with-debug, or other flags
+                # that affect module signature and binary compatibility
+                
                 # Remove problematic modules that require additional dependencies
                 # Remove rewrite module (we don't need it)
                 CONFIGURE_ARGS_CLEAN=$(echo "$NGINX_CONFIGURE_ARGS_SYSTEM" | sed 's/--with-http_rewrite_module//g')
@@ -88,14 +92,25 @@ else
                 CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/--with-mail=dynamic//g')
                 CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/--with-stream=dynamic//g')
                 CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/--with-stream_geoip_module=dynamic//g')
-                # Keep --with-debug if present (needed for binary compatibility)
-                # Don't remove it - it affects module signature
+                
+                # CRITICAL: Preserve all flags that affect module signature:
+                # - --with-cc-opt=* (compiler options)
+                # - --with-ld-opt=* (linker options)
+                # - --with-debug (debug mode)
+                # - --with-compat (compatibility mode)
+                # - Any other flags that affect binary compatibility
+                
                 # Clean up multiple spaces
                 CONFIGURE_ARGS_CLEAN=$(echo "$CONFIGURE_ARGS_CLEAN" | sed 's/  */ /g' | sed 's/^ *//' | sed 's/ *$//')
+                
                 # Add --without-http_rewrite_module if not already present
                 if echo "$CONFIGURE_ARGS_CLEAN" | grep -qv -- "--without-http_rewrite_module"; then
                     CONFIGURE_ARGS_CLEAN="$CONFIGURE_ARGS_CLEAN --without-http_rewrite_module"
                 fi
+                
+                # Debug: Show what flags are preserved
+                echo "Preserved configure flags:"
+                echo "$CONFIGURE_ARGS_CLEAN" | grep -oE '--with-(cc-opt|ld-opt|debug|compat)[^ ]*' || echo "  (none found)"
                 
                 echo "Running configure with system arguments..."
                 echo "Cleaned configure args: $CONFIGURE_ARGS_CLEAN"
