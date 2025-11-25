@@ -168,62 +168,20 @@ else
                     echo "Key configuration values:"
                     grep -E "NGINX_VER|NGX_PTR_SIZE|NGX_SIG_ATOMIC_T_SIZE|NGX_TIME_T_SIZE" "/tmp/nginx-$NGINX_VERSION/objs/ngx_auto_config.h" 2>/dev/null | head -10 || true
                     
-                    # Extract signature from configured nginx source for comparison
+                    # Verify nginx source is properly configured
+                    # Note: build.rs will extract the signature during cargo build
+                    # We just verify that the required files exist
                     if [ -f "/tmp/nginx-$NGINX_VERSION/objs/ngx_modules.c" ]; then
                         echo ""
-                        echo "=== Signature from configured nginx source ==="
-                        # Try multiple extraction methods to match build.rs logic
-                        # Method 1: Simple quoted string pattern
-                        SOURCE_SIG=$(grep -oE '"[0-9]+,[0-9]+,[0-9]+,[^"]*"' "/tmp/nginx-$NGINX_VERSION/objs/ngx_modules.c" 2>/dev/null | head -1 | tr -d '"' || echo "")
-                        
-                        # Method 2: If Method 1 fails, try extracting from ngx_module_signature line
-                        if [ -z "$SOURCE_SIG" ]; then
-                            SOURCE_SIG=$(grep "ngx_module_signature" "/tmp/nginx-$NGINX_VERSION/objs/ngx_modules.c" 2>/dev/null | \
-                                grep -oE '[0-9]+,[0-9]+,[0-9]+,[0-9]+' | head -1 || echo "")
-                        fi
-                        
-                        # Method 3: Try extracting multi-line signature (concatenated strings)
-                        if [ -z "$SOURCE_SIG" ]; then
-                            # Look for signature parts across multiple lines
-                            SIG_PARTS=$(grep -A 5 "ngx_module_signature" "/tmp/nginx-$NGINX_VERSION/objs/ngx_modules.c" 2>/dev/null | \
-                                grep -oE '"[^"]*"' | tr -d '"' | tr -d '\n' | grep -oE '^[0-9]+,[0-9]+,[0-9]+,[0-9]+' || echo "")
-                            if [ -n "$SIG_PARTS" ] && [ ${#SIG_PARTS} -gt 10 ]; then
-                                SOURCE_SIG="$SIG_PARTS"
-                            fi
-                        fi
-                        
-                        if [ -n "$SOURCE_SIG" ]; then
-                            echo "Source signature: $SOURCE_SIG"
-                            # Compare with system nginx signature if available
-                            if command -v strings >/dev/null 2>&1 && [ -f "/usr/sbin/nginx" ]; then
-                                NGINX_SIG=$(strings /usr/sbin/nginx 2>/dev/null | grep -E '^[0-9]+,[0-9]+,[0-9]+,' | head -1 || echo "")
-                                if [ -n "$NGINX_SIG" ]; then
-                                    echo "System nginx signature: $NGINX_SIG"
-                                    if [ "$SOURCE_SIG" = "$NGINX_SIG" ]; then
-                                        echo "✓ Source signature matches system nginx signature"
-                                    else
-                                        echo "⚠ WARNING: Source signature does NOT match system nginx signature"
-                                        echo "  This may cause binary compatibility issues"
-                                        echo "  Difference:"
-                                        echo "    Source: $SOURCE_SIG"
-                                        echo "    System: $NGINX_SIG"
-                                        echo ""
-                                        echo "  This usually means:"
-                                        echo "    1. Configure arguments don't match system nginx exactly"
-                                        echo "    2. Some flags affecting signature were removed during cleaning"
-                                        echo "    3. Signature extraction from ngx_modules.c failed"
-                                        echo ""
-                                        echo "  Please check the configure arguments above and ensure they match"
-                                        echo "  the system nginx configuration exactly."
-                                    fi
-                                fi
-                            fi
-                        else
-                            echo "Could not extract signature from ngx_modules.c"
-                            echo "Will build signature from ngx_auto_config.h during module build"
-                            echo "WARNING: Building from ngx_auto_config.h may result in signature mismatch"
-                            echo "  if the feature flag detection logic doesn't match nginx's actual logic"
-                        fi
+                        echo "✓ Nginx source configured successfully"
+                        echo "  build.rs will extract module signature from:"
+                        echo "    - /tmp/nginx-$NGINX_VERSION/objs/ngx_modules.c (preferred)"
+                        echo "    - /tmp/nginx-$NGINX_VERSION/objs/ngx_auto_config.h (fallback)"
+                    elif [ -f "/tmp/nginx-$NGINX_VERSION/objs/ngx_auto_config.h" ]; then
+                        echo ""
+                        echo "⚠ Nginx source configured but ngx_modules.c not found"
+                        echo "  build.rs will build signature from ngx_auto_config.h"
+                        echo "  This may result in signature mismatch if feature detection logic differs"
                     fi
                 fi
             else
