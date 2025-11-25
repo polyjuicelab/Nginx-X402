@@ -379,8 +379,17 @@ fn extract_quoted_string_from_line(line: &str, marker: &str) -> Option<String> {
     }
 
     if !result.is_empty() && result.contains(',') {
+        eprintln!(
+            "cargo:warning=extract_quoted_string_from_line extracted: {}",
+            result
+        );
         Some(result)
     } else {
+        eprintln!(
+            "cargo:warning=extract_quoted_string_from_line failed: result='{}', contains_comma={}",
+            result,
+            result.contains(',')
+        );
         None
     }
 }
