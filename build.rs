@@ -33,7 +33,9 @@ fn main() {
         eprintln!("cargo:error=Please ensure:");
         eprintln!("cargo:error=  1. NGINX_SOURCE_DIR is set to a configured nginx source directory");
         eprintln!("cargo:error=  2. The nginx source has been configured (./configure has been run)");
-        eprintln!("cargo:error=  3. objs/ngx_modules.c or objs/ngx_auto_config.h exists in the source directory");
+        eprintln!("cargo:error=  3. objs/ngx_auto_config.h exists in the source directory");
+        eprintln!("cargo:error=");
+        eprintln!("cargo:error=Note: Requires nginx 1.10.0 or later (released April 2016).");
         eprintln!("cargo:error=");
         eprintln!("cargo:error=Hardcoded signatures are not allowed - they will cause binary incompatibility.");
         std::process::exit(1);
@@ -98,11 +100,12 @@ fn configure_linker_flags() {
 ///
 /// The signature format is: "{NGX_PTR_SIZE},{NGX_SIG_ATOMIC_T_SIZE},{NGX_TIME_T_SIZE},{feature_flags}"
 ///
-/// This function tries multiple methods in order of reliability:
-/// 1. Extract from objs/ngx_modules.c (most reliable, contains exact signature)
-/// 2. Build from objs/ngx_auto_config.h (fallback, constructs from defines)
+/// This function builds the signature from objs/ngx_auto_config.h by extracting
+/// the necessary defines and constructing the signature according to the logic
+/// in src/core/ngx_module.h.
 ///
 /// REQUIRED: Signature MUST be extracted from nginx source. No hardcoded fallback.
+/// Requires nginx 1.10.0 or later (released April 2016).
 /// Returns an error if signature cannot be extracted.
 fn extract_nginx_module_signature() -> io::Result<String> {
     // Try to get NGINX_SOURCE_DIR from environment
@@ -132,52 +135,11 @@ fn extract_nginx_module_signature() -> io::Result<String> {
         ));
     }
 
-    let modules_path = nginx_source_dir.join("objs/ngx_modules.c");
     let auto_config_path = nginx_source_dir.join("objs/ngx_auto_config.h");
 
-    // Try to extract signature from ngx_modules.c first (most reliable)
-    // Note: Some nginx versions store signature differently, so we try multiple methods
-    if modules_path.exists() {
-        match fs::read_to_string(&modules_path) {
-            Ok(modules_content) => {
-                // Method 1: Look for ngx_module_signature string (most common)
-                let sig_lines: Vec<&str> = modules_content
-                    .lines()
-                    .filter(|l| l.contains("ngx_module_signature"))
-                    .take(5)
-                    .collect();
-                if !sig_lines.is_empty() {
-                    eprintln!("cargo:warning=Found ngx_module_signature lines in ngx_modules.c:");
-                    for (i, line) in sig_lines.iter().enumerate() {
-                        eprintln!("cargo:warning=  [{}] {}", i + 1, line);
-                    }
-
-                    if let Some(signature) = extract_signature_from_modules_c(&modules_content) {
-                        eprintln!(
-                            "cargo:warning=Extracted module signature from ngx_modules.c: {}",
-                            signature
-                        );
-                        return Ok(signature);
-                    }
-                } else {
-                    eprintln!(
-                        "cargo:warning=No 'ngx_module_signature' string found in ngx_modules.c"
-                    );
-                    eprintln!("cargo:warning=This may be normal for some nginx versions - will try ngx_auto_config.h");
-                }
-            }
-            Err(e) => {
-                eprintln!("cargo:warning=Could not read ngx_modules.c: {}", e);
-            }
-        }
-    } else {
-        eprintln!(
-            "cargo:warning=ngx_modules.c not found at: {}",
-            modules_path.display()
-        );
-    }
-
-    // Fallback: Build signature from ngx_auto_config.h
+    // Build signature from ngx_auto_config.h
+    // This is the standard method for nginx 1.10.0+ where signature is defined
+    // via macros in src/core/ngx_module.h and built from configure-time defines
     if auto_config_path.exists() {
         match fs::read_to_string(&auto_config_path) {
             Ok(mut config_content) => {
@@ -287,184 +249,13 @@ fn extract_nginx_module_signature() -> io::Result<String> {
         io::ErrorKind::NotFound,
         format!(
             "Failed to extract module signature from nginx source at: {}\n\
-             Neither objs/ngx_modules.c nor objs/ngx_auto_config.h could be used to extract signature.\n\
-             Please ensure nginx source has been configured (./configure has been run).",
+             objs/ngx_auto_config.h could not be used to extract signature.\n\
+             Please ensure:\n\
+             1. nginx source has been configured (./configure has been run)\n\
+             2. nginx version is 1.10.0 or later (released April 2016)",
             nginx_source_dir.display()
         ),
     ))
-}
-
-/// Extract signature from ngx_modules.c file.
-///
-/// Looks for: `char ngx_module_signature[] = "8,4,8,0010111111010111001111111111100110";`
-/// Handles both single-line and multi-line string definitions.
-fn extract_signature_from_modules_c(content: &str) -> Option<String> {
-    // Try to find the signature line - it might be in different formats
-    // Format 1: char ngx_module_signature[] = "8,4,8,0010111111010111001111111111100110";
-    // Format 2: char ngx_module_signature[] = "8,4,8," "0010111111010111001111111111100110";
-    // Format 3: Multi-line with string concatenation
-
-    // First, try to find any line containing ngx_module_signature
-    let mut signature_lines = Vec::new();
-    for line in content.lines() {
-        if line.contains("ngx_module_signature") {
-            signature_lines.push(line);
-        }
-    }
-
-    if signature_lines.is_empty() {
-        eprintln!(
-            "cargo:warning=No lines containing 'ngx_module_signature' found in ngx_modules.c"
-        );
-        return None;
-    }
-
-    eprintln!(
-        "cargo:warning=Found {} line(s) containing 'ngx_module_signature'",
-        signature_lines.len()
-    );
-
-    // Try to extract from each line
-    for (i, line) in signature_lines.iter().enumerate() {
-        eprintln!("cargo:warning=  Line {}: {}", i + 1, line.trim());
-
-        // Try to extract quoted string
-        if let Some(sig) = extract_quoted_string_from_line(line, "ngx_module_signature") {
-            if sig.contains(',') {
-                eprintln!(
-                    "cargo:warning=  Extracted signature from line {}: {}",
-                    i + 1,
-                    sig
-                );
-                return Some(sig);
-            }
-        }
-    }
-
-    // Fallback: try multi-line extraction
-    eprintln!("cargo:warning=Single-line extraction failed, trying multi-line extraction...");
-    extract_multiline_signature(content)
-}
-
-/// Extract signature from a line containing the signature definition.
-/// Handles both single-line and multi-line string concatenation.
-fn extract_quoted_string_from_line(line: &str, marker: &str) -> Option<String> {
-    if !line.contains(marker) {
-        return None;
-    }
-
-    // Extract all quoted strings from the line and concatenate them
-    // This handles: char ngx_module_signature[] = "8,4,8," "0010111111010111001111111111100110";
-    // Also handles: char ngx_module_signature[] = "8,4,8,0010111111010111001111111111100110";
-    let mut result = String::new();
-    let mut in_quotes = false;
-    let mut found_equals = false;
-
-    // Find the '=' sign to know we're past the variable name
-    for ch in line.chars() {
-        if ch == '=' {
-            found_equals = true;
-            continue;
-        }
-        if found_equals {
-            if ch == '"' && !in_quotes {
-                in_quotes = true;
-            } else if ch == '"' && in_quotes {
-                in_quotes = false;
-                // Don't break here - there might be multiple quoted strings
-            } else if in_quotes {
-                result.push(ch);
-            }
-        }
-    }
-
-    if !result.is_empty() && result.contains(',') {
-        eprintln!(
-            "cargo:warning=extract_quoted_string_from_line extracted: {}",
-            result
-        );
-        Some(result)
-    } else {
-        eprintln!(
-            "cargo:warning=extract_quoted_string_from_line failed: result='{}', contains_comma={}",
-            result,
-            result.contains(',')
-        );
-        None
-    }
-}
-
-/// Extract multi-line signature definition.
-///
-/// Handles cases where the signature string spans multiple lines:
-/// ```c
-/// char ngx_module_signature[] = "8,4,8,"
-///     "0010111111010111001111111111100110";
-/// ```
-fn extract_multiline_signature(content: &str) -> Option<String> {
-    let mut in_signature = false;
-    let mut signature_parts = Vec::new();
-    let mut found_equals = false;
-
-    for line in content.lines() {
-        if line.contains("ngx_module_signature") {
-            in_signature = true;
-            found_equals = line.contains('=');
-        }
-
-        if in_signature {
-            // Only process lines after the '=' sign
-            if !found_equals && line.contains("ngx_module_signature") && line.contains('=') {
-                found_equals = true;
-            }
-
-            if found_equals {
-                // Extract all quoted strings from this line
-                let mut start = 0;
-                while let Some(quote_start) = line[start..].find('"') {
-                    let quote_start = start + quote_start;
-                    if let Some(quote_end) = line[quote_start + 1..].find('"') {
-                        let quote_end = quote_start + 1 + quote_end;
-                        signature_parts.push(line[quote_start + 1..quote_end].to_string());
-                        start = quote_end + 1;
-                    } else {
-                        // String continues on next line (opening quote but no closing quote)
-                        signature_parts.push(line[quote_start + 1..].to_string());
-                        break;
-                    }
-                }
-
-                // Check if we've completed the signature (line ends with semicolon)
-                if line.trim().ends_with(';') {
-                    let signature = signature_parts.join("");
-                    if !signature.is_empty() && signature.contains(',') {
-                        eprintln!(
-                            "cargo:warning=Extracted multi-line signature: {}",
-                            signature
-                        );
-                        return Some(signature);
-                    }
-                    in_signature = false;
-                    signature_parts.clear();
-                    found_equals = false;
-                }
-            }
-        }
-    }
-
-    // If we collected parts but didn't find semicolon, try joining them anyway
-    if !signature_parts.is_empty() {
-        let signature = signature_parts.join("");
-        if !signature.is_empty() && signature.contains(',') {
-            eprintln!(
-                "cargo:warning=Extracted multi-line signature (no semicolon): {}",
-                signature
-            );
-            return Some(signature);
-        }
-    }
-
-    None
 }
 
 /// Build signature from ngx_auto_config.h defines.
@@ -916,7 +707,8 @@ fn auto_download_nginx_source() -> io::Result<PathBuf> {
 
     for path_str in &common_paths {
         let path = PathBuf::from(path_str);
-        if path.join("objs/ngx_modules.c").exists() {
+        // Check for objs/ngx_auto_config.h as indicator of configured source
+        if path.join("objs/ngx_auto_config.h").exists() {
             eprintln!(
                 "cargo:warning=Found configured nginx source at: {}",
                 path.display()
@@ -982,7 +774,7 @@ fn download_and_configure_nginx(version: &str) -> io::Result<PathBuf> {
     let source_dir = download_dir.join(format!("nginx-{}", version));
 
     // Check if already downloaded and configured
-    if source_dir.join("objs/ngx_modules.c").exists() {
+    if source_dir.join("objs/ngx_auto_config.h").exists() {
         return Ok(source_dir);
     }
 
@@ -1029,7 +821,7 @@ fn download_and_configure_nginx(version: &str) -> io::Result<PathBuf> {
 /// Configure nginx source with minimal configuration.
 fn configure_nginx_source(source_dir: &PathBuf) -> io::Result<()> {
     // Check if already configured (e.g., in Docker build where nginx was pre-configured)
-    if source_dir.join("objs/ngx_modules.c").exists() {
+    if source_dir.join("objs/ngx_auto_config.h").exists() {
         eprintln!(
             "cargo:warning=Nginx source already configured at: {}",
             source_dir.display()
@@ -1129,9 +921,9 @@ fn configure_nginx_source(source_dir: &PathBuf) -> io::Result<()> {
     }
 
     // Verify configure succeeded
-    if !source_dir.join("objs/ngx_modules.c").exists() {
+    if !source_dir.join("objs/ngx_auto_config.h").exists() {
         return Err(io::Error::other(
-            "Configure appeared to succeed but ngx_modules.c not found",
+            "Configure appeared to succeed but ngx_auto_config.h not found",
         ));
     }
 

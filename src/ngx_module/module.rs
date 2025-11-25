@@ -250,11 +250,10 @@ include!(concat!(env!("OUT_DIR"), "/module_signature.rs"));
 /// The module signature is extracted from nginx source at build time via build.rs.
 /// The signature format is: "{NGX_PTR_SIZE},{NGX_SIG_ATOMIC_T_SIZE},{NGX_TIME_T_SIZE},{feature_flags}"
 ///
-/// The signature is extracted from:
-/// 1. objs/ngx_modules.c (preferred, contains the exact signature string)
-/// 2. objs/ngx_auto_config.h (fallback, constructs signature from defines)
-/// 3. Default hardcoded signature (final fallback if extraction fails)
+/// The signature is built from objs/ngx_auto_config.h by extracting the necessary
+/// defines and constructing the signature according to the logic in src/core/ngx_module.h.
 ///
+/// Requires nginx 1.10.0 or later (released April 2016).
 /// This ensures binary compatibility with the target nginx binary by matching its exact configuration.
 #[no_mangle]
 pub static mut ngx_http_x402_module: ngx::ffi::ngx_module_t = ngx::ffi::ngx_module_t {
@@ -269,7 +268,8 @@ pub static mut ngx_http_x402_module: ngx::ffi::ngx_module_t = ngx::ffi::ngx_modu
     // Format: "{NGX_PTR_SIZE},{NGX_SIG_ATOMIC_T_SIZE},{NGX_TIME_T_SIZE},{feature_flags}"
     // The signature includes: pointer size, atomic type size, time type size, and feature flags
     //
-    // The signature is extracted from the nginx source's objs/ngx_modules.c or objs/ngx_auto_config.h
+    // The signature is built from objs/ngx_auto_config.h according to the logic in src/core/ngx_module.h
+    // Requires nginx 1.10.0 or later (released April 2016)
     // This ensures binary compatibility with the target nginx binary by matching its exact configuration
     signature: MODULE_SIGNATURE.as_ptr() as *const c_char,
     name: c"ngx_http_x402_module".as_ptr() as *mut c_char,
