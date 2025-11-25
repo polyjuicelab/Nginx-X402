@@ -128,17 +128,26 @@ fi
 echo "Detected system nginx version: $NGINX_VERSION"
 
 # Find or download matching nginx source
+# Check for configured nginx source (must have objs/ngx_modules.c)
 NGINX_SOURCE_DIR=""
-if [ -d "/usr/src/nginx-$NGINX_VERSION" ] && [ -d "/usr/src/nginx-$NGINX_VERSION/objs" ]; then
+if [ -f "/usr/src/nginx-$NGINX_VERSION/objs/ngx_modules.c" ]; then
     NGINX_SOURCE_DIR="/usr/src/nginx-$NGINX_VERSION"
-elif [ -d "/usr/share/nginx-$NGINX_VERSION" ] && [ -d "/usr/share/nginx-$NGINX_VERSION/objs" ]; then
+elif [ -f "/usr/share/nginx-$NGINX_VERSION/objs/ngx_modules.c" ]; then
     NGINX_SOURCE_DIR="/usr/share/nginx-$NGINX_VERSION"
-elif [ -d "/tmp/nginx-$NGINX_VERSION" ] && [ -d "/tmp/nginx-$NGINX_VERSION/objs" ]; then
+elif [ -f "/tmp/nginx-$NGINX_VERSION/objs/ngx_modules.c" ]; then
     NGINX_SOURCE_DIR="/tmp/nginx-$NGINX_VERSION"
 else
     echo "Downloading nginx-$NGINX_VERSION source..."
     mkdir -p /tmp
-    if wget -q -O "/tmp/nginx-$NGINX_VERSION.tar.gz" "http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz" 2>/dev/null; then
+    # Try wget first, then curl (same as build.rs)
+    DOWNLOAD_SUCCESS=0
+    if command -v wget >/dev/null 2>&1 && wget -q -O "/tmp/nginx-$NGINX_VERSION.tar.gz" "http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz" 2>/dev/null; then
+        DOWNLOAD_SUCCESS=1
+    elif command -v curl >/dev/null 2>&1 && curl -sSfL -o "/tmp/nginx-$NGINX_VERSION.tar.gz" "http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz" 2>/dev/null; then
+        DOWNLOAD_SUCCESS=1
+    fi
+    
+    if [ "$DOWNLOAD_SUCCESS" -eq 1 ]; then
         (cd /tmp && tar -xzf "nginx-$NGINX_VERSION.tar.gz" && rm "nginx-$NGINX_VERSION.tar.gz")
         if [ -d "/tmp/nginx-$NGINX_VERSION" ]; then
             echo "Configuring nginx source..."
@@ -173,8 +182,8 @@ else
                 
                 echo "Running configure with system arguments..."
                 echo "Cleaned configure args: $CONFIGURE_ARGS_CLEAN"
-                # Use eval to properly handle quoted arguments
-                (cd "/tmp/nginx-$NGINX_VERSION" && eval "./configure $CONFIGURE_ARGS_CLEAN" >/tmp/nginx-configure.log 2>&1 || {
+                # Use sh -c to properly handle quoted arguments (same as build.rs)
+                (cd "/tmp/nginx-$NGINX_VERSION" && sh -c "./configure $CONFIGURE_ARGS_CLEAN" >/tmp/nginx-configure.log 2>&1 || {
                     echo "Configure with system args failed, checking log..."
                     if [ -f /tmp/nginx-configure.log ]; then
                         echo "Last 50 lines of configure log:"
@@ -229,11 +238,15 @@ else
                 fi
             fi
         fi
+    else
+        echo "ERROR: Failed to download nginx source. Neither wget nor curl is available."
+        exit 1
     fi
 fi
 
-if [ -z "$NGINX_SOURCE_DIR" ] || [ ! -d "$NGINX_SOURCE_DIR/objs" ]; then
+if [ -z "$NGINX_SOURCE_DIR" ] || [ ! -f "$NGINX_SOURCE_DIR/objs/ngx_modules.c" ]; then
     echo "ERROR: Failed to find or configure nginx source for version $NGINX_VERSION"
+    echo "Required file: $NGINX_SOURCE_DIR/objs/ngx_modules.c"
     exit 1
 fi
 
@@ -358,9 +371,13 @@ if [ -n "$RUSTFLAGS" ]; then
 fi
 
 # Verify nginx source has been configured correctly
-if [ ! -f "$NGINX_SOURCE_DIR/objs/ngx_modules.c" ]; then
+# build.rs needs at least one of these files to extract module signature
+if [ ! -f "$NGINX_SOURCE_DIR/objs/ngx_modules.c" ] && [ ! -f "$NGINX_SOURCE_DIR/objs/ngx_auto_config.h" ]; then
     echo "ERROR: Nginx source appears to be not configured properly"
-    echo "Missing: $NGINX_SOURCE_DIR/objs/ngx_modules.c"
+    echo "Missing required files:"
+    echo "  - $NGINX_SOURCE_DIR/objs/ngx_modules.c"
+    echo "  - $NGINX_SOURCE_DIR/objs/ngx_auto_config.h"
+    echo "At least one of these files is required for module signature extraction"
     exit 1
 fi
 
