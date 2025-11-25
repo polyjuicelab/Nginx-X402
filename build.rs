@@ -355,6 +355,7 @@ fn extract_quoted_string_from_line(line: &str, marker: &str) -> Option<String> {
 
     // Extract all quoted strings from the line and concatenate them
     // This handles: char ngx_module_signature[] = "8,4,8," "0010111111010111001111111111100110";
+    // Also handles: char ngx_module_signature[] = "8,4,8,0010111111010111001111111111100110";
     let mut result = String::new();
     let mut in_quotes = false;
     let mut found_equals = false;
@@ -363,12 +364,14 @@ fn extract_quoted_string_from_line(line: &str, marker: &str) -> Option<String> {
     for ch in line.chars() {
         if ch == '=' {
             found_equals = true;
+            continue;
         }
         if found_equals {
             if ch == '"' && !in_quotes {
                 in_quotes = true;
             } else if ch == '"' && in_quotes {
                 in_quotes = false;
+                // Don't break here - there might be multiple quoted strings
             } else if in_quotes {
                 result.push(ch);
             }
@@ -392,36 +395,50 @@ fn extract_quoted_string_from_line(line: &str, marker: &str) -> Option<String> {
 fn extract_multiline_signature(content: &str) -> Option<String> {
     let mut in_signature = false;
     let mut signature_parts = Vec::new();
+    let mut found_equals = false;
 
     for line in content.lines() {
         if line.contains("ngx_module_signature") {
             in_signature = true;
+            found_equals = line.contains('=');
         }
 
         if in_signature {
-            // Extract all quoted strings from this line
-            let mut start = 0;
-            while let Some(quote_start) = line[start..].find('"') {
-                let quote_start = start + quote_start;
-                if let Some(quote_end) = line[quote_start + 1..].find('"') {
-                    let quote_end = quote_start + 1 + quote_end;
-                    signature_parts.push(line[quote_start + 1..quote_end].to_string());
-                    start = quote_end + 1;
-                } else {
-                    // String continues on next line (opening quote but no closing quote)
-                    signature_parts.push(line[quote_start + 1..].to_string());
-                    break;
-                }
+            // Only process lines after the '=' sign
+            if !found_equals && line.contains("ngx_module_signature") && line.contains('=') {
+                found_equals = true;
             }
 
-            // Check if we've completed the signature (line ends with semicolon)
-            if line.trim().ends_with(';') {
-                let signature = signature_parts.join("");
-                if !signature.is_empty() && signature.contains(',') {
-                    return Some(signature);
+            if found_equals {
+                // Extract all quoted strings from this line
+                let mut start = 0;
+                while let Some(quote_start) = line[start..].find('"') {
+                    let quote_start = start + quote_start;
+                    if let Some(quote_end) = line[quote_start + 1..].find('"') {
+                        let quote_end = quote_start + 1 + quote_end;
+                        signature_parts.push(line[quote_start + 1..quote_end].to_string());
+                        start = quote_end + 1;
+                    } else {
+                        // String continues on next line (opening quote but no closing quote)
+                        signature_parts.push(line[quote_start + 1..].to_string());
+                        break;
+                    }
                 }
-                in_signature = false;
-                signature_parts.clear();
+
+                // Check if we've completed the signature (line ends with semicolon)
+                if line.trim().ends_with(';') {
+                    let signature = signature_parts.join("");
+                    if !signature.is_empty() && signature.contains(',') {
+                        eprintln!(
+                            "cargo:warning=Extracted multi-line signature: {}",
+                            signature
+                        );
+                        return Some(signature);
+                    }
+                    in_signature = false;
+                    signature_parts.clear();
+                    found_equals = false;
+                }
             }
         }
     }
@@ -430,6 +447,10 @@ fn extract_multiline_signature(content: &str) -> Option<String> {
     if !signature_parts.is_empty() {
         let signature = signature_parts.join("");
         if !signature.is_empty() && signature.contains(',') {
+            eprintln!(
+                "cargo:warning=Extracted multi-line signature (no semicolon): {}",
+                signature
+            );
             return Some(signature);
         }
     }
@@ -629,23 +650,37 @@ fn build_feature_flags_from_have_defines(content: &str) -> String {
     });
 
     // NGX_MODULE_SIGNATURE_16: NGX_HAVE_VARIADIC_MACROS
-    // This is typically defined as NGX_HAVE_C99_VARIADIC_MACROS || NGX_HAVE_GCC_VARIADIC_MACROS
-    // But in nginx source, it's actually checked as: (NGX_HAVE_C99_VARIADIC_MACROS || NGX_HAVE_GCC_VARIADIC_MACROS)
-    // and NOT NGX_HAVE_VARIADIC_MACROS directly
-    let sig16 = if has_define(content, "NGX_HAVE_C99_VARIADIC_MACROS")
-        || has_define(content, "NGX_HAVE_GCC_VARIADIC_MACROS")
-    {
-        '1'
-    } else {
-        '0'
-    };
+    // In nginx source (src/core/ngx_module.h), this is checked as:
+    // #if (NGX_HAVE_C99_VARIADIC_MACROS || NGX_HAVE_GCC_VARIADIC_MACROS)
+    //     NGX_MODULE_SIGNATURE_16 '1'
+    // #else
+    //     NGX_MODULE_SIGNATURE_16 '0'
+    // #endif
+    //
+    // However, these defines might be in ngx_auto_headers.h, not ngx_auto_config.h
+    // We need to check both files. Since we already merged ngx_auto_headers.h into content,
+    // we should check the merged content.
+    let has_c99 = has_define(content, "NGX_HAVE_C99_VARIADIC_MACROS");
+    let has_gcc = has_define(content, "NGX_HAVE_GCC_VARIADIC_MACROS");
+    let sig16 = if has_c99 || has_gcc { '1' } else { '0' };
     flags.push(sig16);
     eprintln!(
         "cargo:warning=NGX_MODULE_SIGNATURE_16 (variadic macros): {} (C99: {}, GCC: {})",
-        sig16,
-        has_define(content, "NGX_HAVE_C99_VARIADIC_MACROS"),
-        has_define(content, "NGX_HAVE_GCC_VARIADIC_MACROS")
+        sig16, has_c99, has_gcc
     );
+
+    // Debug: show what defines are actually present
+    if has_c99 || has_gcc {
+        eprintln!("cargo:warning=  Found variadic macro support defines in content");
+    } else {
+        eprintln!(
+            "cargo:warning=  No variadic macro support defines found - checking if this is correct"
+        );
+        // Check if content contains any mention of variadic macros
+        if content.contains("VARIADIC") {
+            eprintln!("cargo:warning=  Content mentions VARIADIC but defines not found");
+        }
+    }
 
     // NGX_MODULE_SIGNATURE_17: Always "0"
     flags.push('0');
@@ -668,18 +703,23 @@ fn build_feature_flags_from_have_defines(content: &str) -> String {
 
     // NGX_MODULE_SIGNATURE_20: NGX_HAVE_ATOMIC_OPS
     // This is defined in src/os/unix/ngx_atomic.h, not in ngx_auto_config.h
-    // We need to check if it was added to config_content earlier
-    let sig20 = if has_define(content, "NGX_HAVE_ATOMIC_OPS") {
-        '1'
-    } else {
-        '0'
-    };
+    // We read ngx_atomic.h earlier and added it to config_content
+    // However, the define might be conditional or might not exist on all platforms
+    let has_atomic_ops = has_define(content, "NGX_HAVE_ATOMIC_OPS");
+    let sig20 = if has_atomic_ops { '1' } else { '0' };
     flags.push(sig20);
     eprintln!(
         "cargo:warning=NGX_MODULE_SIGNATURE_20 (atomic ops): {} (found in content: {})",
-        sig20,
-        content.contains("NGX_HAVE_ATOMIC_OPS")
+        sig20, has_atomic_ops
     );
+
+    // Debug: check if ngx_atomic.h was read
+    if content.contains("NGX_HAVE_ATOMIC_OPS") {
+        eprintln!("cargo:warning=  NGX_HAVE_ATOMIC_OPS found in content (from ngx_atomic.h)");
+    } else {
+        eprintln!("cargo:warning=  NGX_HAVE_ATOMIC_OPS not found in content - atomic ops may not be available");
+        eprintln!("cargo:warning=  This is normal on some platforms (e.g., older Linux kernels)");
+    }
 
     // NGX_MODULE_SIGNATURE_21: NGX_HAVE_POSIX_SEM
     flags.push(if has_define(content, "NGX_HAVE_POSIX_SEM") {
