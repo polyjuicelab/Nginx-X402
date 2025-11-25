@@ -39,6 +39,13 @@ fn main() {
         std::process::exit(1);
     });
 
+    // Print extracted signature for debugging
+    eprintln!(
+        "cargo:warning=Extracted nginx module signature: {}",
+        signature
+    );
+    eprintln!("cargo:warning=Signature format: {{NGX_PTR_SIZE}},{{NGX_SIG_ATOMIC_T_SIZE}},{{NGX_TIME_T_SIZE}},{{feature_flags}}");
+
     // Generate a Rust file with the signature
     generate_signature_file(&signature).unwrap_or_else(|e| {
         eprintln!("cargo:error=Failed to generate signature file: {}", e);
