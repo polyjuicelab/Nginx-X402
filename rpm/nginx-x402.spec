@@ -193,7 +193,7 @@ else
                 
                 # Debug: Show what flags are preserved
                 echo "Preserved configure flags:"
-                echo "$CONFIGURE_ARGS_CLEAN" | grep -oE '--with-(cc-opt|ld-opt|debug|compat)[^ ]*' || echo "  (none found)"
+                echo "$CONFIGURE_ARGS_CLEAN" | grep -oE '--with-(cc-opt|ld-opt|debug|compat)(=[^ ]*)?' || echo "  (none found)"
                 
                 echo "Running configure with system arguments..."
                 echo "Cleaned configure args: $CONFIGURE_ARGS_CLEAN"
@@ -216,7 +216,7 @@ else
                 echo "  - --with-stream_geoip_module=dynamic"
                 echo ""
                 echo "Preserved flags (critical for signature):"
-                echo "$CONFIGURE_ARGS_CLEAN" | grep -oE '--with-(cc-opt|ld-opt|debug|compat|threads|file-aio|http_ssl_module|http_realip_module|http_gzip_static_module)[^ ]*' || echo "  (checking...)"
+                echo "$CONFIGURE_ARGS_CLEAN" | grep -oE '--with-(cc-opt|ld-opt|debug|compat|threads|file-aio|http_ssl_module|http_realip_module|http_gzip_static_module)(=[^ ]*)?' || echo "  (checking...)"
 
                 # Use sh -c to properly handle quoted arguments (same as build.rs)
                 (cd "/tmp/nginx-$NGINX_VERSION" && sh -c "./configure $CONFIGURE_ARGS_CLEAN" >/tmp/nginx-configure.log 2>&1 || {
