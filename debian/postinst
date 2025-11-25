@@ -448,6 +448,40 @@ fi
 cp "$MODULE_FILE" "$MODULE_DIR/libnginx_x402.so"
 chmod 644 "$MODULE_DIR/libnginx_x402.so"
 
+# Verify module signature matches system nginx signature
+echo "Verifying module signature compatibility..."
+if command -v strings >/dev/null 2>&1 && [ -f "/usr/sbin/nginx" ]; then
+    MODULE_SIG=$(strings "$MODULE_DIR/libnginx_x402.so" 2>/dev/null | grep -E '^[0-9]+,[0-9]+,[0-9]+,' | head -1 || echo "")
+    NGINX_SIG=$(strings /usr/sbin/nginx 2>/dev/null | grep -E '^[0-9]+,[0-9]+,[0-9]+,' | head -1 || echo "")
+    
+    if [ -n "$MODULE_SIG" ] && [ -n "$NGINX_SIG" ]; then
+        echo "Module signature: $MODULE_SIG"
+        echo "Nginx signature:  $NGINX_SIG"
+        if [ "$MODULE_SIG" = "$NGINX_SIG" ]; then
+            echo "✓ Signatures match - module is binary compatible"
+        else
+            echo "ERROR: Signature mismatch - module may not be binary compatible"
+            echo "This usually means:"
+            echo "  1. Nginx source version used for build doesn't match system nginx version"
+            echo "  2. Nginx source configure arguments don't match system nginx configuration"
+            echo "  3. Module signature extraction failed or was incorrect"
+            echo ""
+            echo "Please check:"
+            echo "  - System nginx version: $(nginx -v 2>&1 | grep -oE 'nginx/[0-9.]+' || echo 'unknown')"
+            echo "  - Build nginx source version: ${NGINX_SOURCE_VERSION:-unknown}"
+            echo "  - Build logs: /tmp/cargo-build.log"
+            rm -rf "$BUILD_DIR"
+            exit 1
+        fi
+    else
+        echo "WARNING: Could not extract signatures for verification"
+        echo "Module signature: ${MODULE_SIG:-not found}"
+        echo "Nginx signature:  ${NGINX_SIG:-not found}"
+    fi
+else
+    echo "WARNING: Cannot verify signatures (strings command or nginx binary not found)"
+fi
+
 # Clean up build directory
 rm -rf "$BUILD_DIR"
 
