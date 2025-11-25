@@ -76,8 +76,13 @@ ENV NGX_CONFIGURE_ARGS="--without-http_rewrite_module"
 ENV RUST_BACKTRACE=1
 
 # Debug: Check what files exist and their content  
-RUN echo "=== Debug: Full ngx_modules.c content ===" && \
-    cat /tmp/nginx-1.28.0/objs/ngx_modules.c
+RUN echo "=== Debug: Check ngx_auto_config.h ===" && \
+    if [ -f /tmp/nginx-1.28.0/objs/ngx_auto_config.h ]; then \
+        echo "✅ ngx_auto_config.h exists"; \
+        grep -E "^#define NGX_PTR_SIZE|^#define NGX_SIG_ATOMIC_T_SIZE|^#define NGX_TIME_T_SIZE" /tmp/nginx-1.28.0/objs/ngx_auto_config.h | head -5; \
+    else \
+        echo "❌ ngx_auto_config.h not found"; \
+    fi
 
 # Build the module using the same nginx source (no vendored feature)
 # This ensures exact version and compilation environment match
