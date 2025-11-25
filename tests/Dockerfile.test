@@ -63,6 +63,7 @@ WORKDIR /build
 # This layer will be cached unless Cargo.toml changes
 COPY Cargo.toml ./
 COPY README.md ./
+COPY build.rs ./
 
 # Copy source code (this layer changes most frequently)
 COPY src ./src
@@ -73,6 +74,10 @@ COPY nginx ./nginx
 ENV NGINX_SOURCE_DIR=/tmp/nginx-1.28.0
 ENV NGX_CONFIGURE_ARGS="--without-http_rewrite_module"
 ENV RUST_BACKTRACE=1
+
+# Debug: Check what files exist and their content  
+RUN echo "=== Debug: Full ngx_modules.c content ===" && \
+    cat /tmp/nginx-1.28.0/objs/ngx_modules.c
 
 # Build the module using the same nginx source (no vendored feature)
 # This ensures exact version and compilation environment match
