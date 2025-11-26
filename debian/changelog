@@ -1,3 +1,9 @@
+nginx-x402 (1.0.1-1) unstable; urgency=medium
+
+  * Version bump to 1.0.1
+
+ -- Ryan Kung <ryan@polyjuice.io>  Mon, 24 Nov 2025 00:00:00 +0000
+
 nginx-x402 (0.1.1-1) unstable; urgency=medium
 
   * Initial release

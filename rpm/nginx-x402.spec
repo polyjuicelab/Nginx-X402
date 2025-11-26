@@ -2,7 +2,7 @@
 %define moduledir %{_libdir}/nginx/modules
 
 Name:           nginx-x402
-Version:        1.0.0
+Version:        1.0.1
 Release:        1%{?dist}
 Summary:        Pure Rust Nginx module for x402 HTTP micropayment protocol
 License:        AGPL-3.0
@@ -659,7 +659,7 @@ fi
 %{_datadir}/%{name}/
 
 %changelog
-* Mon Nov 24 2025 Ryan Kung <ryan@polyjuice.io> - 1.0.0-1
+* Mon Nov 24 2025 Ryan Kung <ryan@polyjuice.io> - 1.0.1-1
 - Implement custom auto-detect nginx version functionality
 - Automatically downloads matching nginx source during build
 - Removed vendored feature dependency
