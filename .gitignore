@@ -23,3 +23,6 @@
 *.md
 !README.md
 build/
+
+# Generated files
+signatures.json
