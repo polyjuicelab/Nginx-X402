@@ -11,17 +11,27 @@ use std::process::Command;
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
-
-    // Auto-download nginx source if NGINX_SOURCE_DIR is not set
-    // This needs to happen early so nginx-sys can use it
-    // Note: nginx-sys build script may run before ours, but cargo:rustc-env helps
+    
+    // IMPORTANT: nginx-sys build script runs BEFORE ours due to dependency order.
+    // We cannot change this order, so NGINX_SOURCE_DIR must be set BEFORE cargo starts.
+    // 
+    // For cargo publish, set NGX_VERSION before running:
+    //   export NGX_VERSION=1.22.0
+    //   cargo publish
+    //
+    // Our build.rs will then download and configure nginx source, but nginx-sys needs
+    // NGINX_SOURCE_DIR to be set in the environment before cargo starts building dependencies.
+    
+    // Try to download and set NGINX_SOURCE_DIR immediately
+    // This helps for subsequent builds, but won't help nginx-sys on first run
     if env::var("NGINX_SOURCE_DIR").is_err() {
         if let Ok(source_dir) = auto_download_nginx_source() {
-            // Set environment variable via cargo:rustc-env for nginx-sys
-            // This is the recommended way to pass env vars to build scripts
+            // Set environment variable via cargo:rustc-env (for our own use)
             println!("cargo:rustc-env=NGINX_SOURCE_DIR={}", source_dir.display());
             // Also set it for our own use
             env::set_var("NGINX_SOURCE_DIR", source_dir.to_str().unwrap());
+            // Mark that we changed this env var so Cargo knows to rerun if needed
+            println!("cargo:rerun-if-env-changed=NGINX_SOURCE_DIR");
         }
     }
 

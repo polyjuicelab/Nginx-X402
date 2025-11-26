@@ -152,7 +152,32 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
+      - name: Setup nginx source for build
+        run: |
+          # Auto-detect nginx version or use default
+          NGX_VERSION="1.22.0"
+          if command -v nginx >/dev/null 2>&1; then
+            NGX_VERSION=$(nginx -v 2>&1 | grep -oE 'nginx/[0-9]+\.[0-9]+\.[0-9]+' | cut -d'/' -f2 || echo "1.22.0")
+          fi
+          echo "NGX_VERSION=$NGX_VERSION" >> $GITHUB_ENV
+          # Download and configure nginx source if not cached
+          if [ ! -d "/tmp/nginx-$NGX_VERSION" ] || [ ! -d "/tmp/nginx-$NGX_VERSION/objs" ]; then
+            cd /tmp
+            if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
+              wget -q "https://nginx.org/download/nginx-$NGX_VERSION.tar.gz" || exit 1
+            else
+              curl -sSfL -o "nginx-$NGX_VERSION.tar.gz" "https://nginx.org/download/nginx-$NGX_VERSION.tar.gz" || exit 1
+            fi
+            tar -xzf nginx-$NGX_VERSION.tar.gz && rm nginx-$NGX_VERSION.tar.gz || exit 1
+            cd nginx-$NGX_VERSION
+            ./configure --without-http_rewrite_module --with-cc-opt="-fPIC" >/dev/null 2>&1 || exit 1
+          fi
+          echo "NGINX_SOURCE_DIR=/tmp/nginx-$NGX_VERSION" >> $GITHUB_ENV
+
       - name: Build release
+        env:
+          NGINX_SOURCE_DIR: ${{ env.NGINX_SOURCE_DIR }}
+          NGX_VERSION: ${{ env.NGX_VERSION }}
         run: cargo build --release
 
       - name: Determine artifact path
@@ -249,8 +274,28 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-${{ matrix.arch }}-
 
+      - name: Setup nginx source for build
+        run: |
+          # Auto-detect nginx version or use default
+          NGX_VERSION="1.22.0"
+          if command -v nginx >/dev/null 2>&1; then
+            NGX_VERSION=$(nginx -v 2>&1 | grep -oE 'nginx/[0-9]+\.[0-9]+\.[0-9]+' | cut -d'/' -f2 || echo "1.22.0")
+          fi
+          echo "NGX_VERSION=$NGX_VERSION" >> $GITHUB_ENV
+          # Download and configure nginx source if not cached
+          if [ ! -d "/tmp/nginx-$NGX_VERSION" ] || [ ! -d "/tmp/nginx-$NGX_VERSION/objs" ]; then
+            cd /tmp
+            wget -q "https://nginx.org/download/nginx-$NGX_VERSION.tar.gz" || exit 1
+            tar -xzf nginx-$NGX_VERSION.tar.gz && rm nginx-$NGX_VERSION.tar.gz || exit 1
+            cd nginx-$NGX_VERSION
+            ./configure --without-http_rewrite_module --with-cc-opt="-fPIC" >/dev/null 2>&1 || exit 1
+          fi
+          echo "NGINX_SOURCE_DIR=/tmp/nginx-$NGX_VERSION" >> $GITHUB_ENV
+
       - name: Build Debian package
         env:
+          NGINX_SOURCE_DIR: ${{ env.NGINX_SOURCE_DIR }}
+          NGX_VERSION: ${{ env.NGX_VERSION }}
           NGX_CONFIGURE_ARGS: "--without-http_rewrite_module"
           DEB_BUILD_OPTIONS: "nocheck"
           DEB_HOST_ARCH: ${{ matrix.deb_arch }}
