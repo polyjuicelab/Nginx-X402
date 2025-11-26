@@ -960,11 +960,17 @@ fn auto_download_nginx_source() -> io::Result<PathBuf> {
 fn detect_nginx_version() -> io::Result<String> {
     // Priority 1: Check environment variables (useful for cargo publish, CI, etc.)
     if let Ok(version) = env::var("NGX_VERSION") {
-        eprintln!("cargo:warning=Using nginx version from NGX_VERSION: {}", version);
+        eprintln!(
+            "cargo:warning=Using nginx version from NGX_VERSION: {}",
+            version
+        );
         return Ok(version);
     }
     if let Ok(version) = env::var("NGINX_VERSION") {
-        eprintln!("cargo:warning=Using nginx version from NGINX_VERSION: {}", version);
+        eprintln!(
+            "cargo:warning=Using nginx version from NGINX_VERSION: {}",
+            version
+        );
         return Ok(version);
     }
 
@@ -974,7 +980,10 @@ fn detect_nginx_version() -> io::Result<String> {
 
         // Extract version from output like "nginx version: nginx/1.24.0"
         if let Some(version) = extract_version_from_string(&output_str) {
-            eprintln!("cargo:warning=Detected nginx version from system: {}", version);
+            eprintln!(
+                "cargo:warning=Detected nginx version from system: {}",
+                version
+            );
             return Ok(version);
         }
     }
