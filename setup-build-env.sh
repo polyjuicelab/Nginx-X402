@@ -27,9 +27,9 @@ if [ -z "$NGINX_SOURCE_DIR" ]; then
         
         if [ ! -f "nginx-$NGINX_VERSION.tar.gz" ]; then
             if command -v wget >/dev/null 2>&1; then
-                wget -q "http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz"
+                wget -q "https://nginx.org/download/nginx-$NGINX_VERSION.tar.gz"
             elif command -v curl >/dev/null 2>&1; then
-                curl -sSfL -o "nginx-$NGINX_VERSION.tar.gz" "http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz"
+                curl -sSfL -o "nginx-$NGINX_VERSION.tar.gz" "https://nginx.org/download/nginx-$NGINX_VERSION.tar.gz"
             else
             echo "ERROR: wget or curl not found" >&2
             exit 1

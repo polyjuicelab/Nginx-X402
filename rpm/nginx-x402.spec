@@ -141,9 +141,9 @@ else
     mkdir -p /tmp
     # Try wget first, then curl (same as build.rs)
     DOWNLOAD_SUCCESS=0
-    if command -v wget >/dev/null 2>&1 && wget -q -O "/tmp/nginx-$NGINX_VERSION.tar.gz" "http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz" 2>/dev/null; then
+    if command -v wget >/dev/null 2>&1 && wget -q -O "/tmp/nginx-$NGINX_VERSION.tar.gz" "https://nginx.org/download/nginx-$NGINX_VERSION.tar.gz" 2>/dev/null; then
         DOWNLOAD_SUCCESS=1
-    elif command -v curl >/dev/null 2>&1 && curl -sSfL -o "/tmp/nginx-$NGINX_VERSION.tar.gz" "http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz" 2>/dev/null; then
+    elif command -v curl >/dev/null 2>&1 && curl -sSfL -o "/tmp/nginx-$NGINX_VERSION.tar.gz" "https://nginx.org/download/nginx-$NGINX_VERSION.tar.gz" 2>/dev/null; then
         DOWNLOAD_SUCCESS=1
     fi
     

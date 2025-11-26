@@ -1007,7 +1007,7 @@ fn download_and_configure_nginx(version: &str) -> io::Result<PathBuf> {
     }
 
     // Download nginx source
-    let download_url = format!("http://nginx.org/download/{}", tarball_name);
+    let download_url = format!("https://nginx.org/download/{}", tarball_name);
 
     // Try wget first, then curl
     let download_success = Command::new("wget")

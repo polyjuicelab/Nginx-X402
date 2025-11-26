@@ -40,7 +40,7 @@ RUN set -e && \
     echo "System nginx configure args: $NGINX_CONFIGURE_ARGS_SYSTEM" && \
     # Download matching nginx source
     cd /tmp && \
-    wget -q "http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz" && \
+    wget -q "https://nginx.org/download/nginx-$NGINX_VERSION.tar.gz" && \
     tar -xzf "nginx-$NGINX_VERSION.tar.gz" && \
     rm "nginx-$NGINX_VERSION.tar.gz" && \
     # Download PCRE source (required for --with-pcre-jit)
