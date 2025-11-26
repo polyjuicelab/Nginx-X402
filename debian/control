@@ -18,7 +18,7 @@ Vcs-Browser: https://github.com/polyjuicelab/Nginx-X402
 
 Package: nginx-x402
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, nginx (>= 1.18.0), cargo | rustc, libclang-dev, libssl-dev, pkg-config, build-essential, wget | curl, gcc, make, ca-certificates
+Depends: ${shlibs:Depends}, ${misc:Depends}, nginx (>= 1.18.0), cargo, libclang-dev, libssl-dev, pkg-config, build-essential, wget | curl, gcc, make, ca-certificates
 Description: Pure Rust Nginx module for x402 HTTP micropayment protocol
  This package provides a pure Rust implementation of an Nginx module
  that implements the x402 HTTP micropayment protocol.
