@@ -817,7 +817,7 @@ fn build_feature_flags_from_have_defines(content: &str) -> String {
 }
 
 /// Check if a define exists in the content (either as #define NAME or #define NAME value).
-/// 
+///
 /// This function ensures exact matching to avoid prefix issues. For example, when checking
 /// for `NGX_HAVE_EPOLL`, it won't incorrectly match `NGX_HAVE_EPOLLEXCLUSIVE`.
 fn has_define(content: &str, name: &str) -> bool {
@@ -832,7 +832,9 @@ fn has_define(content: &str, name: &str) -> bool {
         if trimmed.starts_with(&define_pattern) {
             let remaining = &trimmed[define_pattern.len()..];
             // Next character must be whitespace (space or tab) or end of line
-            return remaining.is_empty() || remaining.starts_with(' ') || remaining.starts_with('\t');
+            return remaining.is_empty()
+                || remaining.starts_with(' ')
+                || remaining.starts_with('\t');
         }
         false
     })
@@ -841,7 +843,7 @@ fn has_define(content: &str, name: &str) -> bool {
 /// Extract a numeric value from a #define directive.
 ///
 /// Example: `#define NGX_PTR_SIZE 8` -> Some(8)
-/// 
+///
 /// This function ensures exact matching to avoid prefix issues. For example, when checking
 /// for `NGX_HAVE_EPOLL`, it won't incorrectly match `NGX_HAVE_EPOLLEXCLUSIVE`.
 fn extract_define_value(content: &str, name: &str) -> Option<u32> {
@@ -872,7 +874,7 @@ fn extract_define_value(content: &str, name: &str) -> Option<u32> {
 /// Handles both quoted strings and numeric values:
 /// - `#define NGX_MODULE_SIGNATURE_1 "0010"` -> Some("0010")
 /// - `#define NGX_MODULE_SIGNATURE_1 0010` -> Some("0010")
-/// 
+///
 /// This function ensures exact matching to avoid prefix issues. For example, when checking
 /// for `NGX_HAVE_EPOLL`, it won't incorrectly match `NGX_HAVE_EPOLLEXCLUSIVE`.
 fn extract_define_string(content: &str, name: &str) -> Option<String> {
