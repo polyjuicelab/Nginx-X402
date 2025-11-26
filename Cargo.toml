@@ -1,6 +1,6 @@
 [package]
 name = "nginx-x402"
-version = "1.0.2"
+version = "1.0.3"
 edition = "2021"
 description = "Pure Rust Nginx module for x402 HTTP micropayment protocol"
 authors = ["Ryan Kung <ryan@polyjuice.io>"]
@@ -27,10 +27,9 @@ log = "0.4"
 
 [features]
 default = []
-# vendored: Enable ngx's vendored feature for crates.io publishing
-# This downloads a default nginx version and is mainly for package verification.
-# For production builds, use the automatic detection (default) or set NGINX_SOURCE_DIR.
-vendored = ["ngx/vendored"]
+# Note: We implement our own vendored-like functionality in build.rs
+# that automatically detects system nginx version and downloads matching source.
+# For cargo publish, build.rs will fallback to nginx 1.28.0 if nginx command is not available.
 integration-test = []  # Feature for integration tests (requires Docker)
 
 [dev-dependencies]

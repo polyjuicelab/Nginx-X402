@@ -14,10 +14,11 @@ fn main() {
 
     // Auto-download nginx source if NGINX_SOURCE_DIR is not set
     // This needs to happen early so nginx-sys can use it
+    // Note: nginx-sys build script may run before ours, but cargo:rustc-env helps
     if env::var("NGINX_SOURCE_DIR").is_err() {
         if let Ok(source_dir) = auto_download_nginx_source() {
-            // Set environment variable for nginx-sys (though it may have already run)
-            // This is best-effort - nginx-sys may need NGINX_SOURCE_DIR set before cargo build
+            // Set environment variable via cargo:rustc-env for nginx-sys
+            // This is the recommended way to pass env vars to build scripts
             println!("cargo:rustc-env=NGINX_SOURCE_DIR={}", source_dir.display());
             // Also set it for our own use
             env::set_var("NGINX_SOURCE_DIR", source_dir.to_str().unwrap());
@@ -951,25 +952,39 @@ fn auto_download_nginx_source() -> io::Result<PathBuf> {
     download_and_configure_nginx(&nginx_version)
 }
 
-/// Detect nginx version from system nginx binary.
+/// Detect nginx version from environment variable or system nginx binary.
+/// Priority:
+/// 1. NGX_VERSION or NGINX_VERSION environment variable (for cargo publish, CI, etc.)
+/// 2. System nginx binary (nginx -v command)
+/// 3. Default fallback version (1.28.0) if neither is available
 fn detect_nginx_version() -> io::Result<String> {
-    // Try to get version from nginx -v command
-    let output = Command::new("nginx")
-        .arg("-v")
-        .output()
-        .map_err(|e| io::Error::other(format!("nginx command not found: {}", e)))?;
-
-    let output_str = String::from_utf8_lossy(&output.stderr);
-
-    // Extract version from output like "nginx version: nginx/1.24.0"
-    if let Some(version) = extract_version_from_string(&output_str) {
+    // Priority 1: Check environment variables (useful for cargo publish, CI, etc.)
+    if let Ok(version) = env::var("NGX_VERSION") {
+        eprintln!("cargo:warning=Using nginx version from NGX_VERSION: {}", version);
+        return Ok(version);
+    }
+    if let Ok(version) = env::var("NGINX_VERSION") {
+        eprintln!("cargo:warning=Using nginx version from NGINX_VERSION: {}", version);
         return Ok(version);
     }
 
-    Err(io::Error::other(format!(
-        "Could not detect nginx version from: {}",
-        output_str
-    )))
+    // Priority 2: Try to get version from nginx -v command
+    if let Ok(output) = Command::new("nginx").arg("-v").output() {
+        let output_str = String::from_utf8_lossy(&output.stderr);
+
+        // Extract version from output like "nginx version: nginx/1.24.0"
+        if let Some(version) = extract_version_from_string(&output_str) {
+            eprintln!("cargo:warning=Detected nginx version from system: {}", version);
+            return Ok(version);
+        }
+    }
+
+    // Priority 3: Fallback to default version when nginx command is not available
+    // This is useful for cargo publish verification where nginx may not be installed
+    // Default to a recent stable version that matches nginx-src vendored version
+    eprintln!("cargo:warning=nginx command not found and no NGX_VERSION/Nginx_VERSION set, using default version 1.28.0");
+    eprintln!("cargo:warning=To specify a version, set NGX_VERSION environment variable (e.g., export NGX_VERSION=1.29.0)");
+    Ok("1.28.0".to_string())
 }
 
 /// Extract version number from nginx version string.
