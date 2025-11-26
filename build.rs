@@ -11,17 +11,17 @@ use std::process::Command;
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
-    
+
     // IMPORTANT: nginx-sys build script runs BEFORE ours due to dependency order.
     // We cannot change this order, so NGINX_SOURCE_DIR must be set BEFORE cargo starts.
-    // 
+    //
     // For cargo publish, set NGX_VERSION before running:
     //   export NGX_VERSION=1.22.0
     //   cargo publish
     //
     // Our build.rs will then download and configure nginx source, but nginx-sys needs
     // NGINX_SOURCE_DIR to be set in the environment before cargo starts building dependencies.
-    
+
     // Try to download and set NGINX_SOURCE_DIR immediately
     // This helps for subsequent builds, but won't help nginx-sys on first run
     if env::var("NGINX_SOURCE_DIR").is_err() {
