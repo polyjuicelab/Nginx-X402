@@ -981,11 +981,13 @@ fn download_and_configure_nginx(version: &str) -> io::Result<PathBuf> {
     let download_success = Command::new("wget")
         .args(["-q", "-O", tarball_path.to_str().unwrap(), &download_url])
         .status()
-        .is_ok()
+        .map(|s| s.success())
+        .unwrap_or(false)
         || Command::new("curl")
             .args(["-sSfL", "-o", tarball_path.to_str().unwrap(), &download_url])
             .status()
-            .is_ok();
+            .map(|s| s.success())
+            .unwrap_or(false);
 
     if !download_success {
         return Err(io::Error::other(format!(
@@ -999,7 +1001,8 @@ fn download_and_configure_nginx(version: &str) -> io::Result<PathBuf> {
         .args(["-xzf", tarball_path.to_str().unwrap()])
         .current_dir(&download_dir)
         .status()
-        .is_ok();
+        .map(|s| s.success())
+        .unwrap_or(false);
 
     // Clean up tarball
     let _ = fs::remove_file(&tarball_path);
