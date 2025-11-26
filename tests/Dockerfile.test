@@ -30,7 +30,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 # Download and configure nginx (cached separately from code)
 # This layer will be cached unless nginx version changes
 RUN cd /tmp \
-    && wget -q http://nginx.org/download/nginx-1.28.0.tar.gz \
+    && wget -q https://nginx.org/download/nginx-1.28.0.tar.gz \
     && tar -xzf nginx-1.28.0.tar.gz \
     && cd nginx-1.28.0 \
     && ./configure --prefix=/etc/nginx \
