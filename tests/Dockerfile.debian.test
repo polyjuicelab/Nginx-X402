@@ -1,0 +1,185 @@
+# Dockerfile for Debian/Ubuntu integration testing
+# Installs system nginx and builds module against it (similar to deb package build)
+# This ensures the module matches the actual system nginx configuration
+
+ARG DEBIAN_VERSION=bookworm
+FROM debian:${DEBIAN_VERSION}
+
+# Avoid interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install all dependencies including system nginx
+# This layer will be cached unless dependencies change
+RUN apt-get update && apt-get install -y \
+    curl \
+    ca-certificates \
+    clang \
+    libclang-dev \
+    pkg-config \
+    libssl-dev \
+    build-essential \
+    libpcre3-dev \
+    zlib1g-dev \
+    wget \
+    nginx \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust toolchain (cached separately from system packages)
+# This layer will be cached unless Rust version changes
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Detect system nginx version and download matching source + PCRE
+# This layer will be cached unless nginx version changes
+RUN set -e && \
+    # Detect nginx version from system installation
+    NGINX_VERSION=$(nginx -v 2>&1 | sed -n 's/.*nginx\/\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/p' | head -1) && \
+    echo "Detected system nginx version: $NGINX_VERSION" && \
+    # Get system nginx configure arguments
+    NGINX_CONFIGURE_ARGS_SYSTEM=$(nginx -V 2>&1 | grep -oE 'configure arguments:.*' | sed 's/configure arguments://' || echo "") && \
+    echo "System nginx configure args: $NGINX_CONFIGURE_ARGS_SYSTEM" && \
+    # Download matching nginx source
+    cd /tmp && \
+    wget -q "http://nginx.org/download/nginx-$NGINX_VERSION.tar.gz" && \
+    tar -xzf "nginx-$NGINX_VERSION.tar.gz" && \
+    rm "nginx-$NGINX_VERSION.tar.gz" && \
+    # Download PCRE source (required for --with-pcre-jit)
+    # Use PCRE 8.45 which is compatible with nginx 1.18.0+
+    if echo "$NGINX_CONFIGURE_ARGS_SYSTEM" | grep -q -- "--with-pcre-jit"; then \
+        echo "Downloading PCRE source for --with-pcre-jit support..." && \
+        wget -q "https://sourceforge.net/projects/pcre/files/pcre/8.45/pcre-8.45.tar.gz" && \
+        tar -xzf "pcre-8.45.tar.gz" && \
+        rm "pcre-8.45.tar.gz" && \
+        PCRE_SOURCE="/tmp/pcre-8.45"; \
+    else \
+        PCRE_SOURCE=""; \
+    fi && \
+    # Clean configure arguments (remove problematic modules, preserve signature-affecting flags)
+    # IMPORTANT: Only remove modules that cause build failures
+    # DO NOT remove --with-cc-opt, --with-ld-opt, --with-debug, or other flags
+    # that affect module signature and binary compatibility
+    CONFIGURE_ARGS_CLEAN=$(echo "$NGINX_CONFIGURE_ARGS_SYSTEM" | \
+        sed 's/--with-http_rewrite_module//g' | \
+        sed 's/--with-http_xslt_module=dynamic//g' | \
+        sed 's/--with-http_perl_module=dynamic//g' | \
+        sed 's/--with-http_image_filter_module=dynamic//g' | \
+        sed 's/--with-http_geoip_module=dynamic//g' | \
+        sed 's/--with-mail=dynamic//g' | \
+        sed 's/--with-stream=dynamic//g' | \
+        sed 's/--with-stream_geoip_module=dynamic//g' | \
+        sed 's/--add-dynamic-module=[^ ]*//g' | \
+        sed 's/  */ /g' | sed 's/^ *//' | sed 's/ *$//') && \
+    # If --with-pcre-jit is present but --with-pcre is not, add --with-pcre (no path)
+    # This tells nginx to use system PCRE library (via pkg-config) instead of PCRE source
+    # Using --with-pcre (no path) matches system nginx behavior when it has --with-pcre-jit
+    # This ensures NGX_PCRE is set (required for signature position 23)
+    # Use shell pattern matching to avoid grep option parsing issues with --with-pcre-jit
+    case "$CONFIGURE_ARGS_CLEAN" in \
+        *--with-pcre-jit*) \
+            case "$CONFIGURE_ARGS_CLEAN" in \
+                *--with-pcre[[:space:]]*) \
+                    ;; \
+                *) \
+                    CONFIGURE_ARGS_CLEAN="$CONFIGURE_ARGS_CLEAN --with-pcre" && \
+                    echo "Added --with-pcre (system library) for PCRE support" \
+                    ;; \
+            esac \
+            ;; \
+    esac && \
+    # Add --without-http_rewrite_module if not already present
+    if echo "$CONFIGURE_ARGS_CLEAN" | grep -qv -- "--without-http_rewrite_module"; then \
+        CONFIGURE_ARGS_CLEAN="$CONFIGURE_ARGS_CLEAN --without-http_rewrite_module"; \
+    fi && \
+    # Configure nginx source with cleaned system arguments - NO FALLBACK
+    # Configure MUST succeed with system arguments to ensure signature match
+    cd "nginx-$NGINX_VERSION" && \
+    if [ -z "$CONFIGURE_ARGS_CLEAN" ]; then \
+        echo "ERROR: No configure arguments available from system nginx"; \
+        exit 1; \
+    fi && \
+    echo "Configuring with system arguments (must match exactly):" && \
+    echo "$CONFIGURE_ARGS_CLEAN" && \
+    eval "./configure $CONFIGURE_ARGS_CLEAN" >/tmp/nginx-configure.log 2>&1 || { \
+        echo "ERROR: Configure failed with system arguments"; \
+        echo "This means we cannot match the system nginx signature"; \
+        if [ -f /tmp/nginx-configure.log ]; then \
+            echo "Configure log:"; \
+            tail -50 /tmp/nginx-configure.log; \
+        fi; \
+        exit 1; \
+    } && \
+    # Verify configure succeeded
+    if [ ! -f "objs/ngx_auto_config.h" ]; then \
+        echo "ERROR: Configure failed - ngx_auto_config.h not found"; \
+        exit 1; \
+    fi && \
+    echo "✓ Nginx source configured successfully" && \
+    # Store version for later use
+    echo "$NGINX_VERSION" > /tmp/nginx_version.txt
+
+# Set working directory
+WORKDIR /build
+
+# Copy dependency files first (for better caching)
+# This layer will be cached unless Cargo.toml changes
+COPY Cargo.toml ./
+COPY README.md ./
+COPY build.rs ./
+
+# Copy source code (this layer changes most frequently)
+COPY src ./src
+COPY nginx ./nginx
+
+ENV NGX_CONFIGURE_ARGS="--without-http_rewrite_module"
+ENV RUST_BACKTRACE=1
+
+# Debug: Check what files exist and their content
+# Also set NGINX_SOURCE_DIR for the build step
+RUN NGINX_VERSION=$(cat /tmp/nginx_version.txt) && \
+    echo "=== Debug: Check ngx_auto_config.h ===" && \
+    if [ -f "/tmp/nginx-$NGINX_VERSION/objs/ngx_auto_config.h" ]; then \
+        echo "✅ ngx_auto_config.h exists"; \
+        grep -E "^#define NGX_PTR_SIZE|^#define NGX_SIG_ATOMIC_T_SIZE|^#define NGX_TIME_T_SIZE" "/tmp/nginx-$NGINX_VERSION/objs/ngx_auto_config.h" | head -5; \
+    else \
+        echo "❌ ngx_auto_config.h not found"; \
+    fi && \
+    echo "=== System nginx info ===" && \
+    nginx -v && \
+    echo "=== Module will be built against ===" && \
+    echo "NGINX_SOURCE_DIR=/tmp/nginx-$NGINX_VERSION" && \
+    # Set NGINX_SOURCE_DIR in a way that persists for cargo build
+    echo "export NGINX_SOURCE_DIR=/tmp/nginx-$NGINX_VERSION" >> /root/.bashrc && \
+    echo "/tmp/nginx-$NGINX_VERSION" > /tmp/nginx_source_dir.txt
+
+# Build the module using the nginx source configured with system nginx arguments
+# Extract signature from system nginx binary instead of nginx source to ensure exact match
+# This ensures exact version and compilation environment match
+# Cargo will cache dependencies automatically, only source changes trigger rebuild
+RUN NGINX_SOURCE_DIR=$(cat /tmp/nginx_source_dir.txt) && \
+    export NGINX_SOURCE_DIR && \
+    export NGINX_BINARY_PATH=/usr/sbin/nginx && \
+    echo "Building module with NGINX_SOURCE_DIR=$NGINX_SOURCE_DIR" && \
+    echo "Extracting signature from system nginx binary: $NGINX_BINARY_PATH" && \
+    echo "Will compare with signature from source config for validation" && \
+    cargo build --release --no-default-features
+
+# Copy the built module
+RUN mkdir -p /usr/lib/nginx/modules \
+    && cp /build/target/release/libnginx_x402.so /usr/lib/nginx/modules/libnginx_x402.so
+
+# Copy test nginx configuration
+COPY tests/nginx.test.conf /etc/nginx/nginx.conf
+
+# Create test directories
+RUN mkdir -p /var/www/html /var/log/nginx
+
+# Expose port
+EXPOSE 80
+
+# Health check
+HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost/health || exit 1
+
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]
+

@@ -410,14 +410,20 @@ fi
 
 # Set up build environment
 export NGINX_SOURCE_DIR="$NGINX_SOURCE_DIR"
+export NGINX_BINARY_PATH="/usr/sbin/nginx"
 export CARGO_FEATURES="--no-default-features"
 export NGX_CONFIGURE_ARGS="--without-http_rewrite_module"
 
 # Verify NGINX_SOURCE_DIR is set correctly
 echo "Build environment:"
 echo "  NGINX_SOURCE_DIR=$NGINX_SOURCE_DIR"
+echo "  NGINX_BINARY_PATH=$NGINX_BINARY_PATH"
 echo "  CARGO_FEATURES=$CARGO_FEATURES"
 echo "  NGX_CONFIGURE_ARGS=$NGX_CONFIGURE_ARGS"
+echo ""
+echo "Note: build.rs will extract signature from system nginx binary and compare"
+echo "      with signature from source config. If they don't match, a warning"
+echo "      will be displayed but the system binary signature will be used."
 if [ -n "$RUSTFLAGS" ]; then
     echo "  RUSTFLAGS=$RUSTFLAGS"
 fi
