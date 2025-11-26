@@ -817,27 +817,48 @@ fn build_feature_flags_from_have_defines(content: &str) -> String {
 }
 
 /// Check if a define exists in the content (either as #define NAME or #define NAME value).
+/// 
+/// This function ensures exact matching to avoid prefix issues. For example, when checking
+/// for `NGX_HAVE_EPOLL`, it won't incorrectly match `NGX_HAVE_EPOLLEXCLUSIVE`.
 fn has_define(content: &str, name: &str) -> bool {
     let define_pattern = format!("#define {}", name);
     content.lines().any(|line| {
         let trimmed = line.trim();
-        // Match both "#define NAME" and "#define NAME value"
-        trimmed == define_pattern || trimmed.starts_with(&define_pattern)
+        // Match "#define NAME" exactly (no value)
+        if trimmed == define_pattern {
+            return true;
+        }
+        // Match "#define NAME value" - ensure next char after name is whitespace
+        if trimmed.starts_with(&define_pattern) {
+            let remaining = &trimmed[define_pattern.len()..];
+            // Next character must be whitespace (space or tab) or end of line
+            return remaining.is_empty() || remaining.starts_with(' ') || remaining.starts_with('\t');
+        }
+        false
     })
 }
 
 /// Extract a numeric value from a #define directive.
 ///
 /// Example: `#define NGX_PTR_SIZE 8` -> Some(8)
+/// 
+/// This function ensures exact matching to avoid prefix issues. For example, when checking
+/// for `NGX_HAVE_EPOLL`, it won't incorrectly match `NGX_HAVE_EPOLLEXCLUSIVE`.
 fn extract_define_value(content: &str, name: &str) -> Option<u32> {
     let define_pattern = format!("#define {}", name);
 
     for line in content.lines() {
-        if line.contains(&define_pattern) {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 3 {
-                if let Ok(value) = parts[2].parse::<u32>() {
-                    return Some(value);
+        let trimmed = line.trim();
+        // Check if line starts with the define pattern
+        if trimmed.starts_with(&define_pattern) {
+            let remaining = &trimmed[define_pattern.len()..];
+            // Ensure next character after name is whitespace (not part of another define name)
+            if remaining.is_empty() || remaining.starts_with(' ') || remaining.starts_with('\t') {
+                let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                if parts.len() >= 3 {
+                    if let Ok(value) = parts[2].parse::<u32>() {
+                        return Some(value);
+                    }
                 }
             }
         }
@@ -851,24 +872,33 @@ fn extract_define_value(content: &str, name: &str) -> Option<u32> {
 /// Handles both quoted strings and numeric values:
 /// - `#define NGX_MODULE_SIGNATURE_1 "0010"` -> Some("0010")
 /// - `#define NGX_MODULE_SIGNATURE_1 0010` -> Some("0010")
+/// 
+/// This function ensures exact matching to avoid prefix issues. For example, when checking
+/// for `NGX_HAVE_EPOLL`, it won't incorrectly match `NGX_HAVE_EPOLLEXCLUSIVE`.
 fn extract_define_string(content: &str, name: &str) -> Option<String> {
     let define_pattern = format!("#define {}", name);
 
     for line in content.lines() {
-        if line.contains(&define_pattern) {
-            // Try to extract quoted string first
-            if let Some(start) = line.find('"') {
-                if let Some(end) = line.rfind('"') {
-                    if end > start {
-                        return Some(line[start + 1..end].to_string());
+        let trimmed = line.trim();
+        // Check if line starts with the define pattern
+        if trimmed.starts_with(&define_pattern) {
+            let remaining = &trimmed[define_pattern.len()..];
+            // Ensure next character after name is whitespace (not part of another define name)
+            if remaining.is_empty() || remaining.starts_with(' ') || remaining.starts_with('\t') {
+                // Try to extract quoted string first
+                if let Some(start) = trimmed.find('"') {
+                    if let Some(end) = trimmed.rfind('"') {
+                        if end > start {
+                            return Some(trimmed[start + 1..end].to_string());
+                        }
                     }
                 }
-            }
 
-            // Fallback: extract numeric value
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 3 {
-                return Some(parts[2].to_string());
+                // Fallback: extract numeric value
+                let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                if parts.len() >= 3 {
+                    return Some(parts[2].to_string());
+                }
             }
         }
     }
