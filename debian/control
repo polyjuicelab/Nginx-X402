@@ -12,7 +12,7 @@ Build-Depends: debhelper-compat (= 12),
                gcc,
                make
 Standards-Version: 4.5.0
-Homepage: https://x402.org
+Homepage: https://polyjuice.io
 Vcs-Git: https://github.com/polyjuicelab/Nginx-X402.git
 Vcs-Browser: https://github.com/polyjuicelab/Nginx-X402
 
