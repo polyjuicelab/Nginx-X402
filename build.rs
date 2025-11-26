@@ -956,7 +956,7 @@ fn auto_download_nginx_source() -> io::Result<PathBuf> {
 /// Priority:
 /// 1. NGX_VERSION or NGINX_VERSION environment variable (for cargo publish, CI, etc.)
 /// 2. System nginx binary (nginx -v command)
-/// 3. Default fallback version (1.28.0) if neither is available
+/// 3. Default fallback version (1.22.0) if neither is available
 fn detect_nginx_version() -> io::Result<String> {
     // Priority 1: Check environment variables (useful for cargo publish, CI, etc.)
     if let Ok(version) = env::var("NGX_VERSION") {
@@ -981,10 +981,10 @@ fn detect_nginx_version() -> io::Result<String> {
 
     // Priority 3: Fallback to default version when nginx command is not available
     // This is useful for cargo publish verification where nginx may not be installed
-    // Default to a recent stable version that matches nginx-src vendored version
-    eprintln!("cargo:warning=nginx command not found and no NGX_VERSION/Nginx_VERSION set, using default version 1.28.0");
+    // Default to nginx 1.22.0 (a stable version)
+    eprintln!("cargo:warning=nginx command not found and no NGX_VERSION/Nginx_VERSION set, using default version 1.22.0");
     eprintln!("cargo:warning=To specify a version, set NGX_VERSION environment variable (e.g., export NGX_VERSION=1.29.0)");
-    Ok("1.28.0".to_string())
+    Ok("1.22.0".to_string())
 }
 
 /// Extract version number from nginx version string.
