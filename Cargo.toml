@@ -21,15 +21,16 @@ serde_json = "1.0"
 rust_decimal = "1.36"
 serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "1.0", features = ["rt", "rt-multi-thread"] }
-ngx = "0.5"
+ngx = { version = "0.5", default-features = false }
 prometheus = "0.14"
 log = "0.4"
 
 [features]
 default = []
-# Note: We don't use ngx's vendored feature anymore.
-# Instead, we implement our own vendored-like functionality in build scripts
-# that automatically detects system nginx version and downloads matching source.
+# vendored: Enable ngx's vendored feature for crates.io publishing
+# This downloads a default nginx version and is mainly for package verification.
+# For production builds, use the automatic detection (default) or set NGINX_SOURCE_DIR.
+vendored = ["ngx/vendored"]
 integration-test = []  # Feature for integration tests (requires Docker)
 
 [dev-dependencies]
