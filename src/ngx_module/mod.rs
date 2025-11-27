@@ -39,7 +39,7 @@ pub mod runtime;
 // Re-export public types and functions
 pub use config::{FacilitatorFallback, ParsedX402Config, X402Config};
 pub use error::{user_errors, ConfigError, Result};
-pub use handler::{x402_handler_impl, x402_metrics_handler_impl, x402_ngx_handler_impl};
+pub use handler::{x402_handler_impl, x402_metrics_handler_impl, x402_ngx_handler_impl, HandlerResult};
 pub use logging::{log_debug, log_error, log_info, log_warn};
 pub use metrics::{collect_metrics, X402Metrics};
 pub use module::{get_module_config, ngx_http_x402_module};
@@ -184,17 +184,23 @@ pub unsafe extern "C" fn x402_phase_handler(
 
     // Module is enabled - perform payment verification
     // This will verify payment and send 402 if needed, or allow request to proceed
-    match x402_ngx_handler_impl(req_mut) {
-        ngx::core::Status::NGX_OK => {
-            // Payment verified or module passed through - allow request to continue
+    use crate::ngx_module::handler::HandlerResult;
+    let (status, result) = x402_ngx_handler_impl(req_mut);
+    match (status, result) {
+        (ngx::core::Status::NGX_OK, HandlerResult::PaymentValid) => {
+            // Payment verified - allow request to continue
             // This will proceed to CONTENT_PHASE where proxy_pass handler will run
             ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t
         }
-        ngx::core::Status::NGX_DECLINED => {
-            // Handler declined - should not happen, but allow request to continue
-            ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t
+        (ngx::core::Status::NGX_DECLINED, HandlerResult::ResponseSent) => {
+            // Response was sent (402 or error) - stop processing
+            // Return OK to indicate we handled the request and prevent further processing
+            // This prevents proxy_pass from executing
+            // Note: In nginx, when a response is sent in ACCESS_PHASE, returning NGX_OK
+            // tells nginx that we've handled the request and it should not proceed to CONTENT_PHASE
+            ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t
         }
-        ngx::core::Status::NGX_ERROR => {
+        (ngx::core::Status::NGX_ERROR, _) => {
             // Error occurred during payment verification
             // The handler should have sent an appropriate response (402 or 500)
             // Return OK to indicate we handled the request and prevent further processing
@@ -226,7 +232,8 @@ pub unsafe extern "C" fn x402_ngx_handler(
     let req_ptr: *mut ngx::http::Request = mem::transmute(r);
     let req_mut = &mut *req_ptr;
 
-    match x402_ngx_handler_impl(req_mut) {
+    let (status, _result) = x402_ngx_handler_impl(req_mut);
+    match status {
         ngx::core::Status::NGX_OK => ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t,
         ngx::core::Status::NGX_ERROR => ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t,
         ngx::core::Status::NGX_DECLINED => ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t,
