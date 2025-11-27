@@ -194,7 +194,32 @@ pub unsafe extern "C" fn x402_phase_handler(
     match (status, result) {
         (ngx::core::Status::NGX_OK, HandlerResult::PaymentValid) => {
             // Payment verified - allow request to continue
-            // This will proceed to CONTENT_PHASE where proxy_pass handler will run
+            // If content handler is x402_ngx_handler (no proxy_pass), clear it to prevent
+            // duplicate payment verification in CONTENT_PHASE. If content handler is something
+            // else (like proxy_pass), keep it so it runs in CONTENT_PHASE.
+            unsafe {
+                use ngx::ffi::ngx_http_request_t;
+                let r_raw = r as *mut ngx_http_request_t;
+                if !r_raw.is_null() {
+                    extern "C" {
+                        fn x402_ngx_handler(r: *mut ngx::ffi::ngx_http_request_t) -> ngx::ffi::ngx_int_t;
+                    }
+                    let x402_handler_fn: ngx::ffi::ngx_http_handler_pt = Some(x402_ngx_handler);
+                    let current_handler = (*r_raw).content_handler;
+                    
+                    // Check if content handler is x402_ngx_handler
+                    if current_handler == x402_handler_fn {
+                        // Clear content handler to prevent duplicate verification
+                        // Payment was already verified in ACCESS_PHASE
+                        (*r_raw).content_handler = None;
+                        log_debug(
+                            Some(req_mut),
+                            "[x402] Phase handler: Payment verified, cleared x402 content handler to prevent duplicate verification",
+                        );
+                    }
+                }
+            }
+            // This will proceed to CONTENT_PHASE where proxy_pass handler will run (if set)
             ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t
         }
         (ngx::core::Status::NGX_DECLINED, HandlerResult::ResponseSent) => {
@@ -221,8 +246,14 @@ pub unsafe extern "C" fn x402_phase_handler(
 /// Main content handler C export
 ///
 /// This is the primary handler function that nginx calls when processing requests
-/// for locations where `x402 on;` is configured. It converts the raw nginx request
-/// pointer to a Rust Request object and delegates to the implementation function.
+/// for locations where `x402 on;` is configured WITHOUT proxy_pass.
+///
+/// **Note**: When proxy_pass is configured, payment verification happens in ACCESS_PHASE
+/// via x402_phase_handler, and this content handler should not be called (it gets cleared
+/// in phase handler to prevent duplicate verification).
+///
+/// This handler converts the raw nginx request pointer to a Rust Request object and
+/// delegates to the implementation function.
 ///
 /// # Safety
 ///
