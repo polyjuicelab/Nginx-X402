@@ -46,11 +46,11 @@ pub fn log_message(_r: Option<&Request>, level: &str, message: &str) {
 
     // Use Rust's log crate
     match level {
-        "error" => log::error!("{}", message),
-        "warn" => log::warn!("{}", message),
-        "info" => log::info!("{}", message),
-        "debug" => log::debug!("{}", message),
-        _ => log::error!("{}", message),
+        "error" => log::error!("{message}"),
+        "warn" => log::warn!("{message}"),
+        "info" => log::info!("{message}"),
+        "debug" => log::debug!("{message}"),
+        _ => log::error!("{message}"),
     }
 }
 

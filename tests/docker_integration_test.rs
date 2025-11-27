@@ -4,7 +4,7 @@
 //! Requires Docker to be installed and running.
 //!
 //! To run:
-//!   cargo test --test docker_integration_test --features integration-test
+//!   cargo test --test `docker_integration_test` --features integration-test
 //!
 //! Note: This requires the 'integration-test' feature to be enabled.
 
@@ -45,7 +45,7 @@ mod tests {
                 false
             }
             Err(e) => {
-                eprintln!("Failed to run docker build: {}", e);
+                eprintln!("Failed to run docker build: {e}");
                 false
             }
         }
@@ -61,7 +61,7 @@ mod tests {
                 "--name",
                 CONTAINER_NAME,
                 "-p",
-                &format!("{}:80", NGINX_PORT),
+                &format!("{NGINX_PORT}:80"),
                 DOCKER_IMAGE,
             ])
             .output();
@@ -84,12 +84,12 @@ mod tests {
                     thread::sleep(Duration::from_secs(2));
                     true
                 } else {
-                    eprintln!("Failed to start container: {}", stderr);
+                    eprintln!("Failed to start container: {stderr}");
                     false
                 }
             }
             Err(e) => {
-                eprintln!("Failed to run docker: {}", e);
+                eprintln!("Failed to run docker: {e}");
                 false
             }
         }
@@ -112,7 +112,7 @@ mod tests {
                 "/dev/null",
                 "-w",
                 "%{http_code}",
-                &format!("http://localhost:{}/health", NGINX_PORT),
+                &format!("http://localhost:{NGINX_PORT}/health"),
             ])
             .output()
             .map(|output| String::from_utf8_lossy(&output.stdout).trim() == "200")
@@ -140,7 +140,7 @@ mod tests {
                 "/dev/null",
                 "-w",
                 "%{http_code}",
-                &format!("http://localhost:{}{}", NGINX_PORT, path),
+                &format!("http://localhost:{NGINX_PORT}{path}"),
             ])
             .output()
             .ok()
@@ -150,7 +150,7 @@ mod tests {
     /// Get HTTP response body
     fn http_get(path: &str) -> Option<String> {
         Command::new("curl")
-            .args(["-s", &format!("http://localhost:{}{}", NGINX_PORT, path)])
+            .args(["-s", &format!("http://localhost:{NGINX_PORT}{path}")])
             .output()
             .ok()
             .map(|output| String::from_utf8_lossy(&output.stdout).to_string())
@@ -169,7 +169,7 @@ mod tests {
                 "ps",
                 "-a",
                 "--filter",
-                &format!("name={}", CONTAINER_NAME),
+                &format!("name={CONTAINER_NAME}"),
                 "--format",
                 "{{.Status}}",
             ])
@@ -230,7 +230,7 @@ mod tests {
 
         let status = http_request("/api/protected").expect("Failed to make HTTP request");
 
-        assert_eq!(status, "402", "Expected 402 response, got {}", status);
+        assert_eq!(status, "402", "Expected 402 response, got {status}");
     }
 
     #[test]
@@ -243,7 +243,7 @@ mod tests {
 
         let status = http_request("/health").expect("Failed to make HTTP request");
 
-        assert_eq!(status, "200", "Expected 200 response, got {}", status);
+        assert_eq!(status, "200", "Expected 200 response, got {status}");
     }
 
     #[test]
@@ -276,8 +276,7 @@ mod tests {
 
         assert_eq!(
             status, "402",
-            "Expected 402 response when no payment header provided with proxy_pass, got {}",
-            status
+            "Expected 402 response when no payment header provided with proxy_pass, got {status}"
         );
     }
 
@@ -301,7 +300,7 @@ mod tests {
                 "%{http_code}",
                 "-H",
                 "X-PAYMENT: invalid-payment-header",
-                &format!("http://localhost:{}/api/protected-proxy", NGINX_PORT),
+                &format!("http://localhost:{NGINX_PORT}/api/protected-proxy"),
             ])
             .output()
             .expect("Failed to run curl");
@@ -312,8 +311,7 @@ mod tests {
         // but NOT proxy to backend (which would return 502 Bad Gateway)
         assert!(
             status == "402" || status == "500",
-            "Expected 402 or 500 response when invalid payment provided with proxy_pass, got {}",
-            status
+            "Expected 402 or 500 response when invalid payment provided with proxy_pass, got {status}"
         );
         assert_ne!(
             status, "502",
@@ -336,8 +334,7 @@ mod tests {
 
         assert_eq!(
             status, "402",
-            "Payment verification should happen before proxy_pass. Expected 402, got {}",
-            status
+            "Payment verification should happen before proxy_pass. Expected 402, got {status}"
         );
 
         // Verify that backend was NOT called by checking that we didn't get backend response
@@ -347,8 +344,7 @@ mod tests {
             // Should not contain backend response JSON
             assert!(
                 !response_body.contains("\"status\":\"ok\"") && !response_body.contains("Backend response"),
-                "Backend should not be called when payment verification fails. Got backend response: {}",
-                response_body
+                "Backend should not be called when payment verification fails. Got backend response: {response_body}"
             );
         }
     }
@@ -380,7 +376,7 @@ mod tests {
                 "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==",
                 "-H",
                 "Sec-WebSocket-Version: 13",
-                &format!("http://localhost:{}/ws", NGINX_PORT),
+                &format!("http://localhost:{NGINX_PORT}/ws"),
             ])
             .output()
             .expect("Failed to run curl");
@@ -394,7 +390,7 @@ mod tests {
         // 4. Return 426 (Upgrade Required) - if WebSocket not supported
         // 5. Return 502 (Bad Gateway) - if backend doesn't support WebSocket
 
-        println!("WebSocket handshake status: {}", status);
+        println!("WebSocket handshake status: {status}");
 
         // WebSocket detection should skip payment verification and allow request to proceed
         // If detection works correctly, we should get 200 (backend response) or 101 (upgrade success)
@@ -405,8 +401,7 @@ mod tests {
                 || status == "402"
                 || status == "426"
                 || status == "502",
-            "Unexpected status for WebSocket handshake: {}",
-            status
+            "Unexpected status for WebSocket handshake: {status}"
         );
 
         // Verify that WebSocket detection is working: if status is 200 or 101, detection worked
@@ -435,15 +430,14 @@ mod tests {
         // This test documents current behavior
         let status = http_request("/api/subrequest-test").expect("Failed to make HTTP request");
 
-        println!("Subrequest test endpoint status (no payment): {}", status);
+        println!("Subrequest test endpoint status (no payment): {status}");
 
         // Current behavior: Should return 402 if subrequest detection doesn't work
         // If subrequest detection works, it may return different status
         // Document the behavior for now
         assert!(
             status == "402" || status == "200" || status == "502",
-            "Unexpected status: {}",
-            status
+            "Unexpected status: {status}"
         );
 
         println!("Note: Subrequest detection requires r->parent != NULL check");
@@ -464,7 +458,7 @@ mod tests {
         // Test endpoint that triggers 404 and internal redirect
         let status = http_request("/api/error-test").expect("Failed to make HTTP request");
 
-        println!("Error page test status: {}", status);
+        println!("Error page test status: {status}");
 
         // Behavior depends on implementation:
         // 1. Return 402 (payment required) - payment verification runs before return
@@ -474,8 +468,7 @@ mod tests {
         // Document current behavior
         assert!(
             status == "402" || status == "404" || status == "502" || status == "200",
-            "Unexpected status for error_page test: {}",
-            status
+            "Unexpected status for error_page test: {status}"
         );
 
         // Test with payment header
@@ -488,15 +481,14 @@ mod tests {
                 "%{http_code}",
                 "-H",
                 "X-PAYMENT: invalid-payment",
-                &format!("http://localhost:{}/api/error-test", NGINX_PORT),
+                &format!("http://localhost:{NGINX_PORT}/api/error-test"),
             ])
             .output()
             .expect("Failed to run curl");
 
         let status_with_payment = String::from_utf8_lossy(&output.stdout).trim().to_string();
         println!(
-            "Error page test status (with invalid payment): {}",
-            status_with_payment
+            "Error page test status (with invalid payment): {status_with_payment}"
         );
 
         // Document behavior
@@ -505,8 +497,7 @@ mod tests {
                 || status_with_payment == "404"
                 || status_with_payment == "502"
                 || status_with_payment == "200",
-            "Unexpected status: {}",
-            status_with_payment
+            "Unexpected status: {status_with_payment}"
         );
     }
 }

@@ -164,12 +164,13 @@ pub fn get_registry() -> &'static Registry {
 }
 
 /// Collect all metrics in Prometheus text format
+#[must_use] 
 pub fn collect_metrics() -> String {
     let registry = get_registry();
     let encoder = prometheus::TextEncoder::new();
     encoder
         .encode_to_string(&registry.gather())
-        .unwrap_or_else(|e| format!("Error encoding metrics: {}", e))
+        .unwrap_or_else(|e| format!("Error encoding metrics: {e}"))
 }
 
 #[cfg(test)]

@@ -23,15 +23,13 @@ mod tests {
             let result = validate_resource_path(path);
             assert!(
                 result.is_ok(),
-                "Valid path '{}' should pass validation",
-                path
+                "Valid path '{path}' should pass validation"
             );
             let sanitized = result.unwrap();
             // Paths should start with /
             assert!(
                 sanitized.starts_with('/'),
-                "Sanitized path should start with /, got: {}",
-                sanitized
+                "Sanitized path should start with /, got: {sanitized}"
             );
         }
     }
@@ -53,14 +51,12 @@ mod tests {
             let result = validate_resource_path(path);
             assert!(
                 result.is_err(),
-                "Dangerous path '{}' should fail validation",
-                path
+                "Dangerous path '{path}' should fail validation"
             );
             let error = result.unwrap_err().to_string();
             assert!(
                 error.contains("Configuration error") || error.contains("error"),
-                "Error should indicate configuration error, got: {}",
-                error
+                "Error should indicate configuration error, got: {error}"
             );
         }
     }
@@ -73,8 +69,7 @@ mod tests {
             let result = validate_resource_path(path);
             assert!(
                 result.is_err(),
-                "Path with null byte '{}' should fail validation",
-                path
+                "Path with null byte '{path}' should fail validation"
             );
         }
     }
@@ -87,8 +82,7 @@ mod tests {
             let result = validate_resource_path(path);
             assert!(
                 result.is_err(),
-                "Empty path '{}' should fail validation",
-                path
+                "Empty path '{path}' should fail validation"
             );
         }
     }
@@ -116,12 +110,11 @@ mod tests {
 
         for (input, expected) in paths {
             let result = validate_resource_path(input);
-            assert!(result.is_ok(), "Path '{}' should be valid", input);
+            assert!(result.is_ok(), "Path '{input}' should be valid");
             let sanitized = result.unwrap();
             assert_eq!(
                 sanitized, expected,
-                "Path '{}' should be normalized to '{}', got '{}'",
-                input, expected, sanitized
+                "Path '{input}' should be normalized to '{expected}', got '{sanitized}'"
             );
         }
     }
@@ -139,8 +132,7 @@ mod tests {
             let result = validate_resource_path(path);
             assert!(
                 result.is_err(),
-                "Path with control character '{}' should fail validation",
-                path
+                "Path with control character '{path}' should fail validation"
             );
         }
     }

@@ -81,14 +81,14 @@ pub unsafe extern "C" fn x402_metrics_handler(
 
 /// Phase handler for ACCESS phase
 ///
-/// This handler is registered as a phase handler in ACCESS_PHASE (before CONTENT_PHASE).
-/// This ensures payment verification happens BEFORE proxy_pass or other content handlers
-/// set their handlers, allowing x402 to work correctly even when proxy_pass is configured.
+/// This handler is registered as a phase handler in `ACCESS_PHASE` (before `CONTENT_PHASE`).
+/// This ensures payment verification happens BEFORE `proxy_pass` or other content handlers
+/// set their handlers, allowing x402 to work correctly even when `proxy_pass` is configured.
 ///
 /// The handler:
 /// 1. Checks if the module is enabled for the current location
 /// 2. If enabled, performs payment verification
-/// 3. If payment is valid, returns NGX_OK to allow request to proceed
+/// 3. If payment is valid, returns `NGX_OK` to allow request to proceed
 /// 4. If payment is invalid or missing, sends 402 response and finalizes request
 ///
 /// # Safety
@@ -128,8 +128,8 @@ pub unsafe extern "C" fn x402_phase_handler(
     // Check for subrequest using raw request pointer
     // Subrequests have r->parent != NULL
     unsafe {
-        use ngx::ffi::ngx_http_request_t;
-        let r_raw = r as *const ngx_http_request_t;
+        
+        let r_raw = r.cast_const();
         if !r_raw.is_null() {
             let parent = (*r_raw).parent;
             if !parent.is_null() {
@@ -146,8 +146,8 @@ pub unsafe extern "C" fn x402_phase_handler(
     // Internal redirects have r->internal = 1 (unsigned flag)
     // In nginx C code, internal is a field in ngx_http_request_t structure
     unsafe {
-        use ngx::ffi::ngx_http_request_t;
-        let r_raw = r as *const ngx_http_request_t;
+        
+        let r_raw = r.cast_const();
         if !r_raw.is_null() {
             // Access internal field directly from C structure
             // internal is an unsigned integer field in ngx_http_request_t
@@ -161,7 +161,7 @@ pub unsafe extern "C" fn x402_phase_handler(
             let uri = request_struct.uri;
             if !uri.data.is_null() && uri.len > 0 {
                 // Check if URI starts with '@' which indicates named location (always internal)
-                let uri_slice = std::slice::from_raw_parts(uri.data as *const u8, uri.len.min(1));
+                let uri_slice = std::slice::from_raw_parts(uri.data.cast_const(), uri.len.min(1));
                 if uri_slice[0] == b'@' {
                     log_debug(
                         Some(req_mut),
@@ -199,7 +199,7 @@ pub unsafe extern "C" fn x402_phase_handler(
             // else (like proxy_pass), keep it so it runs in CONTENT_PHASE.
             unsafe {
                 use ngx::ffi::ngx_http_request_t;
-                let r_raw = r as *mut ngx_http_request_t;
+                let r_raw = r.cast::<ngx_http_request_t>();
                 if !r_raw.is_null() {
                     extern "C" {
                         fn x402_ngx_handler(
@@ -210,7 +210,13 @@ pub unsafe extern "C" fn x402_phase_handler(
                     let current_handler = (*r_raw).content_handler;
 
                     // Check if content handler is x402_ngx_handler
-                    if current_handler == x402_handler_fn {
+                    // Compare function pointers using std::ptr::fn_addr_eq for safety
+                    let is_x402_handler = if let (Some(current), Some(x402)) = (current_handler, x402_handler_fn) {
+                        std::ptr::fn_addr_eq(current, x402)
+                    } else {
+                        false
+                    };
+                    if is_x402_handler {
                         // Clear content handler to prevent duplicate verification
                         // Payment was already verified in ACCESS_PHASE
                         (*r_raw).content_handler = None;
@@ -248,10 +254,10 @@ pub unsafe extern "C" fn x402_phase_handler(
 /// Main content handler C export
 ///
 /// This is the primary handler function that nginx calls when processing requests
-/// for locations where `x402 on;` is configured WITHOUT proxy_pass.
+/// for locations where `x402 on;` is configured WITHOUT `proxy_pass`.
 ///
-/// **Note**: When proxy_pass is configured, payment verification happens in ACCESS_PHASE
-/// via x402_phase_handler, and this content handler should not be called (it gets cleared
+/// **Note**: When `proxy_pass` is configured, payment verification happens in `ACCESS_PHASE`
+/// via `x402_phase_handler`, and this content handler should not be called (it gets cleared
 /// in phase handler to prevent duplicate verification).
 ///
 /// This handler converts the raw nginx request pointer to a Rust Request object and

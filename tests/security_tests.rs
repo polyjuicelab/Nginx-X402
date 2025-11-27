@@ -25,8 +25,7 @@ mod tests {
             let result = validate_payment_header(payload);
             assert!(
                 result.is_ok(),
-                "Valid Base64 payload '{}' should pass validation",
-                payload
+                "Valid Base64 payload '{payload}' should pass validation"
             );
         }
     }
@@ -60,8 +59,7 @@ mod tests {
             let result = validate_payment_header(payload);
             assert!(
                 result.is_err(),
-                "Invalid Base64 payload '{}' should fail validation",
-                payload
+                "Invalid Base64 payload '{payload}' should fail validation"
             );
         }
     }
@@ -103,14 +101,14 @@ mod tests {
 
         for c in valid_base64_chars.chars() {
             let is_valid = c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=';
-            assert!(is_valid, "Character '{}' should be valid Base64", c);
+            assert!(is_valid, "Character '{c}' should be valid Base64");
         }
 
         // Test invalid characters
         let invalid_chars = "!@#$%^&*()[]{}|\\:;\"'<>?,.";
         for c in invalid_chars.chars() {
             let is_valid = c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=';
-            assert!(!is_valid, "Character '{}' should not be valid Base64", c);
+            assert!(!is_valid, "Character '{c}' should not be valid Base64");
         }
     }
 

@@ -73,14 +73,14 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<H
 
     log_debug(
         Some(r),
-        &format!("x402 handler processing request for resource: {}", resource),
+        &format!("x402 handler processing request for resource: {resource}"),
     );
 
     // Create payment requirements
     let requirements = create_requirements(config, resource).map_err(|e| {
         log_error(
             Some(r),
-            &format!("Failed to create payment requirements: {}", e),
+            &format!("Failed to create payment requirements: {e}"),
         );
         e
     })?;
@@ -113,7 +113,7 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<H
         // This ensures that invalid payment headers don't cause the request to be
         // proxied to the backend (when proxy_pass is configured)
         if let Err(e) = validate_payment_header(&payment_b64) {
-            log_warn(Some(r), &format!("Invalid payment header format: {}", e));
+            log_warn(Some(r), &format!("Invalid payment header format: {e}"));
             metrics.record_verification_failed();
             metrics.record_402_response();
             send_402_response(
@@ -149,7 +149,7 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<H
             Ok(valid) => valid,
             Err(e) => {
                 // Facilitator verification failed (network error, timeout, etc.)
-                log_error(Some(r), &format!("Facilitator verification error: {}", e));
+                log_error(Some(r), &format!("Facilitator verification error: {e}"));
                 metrics.record_facilitator_error();
                 match config.facilitator_fallback {
                     FacilitatorFallback::Error => {
@@ -219,7 +219,7 @@ pub fn x402_ngx_handler_impl(req: &mut Request) -> (Status, HandlerResult) {
     let conf = match get_module_config(req) {
         Ok(c) => c,
         Err(e) => {
-            log_error(Some(req), &format!("Failed to get module config: {}", e));
+            log_error(Some(req), &format!("Failed to get module config: {e}"));
             return (Status::NGX_ERROR, HandlerResult::Error);
         }
     };
@@ -227,7 +227,7 @@ pub fn x402_ngx_handler_impl(req: &mut Request) -> (Status, HandlerResult) {
     let parsed_config = match conf.parse() {
         Ok(c) => c,
         Err(e) => {
-            log_error(Some(req), &format!("Failed to parse config: {}", e));
+            log_error(Some(req), &format!("Failed to parse config: {e}"));
             return (Status::NGX_ERROR, HandlerResult::Error);
         }
     };
@@ -238,7 +238,7 @@ pub fn x402_ngx_handler_impl(req: &mut Request) -> (Status, HandlerResult) {
         Ok(HandlerResult::ResponseSent) => (Status::NGX_DECLINED, HandlerResult::ResponseSent),
         Ok(HandlerResult::Error) => (Status::NGX_ERROR, HandlerResult::Error),
         Err(e) => {
-            log_error(Some(req), &format!("Handler error: {}", e));
+            log_error(Some(req), &format!("Handler error: {e}"));
             (Status::NGX_ERROR, HandlerResult::Error)
         }
     }
@@ -299,7 +299,7 @@ pub fn x402_metrics_handler_impl(req: &mut Request) -> Status {
         Err(e) => {
             log_error(
                 Some(req),
-                &format!("Failed to send metrics response: {}", e),
+                &format!("Failed to send metrics response: {e}"),
             );
             Status::NGX_ERROR
         }

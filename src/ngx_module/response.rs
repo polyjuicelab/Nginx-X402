@@ -136,31 +136,24 @@ pub fn send_response_body(r: &mut Request, body: &[u8]) -> Result<()> {
     // Send header using ngx-rust's method
     // This should handle request state correctly
     let status = r.send_header();
-    match status {
-        Status::NGX_OK => {}
-        _ => {
-            // send_header failed - check if we can use alternative approach
-            // In Nginx, we can use ngx_http_send_special_response for error responses
-            // But for now, let's try to understand why it fails
-            // The issue might be that we're calling send_header from a phase handler context
-            // instead of a content handler context
-            let error_msg = format!(
-                "Failed to send header: status={:?}. Request state may be incorrect.",
-                status
-            );
-            return Err(ConfigError::from(error_msg));
-        }
+    if status == Status::NGX_OK {} else {
+        // send_header failed - check if we can use alternative approach
+        // In Nginx, we can use ngx_http_send_special_response for error responses
+        // But for now, let's try to understand why it fails
+        // The issue might be that we're calling send_header from a phase handler context
+        // instead of a content handler context
+        let error_msg = format!(
+            "Failed to send header: status={status:?}. Request state may be incorrect."
+        );
+        return Err(ConfigError::from(error_msg));
     }
 
     // Send body using output filter
     let chain_mut = unsafe { &mut *chain };
     let status = r.output_filter(chain_mut);
-    match status {
-        Status::NGX_OK => {}
-        _ => {
-            let error_msg = format!("Failed to send body: status={:?}", status);
-            return Err(ConfigError::from(error_msg));
-        }
+    if status == Status::NGX_OK {} else {
+        let error_msg = format!("Failed to send body: status={status:?}");
+        return Err(ConfigError::from(error_msg));
     }
 
     Ok(())

@@ -124,8 +124,7 @@ pub fn validate_amount(amount: Decimal) -> Result<()> {
 
     if amount > max_amount {
         return Err(X402Error::config(format!(
-            "Amount too large: maximum is {} USDC, got {}",
-            max_amount, amount
+            "Amount too large: maximum is {max_amount} USDC, got {amount}"
         )));
     }
 
@@ -133,8 +132,7 @@ pub fn validate_amount(amount: Decimal) -> Result<()> {
     let scale = amount.scale();
     if scale > 6 {
         return Err(X402Error::config(format!(
-            "Amount has too many decimal places: maximum is 6, got {}",
-            scale
+            "Amount has too many decimal places: maximum is 6, got {scale}"
         )));
     }
 
@@ -200,7 +198,7 @@ pub fn validate_resource_path(resource: &str) -> Result<String> {
     let sanitized = if normalized.starts_with('/') {
         normalized
     } else {
-        format!("/{}", normalized)
+        format!("/{normalized}")
     };
 
     Ok(sanitized)
@@ -218,6 +216,7 @@ pub fn validate_resource_path(resource: &str) -> Result<String> {
 /// # Examples
 /// - `text/html, application/json;q=0.9` -> returns 1.0 for "text/html", 0.9 for "application/json"
 /// - `*/*;q=0.8` -> returns 0.8 for any media type
+#[must_use] 
 pub fn parse_accept_priority(accept_header: &str, media_type: &str) -> f64 {
     // Split by comma and parse each media range
     for part in accept_header.split(',') {
@@ -230,7 +229,7 @@ pub fn parse_accept_priority(accept_header: &str, media_type: &str) -> f64 {
         // Check if this matches our target media type
         let matches = mime == media_type
             || (media_type == "*/*" && mime == "*/*")
-            || (mime.starts_with(media_type) && mime[media_type.len()..].starts_with("/"));
+            || (mime.starts_with(media_type) && mime[media_type.len()..].starts_with('/'));
 
         if matches {
             // Parse q-value (default to 1.0)

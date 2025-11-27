@@ -33,7 +33,7 @@ fn test_create_requirements_missing_pay_to() {
 #[test]
 fn test_create_requirements_empty_pay_to() {
     let mut config = TestConfig::new();
-    config.pay_to = Some("".to_string());
+    config.pay_to = Some(String::new());
 
     let result = create_requirements_test(&config, "/test");
     assert!(result.is_err(), "Must return error for empty pay_to");
@@ -64,7 +64,7 @@ fn test_create_requirements_whitespace_pay_to() {
 #[test]
 fn test_create_requirements_empty_resource() {
     let mut config = TestConfig::new();
-    config.resource = Some("".to_string());
+    config.resource = Some(String::new());
 
     let result = create_requirements_test(&config, "/test");
     assert!(result.is_err(), "Must return error for empty resource");

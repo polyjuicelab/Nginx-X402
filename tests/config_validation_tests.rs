@@ -38,7 +38,7 @@ mod tests {
         let bytes = c_str.as_bytes();
         ngx::ffi::ngx_str_t {
             len: bytes.len(),
-            data: bytes.as_ptr() as *mut u8,
+            data: bytes.as_ptr().cast_mut(),
         }
     }
 
@@ -86,8 +86,7 @@ mod tests {
         let error = result.err().map(|e| e.to_string()).unwrap_or_default();
         assert!(
             error.contains("Invalid Ethereum address length"),
-            "Error should mention length issue, got: {}",
-            error
+            "Error should mention length issue, got: {error}"
         );
     }
 
@@ -103,8 +102,7 @@ mod tests {
         assert!(
             error.contains("must start with 0x")
                 || error.contains("Invalid Ethereum address length"),
-            "Error should mention 0x prefix or length issue, got: {}",
-            error
+            "Error should mention 0x prefix or length issue, got: {error}"
         );
     }
 
@@ -122,8 +120,7 @@ mod tests {
         let error = result.err().map(|e| e.to_string()).unwrap_or_default();
         assert!(
             error.contains("invalid characters") || error.contains("must be hex"),
-            "Error should mention invalid characters, got: {}",
-            error
+            "Error should mention invalid characters, got: {error}"
         );
     }
 
@@ -181,8 +178,7 @@ mod tests {
         let error = result.err().map(|e| e.to_string()).unwrap_or_default();
         assert!(
             error.contains("http://") || error.contains("https://"),
-            "Error should mention URL scheme, got: {}",
-            error
+            "Error should mention URL scheme, got: {error}"
         );
     }
 
@@ -196,8 +192,7 @@ mod tests {
         let error = result.err().map(|e| e.to_string()).unwrap_or_default();
         assert!(
             error.contains("too short"),
-            "Error should mention URL length, got: {}",
-            error
+            "Error should mention URL length, got: {error}"
         );
     }
 
@@ -211,8 +206,7 @@ mod tests {
         let error = result.err().map(|e| e.to_string()).unwrap_or_default();
         assert!(
             error.contains("whitespace") || error.contains("invalid"),
-            "Error should mention whitespace, got: {}",
-            error
+            "Error should mention whitespace, got: {error}"
         );
     }
 
@@ -249,14 +243,12 @@ mod tests {
         let error = result.err().map(|e| e.to_string()).unwrap_or_default();
         assert!(
             error.contains("Unsupported network") || error.contains("unsupported-network"),
-            "Error should mention unsupported network, got: {}",
-            error
+            "Error should mention unsupported network, got: {error}"
         );
         // Error should list supported networks
         assert!(
             error.contains("base-sepolia") || error.contains("base"),
-            "Error should list supported networks, got: {}",
-            error
+            "Error should list supported networks, got: {error}"
         );
     }
 
@@ -270,8 +262,7 @@ mod tests {
             let result = config.parse();
             assert!(
                 result.is_ok(),
-                "Supported network '{}' should parse successfully",
-                network
+                "Supported network '{network}' should parse successfully"
             );
         }
     }
@@ -308,8 +299,7 @@ mod tests {
         let error = result.err().map(|e| e.to_string()).unwrap_or_default();
         assert!(
             error.contains("negative") || error.contains("cannot be negative"),
-            "Error should mention negative amount, got: {}",
-            error
+            "Error should mention negative amount, got: {error}"
         );
     }
 
@@ -324,8 +314,7 @@ mod tests {
         let error = result.err().map(|e| e.to_string()).unwrap_or_default();
         assert!(
             error.contains("too large") || error.contains("maximum"),
-            "Error should mention amount limit, got: {}",
-            error
+            "Error should mention amount limit, got: {error}"
         );
     }
 
@@ -353,8 +342,7 @@ mod tests {
         let error = result.err().map(|e| e.to_string()).unwrap_or_default();
         assert!(
             error.contains("decimal places") || error.contains("precision"),
-            "Error should mention decimal places, got: {}",
-            error
+            "Error should mention decimal places, got: {error}"
         );
     }
 
@@ -381,8 +369,7 @@ mod tests {
         let error = result.err().map(|e| e.to_string()).unwrap_or_default();
         assert!(
             error.contains("Invalid amount format") || error.contains("parse"),
-            "Error should mention invalid format, got: {}",
-            error
+            "Error should mention invalid format, got: {error}"
         );
     }
 
@@ -434,8 +421,7 @@ mod tests {
         let error = result.err().map(|e| e.to_string()).unwrap_or_default();
         assert!(
             error.contains("negative") || error.contains("Amount"),
-            "Should fail on first validation error, got: {}",
-            error
+            "Should fail on first validation error, got: {error}"
         );
     }
 

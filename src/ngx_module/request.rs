@@ -11,6 +11,7 @@ use ngx::http::Request;
 /// # Returns
 /// - `Some(String)` if header exists and can be read
 /// - `None` if header doesn't exist or cannot be read
+#[must_use] 
 pub fn get_header_value(r: &Request, name: &str) -> Option<String> {
     if name.trim().is_empty() {
         return None;
@@ -20,7 +21,7 @@ pub fn get_header_value(r: &Request, name: &str) -> Option<String> {
     for (key, value) in r.headers_in_iterator() {
         if let Ok(key_str) = key.to_str() {
             if key_str.eq_ignore_ascii_case(name) {
-                return value.to_str().ok().map(|s| s.to_string());
+                return value.to_str().ok().map(std::string::ToString::to_string);
             }
         }
     }
@@ -48,6 +49,7 @@ pub fn get_header_value(r: &Request, name: &str) -> Option<String> {
 /// # Returns
 /// - `true` if request appears to be from a browser
 /// - `false` if request appears to be from an API client
+#[must_use] 
 pub fn is_browser_request(r: &Request) -> bool {
     let user_agent = get_header_value(r, "User-Agent");
     let accept = get_header_value(r, "Accept");
@@ -82,7 +84,7 @@ pub fn is_browser_request(r: &Request) -> bool {
     // Use stricter matching: must contain browser identifier AND not be an API client
     let has_browser_ua = user_agent
         .as_ref()
-        .map(|ua| {
+        .is_some_and(|ua| {
             let ua_lower = ua.to_lowercase();
 
             // Check for browser identifiers
@@ -109,18 +111,16 @@ pub fn is_browser_request(r: &Request) -> bool {
                 || ua_lower.starts_with("http");
 
             has_browser && !is_api_client
-        })
-        .unwrap_or(false);
+        });
 
     // Priority 3: Check Content-Type for browser-specific types
     let is_browser_content_type = content_type
         .as_ref()
-        .map(|ct| {
+        .is_some_and(|ct| {
             let ct_lower = ct.to_lowercase();
             ct_lower.starts_with("multipart/form-data")
                 || ct_lower.starts_with("application/x-www-form-urlencoded")
-        })
-        .unwrap_or(false);
+        });
 
     // Priority 4: Check Upgrade header (WebSocket, etc.)
     let has_upgrade = upgrade.is_some();
@@ -150,6 +150,7 @@ pub fn is_browser_request(r: &Request) -> bool {
 /// # Returns
 /// - `true` if request is a WebSocket upgrade request
 /// - `false` otherwise
+#[must_use] 
 pub fn is_websocket_request(r: &Request) -> bool {
     let upgrade = get_header_value(r, "Upgrade");
     let connection = get_header_value(r, "Connection");
@@ -157,13 +158,11 @@ pub fn is_websocket_request(r: &Request) -> bool {
     // Check for WebSocket upgrade headers
     let has_upgrade = upgrade
         .as_ref()
-        .map(|u| u.to_lowercase() == "websocket")
-        .unwrap_or(false);
+        .is_some_and(|u| u.to_lowercase() == "websocket");
 
     let has_connection_upgrade = connection
         .as_ref()
-        .map(|c| c.to_lowercase().contains("upgrade"))
-        .unwrap_or(false);
+        .is_some_and(|c| c.to_lowercase().contains("upgrade"));
 
     has_upgrade && has_connection_upgrade
 }
