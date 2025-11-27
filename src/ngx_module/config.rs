@@ -66,7 +66,7 @@ impl X402Config {
                 .map_err(|_| ConfigError::from("Invalid amount string encoding"))?;
 
             let amount = Decimal::from_str(amount_str)
-                .map_err(|e| ConfigError::from(format!("Invalid amount format: {}", e)))?;
+                .map_err(|e| ConfigError::from(format!("Invalid amount format: {e}")))?;
 
             // Validate amount range and format
             crate::config::validate_amount(amount).map_err(|e| ConfigError::from(e.to_string()))?;
@@ -107,7 +107,7 @@ impl X402Config {
             None
         } else {
             let ngx_str = unsafe { NgxStr::from_ngx_str(self.description_str) };
-            ngx_str.to_str().ok().map(|s| s.to_string())
+            ngx_str.to_str().ok().map(std::string::ToString::to_string)
         };
 
         let network = if self.network_str.len == 0 {
@@ -129,7 +129,7 @@ impl X402Config {
             None
         } else {
             let ngx_str = unsafe { NgxStr::from_ngx_str(self.resource_str) };
-            ngx_str.to_str().ok().map(|s| s.to_string())
+            ngx_str.to_str().ok().map(std::string::ToString::to_string)
         };
 
         // Parse timeout (in seconds)
@@ -143,7 +143,7 @@ impl X402Config {
 
             let timeout_secs = timeout_str
                 .parse::<u64>()
-                .map_err(|e| ConfigError::from(format!("Invalid timeout format: {}", e)))?;
+                .map_err(|e| ConfigError::from(format!("Invalid timeout format: {e}")))?;
 
             // Validate timeout range (1 second to 300 seconds / 5 minutes)
             // Note: This timeout is for facilitator service requests only, not for Nginx HTTP requests.

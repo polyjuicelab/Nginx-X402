@@ -123,7 +123,6 @@ fn configure_linker_flags() {
 ///
 /// Requires nginx 1.10.0 or later (released April 2016).
 /// Returns an error if signature cannot be extracted.
-#[allow(clippy::too_many_lines)]
 fn extract_nginx_module_signature() -> io::Result<String> {
     // Priority 1: Try to extract from system nginx binary
     if let Ok(binary_path) = env::var("NGINX_BINARY_PATH") {
@@ -137,133 +136,7 @@ fn extract_nginx_module_signature() -> io::Result<String> {
                 eprintln!(
                     "cargo:warning=Successfully extracted signature from nginx binary: {binary_signature}"
                 );
-
-                // Also try to extract from source config for comparison
-                if let Ok(nginx_source_dir) = env::var("NGINX_SOURCE_DIR") {
-                    let source_dir = PathBuf::from(nginx_source_dir);
-                    let auto_config_path = source_dir.join("objs/ngx_auto_config.h");
-
-                    if auto_config_path.exists() {
-                        match fs::read_to_string(&auto_config_path) {
-                            Ok(mut config_content) => {
-                                // Also read ngx_auto_headers.h if it exists
-                                let auto_headers_path = source_dir.join("objs/ngx_auto_headers.h");
-                                if auto_headers_path.exists() {
-                                    if let Ok(headers_content) =
-                                        fs::read_to_string(&auto_headers_path)
-                                    {
-                                        config_content.push('\n');
-                                        config_content.push_str(&headers_content);
-                                    }
-                                }
-
-                                // Check autoconf.err for SO_ACCEPTFILTER availability
-                                let autoconf_err_path = source_dir.join("objs/autoconf.err");
-                                let has_so_acceptfilter = if autoconf_err_path.exists() {
-                                    if let Ok(autoconf_content) =
-                                        fs::read_to_string(&autoconf_err_path)
-                                    {
-                                        !autoconf_content.contains("'SO_ACCEPTFILTER' undeclared")
-                                            && !autoconf_content.contains("SO_ACCEPTFILTER.*error")
-                                    } else {
-                                        false
-                                    }
-                                } else {
-                                    false
-                                };
-
-                                if has_so_acceptfilter {
-                                    config_content
-                                        .push_str("\n#define SO_ACCEPTFILTER_AVAILABLE 1");
-                                } else {
-                                    config_content.push_str("\n#undef SO_ACCEPTFILTER_AVAILABLE");
-                                }
-
-                                // Try to read ngx_atomic.h for NGX_HAVE_ATOMIC_OPS
-                                let atomic_h_path = source_dir.join("src/os/unix/ngx_atomic.h");
-                                if atomic_h_path.exists() {
-                                    if let Ok(atomic_content) = fs::read_to_string(&atomic_h_path) {
-                                        for line in atomic_content.lines() {
-                                            if line
-                                                .trim()
-                                                .starts_with("#define NGX_HAVE_ATOMIC_OPS")
-                                            {
-                                                config_content.push('\n');
-                                                config_content.push_str(line.trim());
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Build signature from source config
-                                if let Some(source_signature) =
-                                    build_signature_from_config_h(&config_content)
-                                {
-                                    eprintln!(
-                                        "cargo:warning=Extracted signature from source config: {}",
-                                        source_signature
-                                    );
-
-                                    // Compare signatures
-                                    if binary_signature != source_signature {
-                                        eprintln!("cargo:warning=");
-                                        eprintln!("cargo:warning=╔══════════════════════════════════════════════════════════════════════════════╗");
-                                        eprintln!("cargo:warning=║                    ⚠️  SIGNATURE MISMATCH WARNING ⚠️                        ║");
-                                        eprintln!("cargo:warning=╠══════════════════════════════════════════════════════════════════════════════╣");
-                                        eprintln!("cargo:warning=║                                                                              ║");
-                                        eprintln!("cargo:warning=║  The signature extracted from nginx source configuration does NOT match   ║");
-                                        eprintln!("cargo:warning=║  the signature from the system nginx binary!                                 ║");
-                                        eprintln!("cargo:warning=║                                                                              ║");
-                                        let binary_sig_formatted =
-                                            format!("{:<50}", binary_signature);
-                                        let source_sig_formatted =
-                                            format!("{:<50}", source_signature);
-                                        eprintln!(
-                                            "cargo:warning=║  System nginx binary signature:  {}",
-                                            binary_sig_formatted
-                                        );
-                                        eprintln!(
-                                            "cargo:warning=║  Source config signature:        {}",
-                                            source_sig_formatted
-                                        );
-                                        eprintln!("cargo:warning=║                                                                              ║");
-                                        eprintln!("cargo:warning=║  This indicates that the nginx source configuration does not exactly match   ║");
-                                        eprintln!("cargo:warning=║  the system nginx build configuration. The module will use the system      ║");
-                                        eprintln!("cargo:warning=║  binary signature to ensure compatibility, but you should investigate why   ║");
-                                        eprintln!("cargo:warning=║  the source configuration differs.                                           ║");
-                                        eprintln!("cargo:warning=║                                                                              ║");
-                                        eprintln!("cargo:warning=║  Possible causes:                                                           ║");
-                                        eprintln!("cargo:warning=║    - Configure arguments don't match exactly                                 ║");
-                                        eprintln!("cargo:warning=║    - Different nginx version                                                 ║");
-                                        eprintln!("cargo:warning=║    - Platform-specific feature detection differences                         ║");
-                                        eprintln!("cargo:warning=║                                                                              ║");
-                                        eprintln!("cargo:warning=║  Using system binary signature to ensure module compatibility.               ║");
-                                        eprintln!("cargo:warning=╚══════════════════════════════════════════════════════════════════════════════╝");
-                                        eprintln!("cargo:warning=");
-                                    } else {
-                                        eprintln!("cargo:warning=✓ Signatures match! Source config signature matches system binary signature.");
-                                    }
-                                } else {
-                                    eprintln!("cargo:warning=Could not build signature from source config for comparison");
-                                }
-                            }
-                            Err(e) => {
-                                eprintln!(
-                                    "cargo:warning=Could not read source config for comparison: {}",
-                                    e
-                                );
-                            }
-                        }
-                    } else {
-                        eprintln!("cargo:warning=Source config file not found, skipping signature comparison");
-                    }
-                } else {
-                    eprintln!(
-                        "cargo:warning=NGINX_SOURCE_DIR not set, skipping signature comparison"
-                    );
-                }
-
+                compare_binary_with_source_signature(&binary_signature);
                 return Ok(binary_signature);
             }
             eprintln!(
@@ -278,121 +151,112 @@ fn extract_nginx_module_signature() -> io::Result<String> {
     }
 
     // Priority 2: Extract from nginx source configuration
-    // Try to get NGINX_SOURCE_DIR from environment
+    extract_signature_from_source()
+}
+
+/// Compare binary signature with source signature and emit warnings if they don't match.
+fn compare_binary_with_source_signature(binary_signature: &str) {
+    if let Ok(nginx_source_dir) = env::var("NGINX_SOURCE_DIR") {
+        let source_dir = PathBuf::from(nginx_source_dir);
+        let auto_config_path = source_dir.join("objs/ngx_auto_config.h");
+        if auto_config_path.exists() {
+            if let Ok(mut config_content) = fs::read_to_string(&auto_config_path) {
+                config_content = prepare_config_content(&source_dir, config_content);
+                if let Some(source_signature) = build_signature_from_config_h(&config_content) {
+                    eprintln!(
+                        "cargo:warning=Extracted signature from source config: {source_signature}"
+                    );
+                    if binary_signature == source_signature {
+                        eprintln!("cargo:warning=✓ Signatures match! Source config signature matches system binary signature.");
+                    } else {
+                        print_signature_mismatch_warning(binary_signature, &source_signature);
+                    }
+                } else {
+                    eprintln!(
+                        "cargo:warning=Could not build signature from source config for comparison"
+                    );
+                }
+            } else if let Err(e) = fs::read_to_string(&auto_config_path) {
+                eprintln!("cargo:warning=Could not read source config for comparison: {e}");
+            }
+        } else {
+            eprintln!("cargo:warning=Source config file not found, skipping signature comparison");
+        }
+    } else {
+        eprintln!("cargo:warning=NGINX_SOURCE_DIR not set, skipping signature comparison");
+    }
+}
+
+/// Prepare config content by reading additional files and adding defines.
+fn prepare_config_content(source_dir: &std::path::Path, mut config_content: String) -> String {
+    let auto_headers_path = source_dir.join("objs/ngx_auto_headers.h");
+    if auto_headers_path.exists() {
+        if let Ok(headers_content) = fs::read_to_string(&auto_headers_path) {
+            config_content.push('\n');
+            config_content.push_str(&headers_content);
+        }
+    }
+    let autoconf_err_path = source_dir.join("objs/autoconf.err");
+    let has_so_acceptfilter = if autoconf_err_path.exists() {
+        if let Ok(autoconf_content) = fs::read_to_string(&autoconf_err_path) {
+            !autoconf_content.contains("'SO_ACCEPTFILTER' undeclared")
+                && !autoconf_content.contains("SO_ACCEPTFILTER.*error")
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+    if has_so_acceptfilter {
+        config_content.push_str("\n#define SO_ACCEPTFILTER_AVAILABLE 1");
+    } else {
+        config_content.push_str("\n#undef SO_ACCEPTFILTER_AVAILABLE");
+    }
+    let atomic_h_path = source_dir.join("src/os/unix/ngx_atomic.h");
+    if atomic_h_path.exists() {
+        if let Ok(atomic_content) = fs::read_to_string(&atomic_h_path) {
+            for line in atomic_content.lines() {
+                if line.trim().starts_with("#define NGX_HAVE_ATOMIC_OPS") {
+                    config_content.push('\n');
+                    config_content.push_str(line.trim());
+                }
+            }
+        }
+    }
+    config_content
+}
+
+/// Extract signature from nginx source configuration.
+fn extract_signature_from_source() -> io::Result<String> {
     let nginx_source_dir = if let Ok(dir) = env::var("NGINX_SOURCE_DIR") {
         PathBuf::from(dir)
     } else {
-        // Auto-detect and download nginx source if not set
         auto_download_nginx_source().map_err(|e| {
             io::Error::other(format!(
-                "NGINX_SOURCE_DIR not set and failed to auto-download nginx source: {}",
-                e
+                "NGINX_SOURCE_DIR not set and failed to auto-download nginx source: {e}"
             ))
         })?
     };
-
-    // Verify source directory exists
     if !nginx_source_dir.exists() {
         return Err(io::Error::other(format!(
             "Nginx source directory does not exist: {}",
             nginx_source_dir.display()
         )));
     }
-
     let auto_config_path = nginx_source_dir.join("objs/ngx_auto_config.h");
-
-    // Build signature from ngx_auto_config.h
-    // This is the standard method for nginx 1.10.0+ where signature is defined
-    // via macros in src/core/ngx_module.h and built from configure-time defines
     if auto_config_path.exists() {
         match fs::read_to_string(&auto_config_path) {
             Ok(mut config_content) => {
-                // Also read ngx_auto_headers.h if it exists
-                let auto_headers_path = nginx_source_dir.join("objs/ngx_auto_headers.h");
-                if auto_headers_path.exists() {
-                    if let Ok(headers_content) = fs::read_to_string(&auto_headers_path) {
-                        config_content.push('\n');
-                        config_content.push_str(&headers_content);
-                    }
-                }
-
-                // Check autoconf.err for SO_ACCEPTFILTER availability
-                // SO_ACCEPTFILTER is BSD-specific and typically not available on Linux
-                let autoconf_err_path = nginx_source_dir.join("objs/autoconf.err");
-                let has_so_acceptfilter = if autoconf_err_path.exists() {
-                    if let Ok(autoconf_content) = fs::read_to_string(&autoconf_err_path) {
-                        // If SO_ACCEPTFILTER check failed (undeclared/error), it's not available
-                        // Check for error messages indicating SO_ACCEPTFILTER is not available
-                        !autoconf_content.contains("'SO_ACCEPTFILTER' undeclared")
-                            && !autoconf_content.contains("SO_ACCEPTFILTER.*error")
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                };
-
-                // Store SO_ACCEPTFILTER availability in config_content for later use
-                if has_so_acceptfilter {
-                    config_content.push_str("\n#define SO_ACCEPTFILTER_AVAILABLE 1");
-                } else {
-                    config_content.push_str("\n#undef SO_ACCEPTFILTER_AVAILABLE");
-                }
-
-                // Try to read ngx_atomic.h for NGX_HAVE_ATOMIC_OPS
-                // This is typically defined in src/os/unix/ngx_atomic.h based on platform capabilities
-                let atomic_h_path = nginx_source_dir.join("src/os/unix/ngx_atomic.h");
-                if atomic_h_path.exists() {
-                    if let Ok(atomic_content) = fs::read_to_string(&atomic_h_path) {
-                        // Look for NGX_HAVE_ATOMIC_OPS definition
-                        for line in atomic_content.lines() {
-                            if line.trim().starts_with("#define NGX_HAVE_ATOMIC_OPS") {
-                                config_content.push('\n');
-                                config_content.push_str(line.trim());
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                // Debug: check for required defines
-                let has_ptr_size = config_content.contains("NGX_PTR_SIZE");
-                let has_sig_atomic = config_content.contains("NGX_SIG_ATOMIC_T_SIZE");
-                let has_time_size = config_content.contains("NGX_TIME_T_SIZE");
-                let has_module_sig = config_content.contains("NGX_MODULE_SIGNATURE_1");
-
-                eprintln!("cargo:warning=ngx_auto_config.h content check:");
-                eprintln!("cargo:warning=  NGX_PTR_SIZE: {has_ptr_size}");
-                eprintln!("cargo:warning=  NGX_SIG_ATOMIC_T_SIZE: {has_sig_atomic}");
-                eprintln!("cargo:warning=  NGX_TIME_T_SIZE: {has_time_size}");
-                eprintln!("cargo:warning=  NGX_MODULE_SIGNATURE_1: {has_module_sig}");
-
-                // Try to extract feature flags - they might be in a different format
-                // Check for NGX_MODULE_SIGNATURE defines (might be numbered differently)
-                let sig_defines: Vec<&str> = config_content
-                    .lines()
-                    .filter(|l| l.contains("NGX_MODULE_SIGNATURE"))
-                    .take(5)
-                    .collect();
-                if !sig_defines.is_empty() {
-                    eprintln!("cargo:warning=Found NGX_MODULE_SIGNATURE defines:");
-                    for (i, line) in sig_defines.iter().enumerate() {
-                        eprintln!("cargo:warning=  [{}] {}", i + 1, line.trim());
-                    }
-                }
-
+                config_content = prepare_config_content(&nginx_source_dir, config_content);
+                debug_check_config_content(&config_content);
                 if let Some(signature) = build_signature_from_config_h(&config_content) {
                     eprintln!(
-                        "cargo:warning=Built module signature from ngx_auto_config.h: {}",
-                        signature
+                        "cargo:warning=Built module signature from ngx_auto_config.h: {signature}"
                     );
                     return Ok(signature);
                 }
                 eprintln!("cargo:warning=Failed to build signature from ngx_auto_config.h content");
                 eprintln!("cargo:warning=One or more required defines are missing or feature flags are empty");
-
-                // Note: We cannot use default feature flags as they may not match the actual nginx build.
-                // The signature MUST be extracted from the actual nginx source configuration.
             }
             Err(e) => {
                 eprintln!("cargo:warning=Could not read ngx_auto_config.h: {e}");
@@ -404,8 +268,6 @@ fn extract_nginx_module_signature() -> io::Result<String> {
             auto_config_path.display()
         );
     }
-
-    // No fallback - fail the build
     Err(io::Error::other(format!(
         "Failed to extract module signature from nginx source at: {}\n\
          objs/ngx_auto_config.h could not be used to extract signature.\n\
@@ -416,13 +278,66 @@ fn extract_nginx_module_signature() -> io::Result<String> {
     )))
 }
 
-/// Build signature from ngx_auto_config.h defines.
+/// Print signature mismatch warning with formatted output.
+fn print_signature_mismatch_warning(binary_signature: &str, source_signature: &str) {
+    eprintln!("cargo:warning=╔══════════════════════════════════════════════════════════════════════════════╗");
+    eprintln!("cargo:warning=║                    ⚠️  SIGNATURE MISMATCH WARNING ⚠️                        ║");
+    eprintln!("cargo:warning=╠══════════════════════════════════════════════════════════════════════════════╣");
+    eprintln!("cargo:warning=║                                                                              ║");
+    eprintln!("cargo:warning=║  The signature extracted from nginx source configuration does NOT match   ║");
+    eprintln!("cargo:warning=║  the signature from the system nginx binary!                                 ║");
+    eprintln!("cargo:warning=║                                                                              ║");
+    let binary_sig_formatted = format!("{binary_signature:<50}");
+    let source_sig_formatted = format!("{source_signature:<50}");
+    eprintln!("cargo:warning=║  System nginx binary signature:  {binary_sig_formatted}");
+    eprintln!("cargo:warning=║  Source config signature:        {source_sig_formatted}");
+    eprintln!("cargo:warning=║                                                                              ║");
+    eprintln!("cargo:warning=║  This indicates that the nginx source configuration does not exactly match   ║");
+    eprintln!("cargo:warning=║  the system nginx build configuration. The module will use the system      ║");
+    eprintln!("cargo:warning=║  binary signature to ensure compatibility, but you should investigate why   ║");
+    eprintln!("cargo:warning=║  the source configuration differs.                                           ║");
+    eprintln!("cargo:warning=║                                                                              ║");
+    eprintln!("cargo:warning=║  Possible causes:                                                           ║");
+    eprintln!("cargo:warning=║    - Configure arguments don't match exactly                                 ║");
+    eprintln!("cargo:warning=║    - Different nginx version                                                 ║");
+    eprintln!("cargo:warning=║    - Platform-specific feature detection differences                         ║");
+    eprintln!("cargo:warning=║                                                                              ║");
+    eprintln!("cargo:warning=║  Using system binary signature to ensure module compatibility.               ║");
+    eprintln!("cargo:warning=╚══════════════════════════════════════════════════════════════════════════════╝");
+    eprintln!("cargo:warning=");
+}
+
+/// Debug check for config content.
+fn debug_check_config_content(config_content: &str) {
+    let has_ptr_size = config_content.contains("NGX_PTR_SIZE");
+    let has_sig_atomic = config_content.contains("NGX_SIG_ATOMIC_T_SIZE");
+    let has_time_size = config_content.contains("NGX_TIME_T_SIZE");
+    let has_module_sig = config_content.contains("NGX_MODULE_SIGNATURE_1");
+    eprintln!("cargo:warning=ngx_auto_config.h content check:");
+    eprintln!("cargo:warning=  NGX_PTR_SIZE: {has_ptr_size}");
+    eprintln!("cargo:warning=  NGX_SIG_ATOMIC_T_SIZE: {has_sig_atomic}");
+    eprintln!("cargo:warning=  NGX_TIME_T_SIZE: {has_time_size}");
+    eprintln!("cargo:warning=  NGX_MODULE_SIGNATURE_1: {has_module_sig}");
+    let sig_defines: Vec<&str> = config_content
+        .lines()
+        .filter(|l| l.contains("NGX_MODULE_SIGNATURE"))
+        .take(5)
+        .collect();
+    if !sig_defines.is_empty() {
+        eprintln!("cargo:warning=Found NGX_MODULE_SIGNATURE defines:");
+        for (i, line) in sig_defines.iter().enumerate() {
+            eprintln!("cargo:warning=  [{i}] {}", line.trim());
+        }
+    }
+}
+
+/// Build signature from `ngx_auto_config.h` defines.
 ///
 /// Constructs signature from:
-/// - NGX_PTR_SIZE
-/// - NGX_SIG_ATOMIC_T_SIZE
-/// - NGX_TIME_T_SIZE
-/// - NGX_MODULE_SIGNATURE_1..N (feature flags)
+/// - `NGX_PTR_SIZE`
+/// - `NGX_SIG_ATOMIC_T_SIZE`
+/// - `NGX_TIME_T_SIZE`
+/// - `NGX_MODULE_SIGNATURE_1..N` (feature flags)
 ///
 /// Returns None if required values cannot be extracted (no hardcoded fallbacks).
 fn build_signature_from_config_h(content: &str) -> Option<String> {
@@ -454,17 +369,10 @@ fn build_signature_from_config_h(content: &str) -> Option<String> {
         return None;
     }
 
-    let signature = format!(
-        "{},{},{},{}",
-        ptr_size, sig_atomic_size, time_size, feature_flags
-    );
+    let signature = format!("{ptr_size},{sig_atomic_size},{time_size},{feature_flags}");
+    eprintln!("cargo:warning=Built signature from ngx_auto_config.h: {signature}");
     eprintln!(
-        "cargo:warning=Built signature from ngx_auto_config.h: {}",
-        signature
-    );
-    eprintln!(
-        "cargo:warning=  PTR_SIZE={}, SIG_ATOMIC_T_SIZE={}, TIME_T_SIZE={}",
-        ptr_size, sig_atomic_size, time_size
+        "cargo:warning=  PTR_SIZE={ptr_size}, SIG_ATOMIC_T_SIZE={sig_atomic_size}, TIME_T_SIZE={time_size}"
     );
     eprintln!(
         "cargo:warning=  Feature flags length: {} chars",
@@ -473,13 +381,13 @@ fn build_signature_from_config_h(content: &str) -> Option<String> {
     Some(signature)
 }
 
-/// Extract feature flags from NGX_MODULE_SIGNATURE_1..N defines.
+/// Extract feature flags from `NGX_MODULE_SIGNATURE_1..N` defines.
 fn extract_feature_flags(content: &str) -> String {
     let mut feature_flags = String::new();
     let mut sig_num = 1;
 
     loop {
-        let sig_name = format!("NGX_MODULE_SIGNATURE_{}", sig_num);
+        let sig_name = format!("NGX_MODULE_SIGNATURE_{sig_num}");
         match extract_define_string(content, &sig_name) {
             Some(value) => {
                 feature_flags.push_str(&value);
@@ -497,28 +405,33 @@ fn extract_feature_flags(content: &str) -> String {
     }
 }
 
-/// Build feature flags from NGX_HAVE_* defines.
+/// Build feature flags from `NGX_HAVE`_* defines.
 ///
-/// This matches the logic in src/core/ngx_module.h where NGX_MODULE_SIGNATURE_1..N
-/// are defined based on NGX_HAVE_* macros.
+/// This matches the logic in `src/core/ngx_module.h` where `NGX_MODULE_SIGNATURE_1..N`
+/// are defined based on `NGX_HAVE`_* macros.
 fn build_feature_flags_from_have_defines(content: &str) -> String {
     let mut flags = String::new();
+    flags.push_str(&build_basic_feature_flags(content));
+    flags.push_str(&build_special_feature_flags(content));
+    flags.push_str(&build_http_feature_flags(content));
+    flags
+}
 
-    // Build flags based on ngx_module.h logic
+/// Build basic feature flags (signatures 1-15).
+fn build_basic_feature_flags(content: &str) -> String {
+    let mut flags = String::new();
     // NGX_MODULE_SIGNATURE_1: NGX_HAVE_KQUEUE
     flags.push(if has_define(content, "NGX_HAVE_KQUEUE") {
         '1'
     } else {
         '0'
     });
-
     // NGX_MODULE_SIGNATURE_2: NGX_HAVE_IOCP
     flags.push(if has_define(content, "NGX_HAVE_IOCP") {
         '1'
     } else {
         '0'
     });
-
     // NGX_MODULE_SIGNATURE_3: NGX_HAVE_FILE_AIO || NGX_COMPAT
     flags.push(
         if has_define(content, "NGX_HAVE_FILE_AIO") || has_define(content, "NGX_COMPAT") {
@@ -527,7 +440,6 @@ fn build_feature_flags_from_have_defines(content: &str) -> String {
             '0'
         },
     );
-
     // NGX_MODULE_SIGNATURE_4: NGX_HAVE_SENDFILE_NODISKIO || NGX_COMPAT
     flags.push(
         if has_define(content, "NGX_HAVE_SENDFILE_NODISKIO") || has_define(content, "NGX_COMPAT") {
@@ -536,199 +448,145 @@ fn build_feature_flags_from_have_defines(content: &str) -> String {
             '0'
         },
     );
-
     // NGX_MODULE_SIGNATURE_5: NGX_HAVE_EVENTFD
     flags.push(if has_define(content, "NGX_HAVE_EVENTFD") {
         '1'
     } else {
         '0'
     });
-
     // NGX_MODULE_SIGNATURE_6: NGX_HAVE_EPOLL
     flags.push(if has_define(content, "NGX_HAVE_EPOLL") {
         '1'
     } else {
         '0'
     });
-
     // NGX_MODULE_SIGNATURE_7: NGX_HAVE_KEEPALIVE_TUNABLE
     flags.push(if has_define(content, "NGX_HAVE_KEEPALIVE_TUNABLE") {
         '1'
     } else {
         '0'
     });
-
     // NGX_MODULE_SIGNATURE_8: NGX_HAVE_INET6
     flags.push(if has_define(content, "NGX_HAVE_INET6") {
         '1'
     } else {
         '0'
     });
-
     // NGX_MODULE_SIGNATURE_9: Always "1"
     flags.push('1');
-
     // NGX_MODULE_SIGNATURE_10: Always "1"
     flags.push('1');
-
     // NGX_MODULE_SIGNATURE_11: NGX_HAVE_DEFERRED_ACCEPT && defined SO_ACCEPTFILTER
-    // Check both NGX_HAVE_DEFERRED_ACCEPT and SO_ACCEPTFILTER_AVAILABLE
-    // SO_ACCEPTFILTER_AVAILABLE is set to 1 if available, undefined otherwise
-    let sig11 = if has_define(content, "NGX_HAVE_DEFERRED_ACCEPT")
-        && has_define(content, "SO_ACCEPTFILTER_AVAILABLE")
-    {
-        '1'
-    } else {
-        '0'
-    };
-    flags.push(sig11);
-
+    flags.push(
+        if has_define(content, "NGX_HAVE_DEFERRED_ACCEPT")
+            && has_define(content, "SO_ACCEPTFILTER_AVAILABLE")
+        {
+            '1'
+        } else {
+            '0'
+        },
+    );
     // NGX_MODULE_SIGNATURE_12: Always "1"
     flags.push('1');
-
     // NGX_MODULE_SIGNATURE_13: NGX_HAVE_SETFIB
     flags.push(if has_define(content, "NGX_HAVE_SETFIB") {
         '1'
     } else {
         '0'
     });
-
     // NGX_MODULE_SIGNATURE_14: NGX_HAVE_TCP_FASTOPEN
     flags.push(if has_define(content, "NGX_HAVE_TCP_FASTOPEN") {
         '1'
     } else {
         '0'
     });
-
     // NGX_MODULE_SIGNATURE_15: NGX_HAVE_UNIX_DOMAIN
     flags.push(if has_define(content, "NGX_HAVE_UNIX_DOMAIN") {
         '1'
     } else {
         '0'
     });
+    flags
+}
 
+/// Build special feature flags (signatures 16-20) with complex logic.
+fn build_special_feature_flags(content: &str) -> String {
+    let mut flags = String::new();
     // NGX_MODULE_SIGNATURE_16: NGX_HAVE_VARIADIC_MACROS
-    // In nginx source (src/core/ngx_module.h), this is checked as:
-    // #if (NGX_HAVE_C99_VARIADIC_MACROS || NGX_HAVE_GCC_VARIADIC_MACROS)
-    //     NGX_MODULE_SIGNATURE_16 '1'
-    // #else
-    //     NGX_MODULE_SIGNATURE_16 '0'
-    // #endif
-    //
-    // However, these defines might be in ngx_auto_headers.h, not ngx_auto_config.h
-    // We need to check both files. Since we already merged ngx_auto_headers.h into content,
-    // we should check the merged content.
     let has_c99 = has_define(content, "NGX_HAVE_C99_VARIADIC_MACROS");
     let has_gcc = has_define(content, "NGX_HAVE_GCC_VARIADIC_MACROS");
     let sig16 = if has_c99 || has_gcc { '1' } else { '0' };
     flags.push(sig16);
-    eprintln!(
-        "cargo:warning=NGX_MODULE_SIGNATURE_16 (variadic macros): {} (C99: {}, GCC: {})",
-        sig16, has_c99, has_gcc
-    );
-
-    // Debug: show what defines are actually present
+    eprintln!("cargo:warning=NGX_MODULE_SIGNATURE_16 (variadic macros): {sig16} (C99: {has_c99}, GCC: {has_gcc})");
     if has_c99 || has_gcc {
         eprintln!("cargo:warning=  Found variadic macro support defines in content");
     } else {
         eprintln!(
             "cargo:warning=  No variadic macro support defines found - checking if this is correct"
         );
-        // Check if content contains any mention of variadic macros
         if content.contains("VARIADIC") {
             eprintln!("cargo:warning=  Content mentions VARIADIC but defines not found");
         }
     }
-
     // NGX_MODULE_SIGNATURE_17: Always "0"
     flags.push('0');
-
     // NGX_MODULE_SIGNATURE_18: Check nginx source to determine actual logic
-    // Different nginx versions may have different definitions
-    // Try to read from nginx source ngx_module.h if available
-    let sig18 = if let Ok(nginx_source_dir) = env::var("NGINX_SOURCE_DIR") {
-        let ngx_module_h = PathBuf::from(&nginx_source_dir).join("src/core/ngx_module.h");
-        if ngx_module_h.exists() {
-            if let Ok(module_h_content) = fs::read_to_string(&ngx_module_h) {
-                // Check if NGX_MODULE_SIGNATURE_18 is hardcoded as "0"
-                if module_h_content.contains("#define NGX_MODULE_SIGNATURE_18  \"0\"") {
-                    '0'
-                } else if module_h_content.contains("NGX_MODULE_SIGNATURE_18") {
-                    // If it's conditionally defined, check the condition
-                    // For now, default to checking NGX_QUIC || NGX_COMPAT if not hardcoded
-                    if has_define(content, "NGX_QUIC") || has_define(content, "NGX_COMPAT") {
-                        '1'
-                    } else {
-                        '0'
-                    }
-                } else {
-                    // Fallback: check NGX_QUIC || NGX_COMPAT
-                    if has_define(content, "NGX_QUIC") || has_define(content, "NGX_COMPAT") {
-                        '1'
-                    } else {
-                        '0'
-                    }
-                }
-            } else {
-                // Fallback: check NGX_QUIC || NGX_COMPAT
-                if has_define(content, "NGX_QUIC") || has_define(content, "NGX_COMPAT") {
-                    '1'
-                } else {
-                    '0'
-                }
-            }
-        } else {
-            // Fallback: check NGX_QUIC || NGX_COMPAT
-            if has_define(content, "NGX_QUIC") || has_define(content, "NGX_COMPAT") {
-                '1'
-            } else {
-                '0'
-            }
-        }
-    } else {
-        // Fallback: check NGX_QUIC || NGX_COMPAT
-        if has_define(content, "NGX_QUIC") || has_define(content, "NGX_COMPAT") {
-            '1'
-        } else {
-            '0'
-        }
-    };
-    flags.push(sig18);
-
+    flags.push(build_signature_18(content));
     // NGX_MODULE_SIGNATURE_19: NGX_HAVE_OPENAT
     flags.push(if has_define(content, "NGX_HAVE_OPENAT") {
         '1'
     } else {
         '0'
     });
-
     // NGX_MODULE_SIGNATURE_20: NGX_HAVE_ATOMIC_OPS
-    // This is defined in src/os/unix/ngx_atomic.h, not in ngx_auto_config.h
-    // We read ngx_atomic.h earlier and added it to config_content
-    // However, the define might be conditional or might not exist on all platforms
     let has_atomic_ops = has_define(content, "NGX_HAVE_ATOMIC_OPS");
     let sig20 = if has_atomic_ops { '1' } else { '0' };
     flags.push(sig20);
-    eprintln!(
-        "cargo:warning=NGX_MODULE_SIGNATURE_20 (atomic ops): {} (found in content: {})",
-        sig20, has_atomic_ops
-    );
-
-    // Debug: check if ngx_atomic.h was read
+    eprintln!("cargo:warning=NGX_MODULE_SIGNATURE_20 (atomic ops): {sig20} (found in content: {has_atomic_ops})");
     if content.contains("NGX_HAVE_ATOMIC_OPS") {
         eprintln!("cargo:warning=  NGX_HAVE_ATOMIC_OPS found in content (from ngx_atomic.h)");
     } else {
         eprintln!("cargo:warning=  NGX_HAVE_ATOMIC_OPS not found in content - atomic ops may not be available");
         eprintln!("cargo:warning=  This is normal on some platforms (e.g., older Linux kernels)");
     }
+    flags
+}
 
+/// Build signature 18 with complex logic checking nginx source.
+fn build_signature_18(content: &str) -> char {
+    if let Ok(nginx_source_dir) = env::var("NGINX_SOURCE_DIR") {
+        let ngx_module_h = PathBuf::from(&nginx_source_dir).join("src/core/ngx_module.h");
+        if ngx_module_h.exists() {
+            if let Ok(module_h_content) = fs::read_to_string(&ngx_module_h) {
+                if module_h_content.contains("#define NGX_MODULE_SIGNATURE_18  \"0\"") {
+                    return '0';
+                }
+                if module_h_content.contains("NGX_MODULE_SIGNATURE_18") {
+                    return if has_define(content, "NGX_QUIC") || has_define(content, "NGX_COMPAT") {
+                        '1'
+                    } else {
+                        '0'
+                    };
+                }
+            }
+        }
+    }
+    if has_define(content, "NGX_QUIC") || has_define(content, "NGX_COMPAT") {
+        '1'
+    } else {
+        '0'
+    }
+}
+
+/// Build HTTP-related feature flags (signatures 21-34).
+fn build_http_feature_flags(content: &str) -> String {
+    let mut flags = String::new();
     // NGX_MODULE_SIGNATURE_21: NGX_HAVE_POSIX_SEM
     flags.push(if has_define(content, "NGX_HAVE_POSIX_SEM") {
         '1'
     } else {
         '0'
     });
-
     // NGX_MODULE_SIGNATURE_22: NGX_THREADS || NGX_COMPAT
     flags.push(
         if has_define(content, "NGX_THREADS") || has_define(content, "NGX_COMPAT") {
@@ -737,14 +595,12 @@ fn build_feature_flags_from_have_defines(content: &str) -> String {
             '0'
         },
     );
-
     // NGX_MODULE_SIGNATURE_23: NGX_PCRE
     flags.push(if has_define(content, "NGX_PCRE") {
         '1'
     } else {
         '0'
     });
-
     // NGX_MODULE_SIGNATURE_24: NGX_HTTP_SSL || NGX_COMPAT
     flags.push(
         if has_define(content, "NGX_HTTP_SSL") || has_define(content, "NGX_COMPAT") {
@@ -753,69 +609,58 @@ fn build_feature_flags_from_have_defines(content: &str) -> String {
             '0'
         },
     );
-
     // NGX_MODULE_SIGNATURE_25: Always "1"
     flags.push('1');
-
     // NGX_MODULE_SIGNATURE_26: NGX_HTTP_GZIP
     flags.push(if has_define(content, "NGX_HTTP_GZIP") {
         '1'
     } else {
         '0'
     });
-
     // NGX_MODULE_SIGNATURE_27: Always "1"
     flags.push('1');
-
     // NGX_MODULE_SIGNATURE_28: NGX_HTTP_X_FORWARDED_FOR
     flags.push(if has_define(content, "NGX_HTTP_X_FORWARDED_FOR") {
         '1'
     } else {
         '0'
     });
-
     // NGX_MODULE_SIGNATURE_29: NGX_HTTP_REALIP
     flags.push(if has_define(content, "NGX_HTTP_REALIP") {
         '1'
     } else {
         '0'
     });
-
     // NGX_MODULE_SIGNATURE_30: NGX_HTTP_HEADERS
     flags.push(if has_define(content, "NGX_HTTP_HEADERS") {
         '1'
     } else {
         '0'
     });
-
     // NGX_MODULE_SIGNATURE_31: NGX_HTTP_DAV
     flags.push(if has_define(content, "NGX_HTTP_DAV") {
         '1'
     } else {
         '0'
     });
-
     // NGX_MODULE_SIGNATURE_32: NGX_HTTP_CACHE
     flags.push(if has_define(content, "NGX_HTTP_CACHE") {
         '1'
     } else {
         '0'
     });
-
     // NGX_MODULE_SIGNATURE_33: NGX_HTTP_UPSTREAM_ZONE
     flags.push(if has_define(content, "NGX_HTTP_UPSTREAM_ZONE") {
         '1'
     } else {
         '0'
     });
-
     // NGX_MODULE_SIGNATURE_34: NGX_COMPAT
     flags.push(if has_define(content, "NGX_COMPAT") {
         '1'
     } else {
         '0'
     });
-
     flags
 }
 
@@ -824,7 +669,7 @@ fn build_feature_flags_from_have_defines(content: &str) -> String {
 /// This function ensures exact matching to avoid prefix issues. For example, when checking
 /// for `NGX_HAVE_EPOLL`, it won't incorrectly match `NGX_HAVE_EPOLLEXCLUSIVE`.
 fn has_define(content: &str, name: &str) -> bool {
-    let define_pattern = format!("#define {}", name);
+    let define_pattern = format!("#define {name}");
     content.lines().any(|line| {
         let trimmed = line.trim();
         // Match "#define NAME" exactly (no value)
@@ -850,7 +695,7 @@ fn has_define(content: &str, name: &str) -> bool {
 /// This function ensures exact matching to avoid prefix issues. For example, when checking
 /// for `NGX_HAVE_EPOLL`, it won't incorrectly match `NGX_HAVE_EPOLLEXCLUSIVE`.
 fn extract_define_value(content: &str, name: &str) -> Option<u32> {
-    let define_pattern = format!("#define {}", name);
+    let define_pattern = format!("#define {name}");
 
     for line in content.lines() {
         let trimmed = line.trim();
@@ -881,7 +726,7 @@ fn extract_define_value(content: &str, name: &str) -> Option<u32> {
 /// This function ensures exact matching to avoid prefix issues. For example, when checking
 /// for `NGX_HAVE_EPOLL`, it won't incorrectly match `NGX_HAVE_EPOLLEXCLUSIVE`.
 fn extract_define_string(content: &str, name: &str) -> Option<String> {
-    let define_pattern = format!("#define {}", name);
+    let define_pattern = format!("#define {name}");
 
     for line in content.lines() {
         let trimmed = line.trim();
@@ -919,7 +764,7 @@ fn extract_define_string(content: &str, name: &str) -> Option<String> {
 /// 3. Downloads and configures nginx source if not found
 fn auto_download_nginx_source() -> io::Result<PathBuf> {
     // Detect nginx version
-    let nginx_version = detect_nginx_version()?;
+    let nginx_version = detect_nginx_version();
 
     // Check common locations for existing nginx source
     // Priority order:
@@ -928,14 +773,14 @@ fn auto_download_nginx_source() -> io::Result<PathBuf> {
     // 3. Temporary directories
     let common_paths = [
         // Debian/Ubuntu: nginx-source package
-        format!("/usr/src/nginx-{}", nginx_version),
-        format!("/usr/src/nginx/nginx-{}", nginx_version),
+        format!("/usr/src/nginx-{nginx_version}"),
+        format!("/usr/src/nginx/nginx-{nginx_version}"),
         // RedHat/CentOS: nginx source RPM
-        format!("/usr/src/redhat/BUILD/nginx-{}", nginx_version),
-        format!("/usr/src/rpm/BUILD/nginx-{}", nginx_version),
+        format!("/usr/src/redhat/BUILD/nginx-{nginx_version}"),
+        format!("/usr/src/rpm/BUILD/nginx-{nginx_version}"),
         // Common build locations
-        format!("/usr/share/nginx-{}", nginx_version),
-        format!("/tmp/nginx-{}", nginx_version),
+        format!("/usr/share/nginx-{nginx_version}"),
+        format!("/tmp/nginx-{nginx_version}"),
     ];
 
     for path_str in &common_paths {
@@ -956,24 +801,18 @@ fn auto_download_nginx_source() -> io::Result<PathBuf> {
 
 /// Detect nginx version from environment variable or system nginx binary.
 /// Priority:
-/// 1. NGX_VERSION or NGINX_VERSION environment variable (for cargo publish, CI, etc.)
+/// 1. `NGX_VERSION` or `NGINX_VERSION` environment variable (for cargo publish, CI, etc.)
 /// 2. System nginx binary (nginx -v command)
 /// 3. Default fallback version (1.22.0) if neither is available
-fn detect_nginx_version() -> io::Result<String> {
+fn detect_nginx_version() -> String {
     // Priority 1: Check environment variables (useful for cargo publish, CI, etc.)
     if let Ok(version) = env::var("NGX_VERSION") {
-        eprintln!(
-            "cargo:warning=Using nginx version from NGX_VERSION: {}",
-            version
-        );
-        return Ok(version);
+        eprintln!("cargo:warning=Using nginx version from NGX_VERSION: {version}");
+        return version;
     }
     if let Ok(version) = env::var("NGINX_VERSION") {
-        eprintln!(
-            "cargo:warning=Using nginx version from NGINX_VERSION: {}",
-            version
-        );
-        return Ok(version);
+        eprintln!("cargo:warning=Using nginx version from NGINX_VERSION: {version}");
+        return version;
     }
 
     // Priority 2: Try to get version from nginx -v command
@@ -982,11 +821,8 @@ fn detect_nginx_version() -> io::Result<String> {
 
         // Extract version from output like "nginx version: nginx/1.24.0"
         if let Some(version) = extract_version_from_string(&output_str) {
-            eprintln!(
-                "cargo:warning=Detected nginx version from system: {}",
-                version
-            );
-            return Ok(version);
+            eprintln!("cargo:warning=Detected nginx version from system: {version}");
+            return version;
         }
     }
 
@@ -995,7 +831,7 @@ fn detect_nginx_version() -> io::Result<String> {
     // Default to nginx 1.22.0 (a stable version)
     eprintln!("cargo:warning=nginx command not found and no NGX_VERSION/Nginx_VERSION set, using default version 1.22.0");
     eprintln!("cargo:warning=To specify a version, set NGX_VERSION environment variable (e.g., export NGX_VERSION=1.29.0)");
-    Ok("1.22.0".to_string())
+    "1.22.0".to_string()
 }
 
 /// Extract version number from nginx version string.
@@ -1023,9 +859,9 @@ fn extract_version_from_string(s: &str) -> Option<String> {
 /// Download and configure nginx source.
 fn download_and_configure_nginx(version: &str) -> io::Result<PathBuf> {
     let download_dir = PathBuf::from("/tmp");
-    let tarball_name = format!("nginx-{}.tar.gz", version);
+    let tarball_name = format!("nginx-{version}.tar.gz");
     let tarball_path = download_dir.join(&tarball_name);
-    let source_dir = download_dir.join(format!("nginx-{}", version));
+    let source_dir = download_dir.join(format!("nginx-{version}"));
 
     // Check if already downloaded and configured
     if source_dir.join("objs/ngx_auto_config.h").exists() {
@@ -1033,7 +869,7 @@ fn download_and_configure_nginx(version: &str) -> io::Result<PathBuf> {
     }
 
     // Download nginx source
-    let download_url = format!("https://nginx.org/download/{}", tarball_name);
+    let download_url = format!("https://nginx.org/download/{tarball_name}");
 
     // Try wget first, then curl
     let download_success = Command::new("wget")
@@ -1049,8 +885,7 @@ fn download_and_configure_nginx(version: &str) -> io::Result<PathBuf> {
 
     if !download_success {
         return Err(io::Error::other(format!(
-            "Failed to download nginx source from {}",
-            download_url
+            "Failed to download nginx source from {download_url}"
         )));
     }
 
@@ -1076,7 +911,7 @@ fn download_and_configure_nginx(version: &str) -> io::Result<PathBuf> {
 }
 
 /// Configure nginx source with minimal configuration.
-fn configure_nginx_source(source_dir: &PathBuf) -> io::Result<()> {
+fn configure_nginx_source(source_dir: &std::path::Path) -> io::Result<()> {
     // Check if already configured (e.g., in Docker build where nginx was pre-configured)
     if source_dir.join("objs/ngx_auto_config.h").exists() {
         eprintln!(
@@ -1090,10 +925,7 @@ fn configure_nginx_source(source_dir: &PathBuf) -> io::Result<()> {
     let configure_args = get_system_configure_args()
         .unwrap_or_else(|_| "--without-http_rewrite_module --with-cc-opt=-fPIC".to_string());
 
-    eprintln!(
-        "cargo:warning=Configuring nginx source with args: {}",
-        configure_args
-    );
+    eprintln!("cargo:warning=Configuring nginx source with args: {configure_args}");
 
     // Run configure with shell to properly handle quoted arguments
     // Use sh -c to ensure proper argument parsing
@@ -1111,10 +943,7 @@ fn configure_nginx_source(source_dir: &PathBuf) -> io::Result<()> {
         }
         Ok(output) => {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            eprintln!(
-                "cargo:warning=Nginx configure failed, trying fallback. Error: {}",
-                stderr
-            );
+            eprintln!("cargo:warning=Nginx configure failed, trying fallback. Error: {stderr}");
 
             // Try with parsed arguments as fallback
             let parsed_args = parse_configure_args(&configure_args);
@@ -1132,8 +961,7 @@ fn configure_nginx_source(source_dir: &PathBuf) -> io::Result<()> {
                 Ok(output) => {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     eprintln!(
-                        "cargo:warning=Parsed args configure failed, trying minimal. Error: {}",
-                        stderr
+                        "cargo:warning=Parsed args configure failed, trying minimal. Error: {stderr}"
                     );
 
                     // Try minimal configuration
@@ -1149,30 +977,24 @@ fn configure_nginx_source(source_dir: &PathBuf) -> io::Result<()> {
                         Ok(output) => {
                             let stderr = String::from_utf8_lossy(&output.stderr);
                             return Err(io::Error::other(format!(
-                                "Failed to configure nginx source: {}",
-                                stderr
+                                "Failed to configure nginx source: {stderr}"
                             )));
                         }
                         Err(e) => {
-                            return Err(io::Error::other(format!(
-                                "Failed to run configure: {}",
-                                e
-                            )));
+                            return Err(io::Error::other(format!("Failed to run configure: {e}")));
                         }
                     }
                 }
                 Err(e) => {
                     return Err(io::Error::other(format!(
-                        "Failed to run configure with parsed args: {}",
-                        e
+                        "Failed to run configure with parsed args: {e}"
                     )));
                 }
             }
         }
         Err(e) => {
             return Err(io::Error::other(format!(
-                "Failed to run configure script: {}",
-                e
+                "Failed to run configure script: {e}"
             )));
         }
     }
@@ -1234,7 +1056,7 @@ fn get_system_configure_args() -> io::Result<String> {
     let output = Command::new("nginx")
         .arg("-V")
         .output()
-        .map_err(|e| io::Error::other(format!("nginx command not found: {}", e)))?;
+        .map_err(|e| io::Error::other(format!("nginx command not found: {e}")))?;
 
     let output_str = String::from_utf8_lossy(&output.stderr);
 
@@ -1318,7 +1140,7 @@ fn clean_configure_args(args: &str) -> String {
 ///
 /// This is useful when building against system-installed nginx where we want
 /// to match the exact signature of the system nginx binary.
-fn extract_signature_from_binary(binary_path: &PathBuf) -> io::Result<String> {
+fn extract_signature_from_binary(binary_path: &std::path::Path) -> io::Result<String> {
     // Use strings command to extract signature
     let output = Command::new("strings")
         .arg(binary_path)

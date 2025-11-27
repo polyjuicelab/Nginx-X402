@@ -8,15 +8,15 @@ use ngx::http::Request;
 use std::ffi::c_char;
 use std::ptr;
 
-/// Helper function to get ngx_http_core_loc_conf_t from ngx_conf_t
+/// Helper function to get `ngx_http_core_loc_conf_t` from `ngx_conf_t`
 ///
-/// This is equivalent to ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module)
+/// This is equivalent to `ngx_http_conf_get_module_loc_conf(cf`, `ngx_http_core_module`)
 /// Returns None if not in location context or if clcf is null
 #[allow(dead_code)]
 unsafe fn get_core_loc_conf(
     cf: *mut ngx::ffi::ngx_conf_t,
 ) -> Option<*mut ngx::ffi::ngx_http_core_loc_conf_t> {
-    let ctx = (*cf).ctx as *mut ngx::ffi::ngx_http_conf_ctx_t;
+    let ctx = (*cf).ctx.cast::<ngx::ffi::ngx_http_conf_ctx_t>();
     if ctx.is_null() {
         return None;
     }
@@ -36,7 +36,7 @@ unsafe fn get_core_loc_conf(
     }
 
     // Read the pointer value
-    let clcf_void: *mut core::ffi::c_void = ptr::read(ptr_to_ptr as *const *mut core::ffi::c_void);
+    let clcf_void: *mut core::ffi::c_void = ptr::read(ptr_to_ptr.cast_const());
     if clcf_void.is_null() {
         return None;
     }
@@ -47,9 +47,9 @@ unsafe fn get_core_loc_conf(
     >(clcf_void))
 }
 
-/// Helper function to get ngx_http_core_main_conf_t from ngx_conf_t
+/// Helper function to get `ngx_http_core_main_conf_t` from `ngx_conf_t`
 ///
-/// This is equivalent to ngx_http_conf_get_module_main_conf(cf, ngx_http_core_module)
+/// This is equivalent to `ngx_http_conf_get_module_main_conf(cf`, `ngx_http_core_module`)
 unsafe fn get_core_main_conf(
     cf: *mut ngx::ffi::ngx_conf_t,
 ) -> Option<*mut ngx_http_core_main_conf_t> {
@@ -57,7 +57,7 @@ unsafe fn get_core_main_conf(
         return None;
     }
 
-    let ctx = (*cf).ctx as *mut ngx::ffi::ngx_http_conf_ctx_t;
+    let ctx = (*cf).ctx.cast::<ngx::ffi::ngx_http_conf_ctx_t>();
     if ctx.is_null() {
         return None;
     }
@@ -77,7 +77,7 @@ unsafe fn get_core_main_conf(
     }
 
     // Read the pointer value from the array
-    let cmcf_void: *mut core::ffi::c_void = ptr::read(ptr_to_ptr as *const *mut core::ffi::c_void);
+    let cmcf_void: *mut core::ffi::c_void = ptr::read(ptr_to_ptr.cast_const());
     if cmcf_void.is_null() {
         return None;
     }
@@ -116,12 +116,12 @@ unsafe extern "C" fn postconfiguration(cf: *mut ngx::ffi::ngx_conf_t) -> ngx::ff
         if access_phase_index < phases.len() {
             let access_phase = &phases[access_phase_index];
             use ngx::ffi::ngx_array_push;
-            let handlers_ptr = &access_phase.handlers as *const _ as *mut _;
+            let handlers_ptr = (&raw const access_phase.handlers).cast_mut();
             let handler_ptr = ngx_array_push(handlers_ptr);
             if handler_ptr.is_null() {
                 return ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t;
             }
-            let handler_ptr_typed = handler_ptr as *mut ngx::ffi::ngx_http_handler_pt;
+            let handler_ptr_typed = handler_ptr.cast::<ngx::ffi::ngx_http_handler_pt>();
             *handler_ptr_typed = Some(x402_phase_handler);
         } else {
             return ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t;
@@ -152,7 +152,7 @@ static mut ngx_http_x402_module_ctx: ngx::ffi::ngx_http_module_t = ngx::ffi::ngx
 /// Create location configuration
 ///
 /// This function is called by nginx when creating a new location configuration block.
-/// It allocates and initializes a new X402Config structure.
+/// It allocates and initializes a new `X402Config` structure.
 unsafe extern "C" fn create_loc_conf(cf: *mut ngx::ffi::ngx_conf_t) -> *mut core::ffi::c_void {
     use ngx::ffi::ngx_pcalloc;
     use std::mem::size_of;
@@ -177,8 +177,8 @@ unsafe extern "C" fn merge_loc_conf(
     prev: *mut core::ffi::c_void,
     conf: *mut core::ffi::c_void,
 ) -> *mut c_char {
-    let prev = prev as *mut X402Config;
-    let conf = conf as *mut X402Config;
+    let prev = prev.cast::<X402Config>();
+    let conf = conf.cast::<X402Config>();
 
     if prev.is_null() || conf.is_null() {
         return ptr::null_mut();
@@ -250,10 +250,10 @@ include!(concat!(env!("OUT_DIR"), "/module_signature.rs"));
 /// # Signature Generation
 ///
 /// The module signature is extracted from nginx source at build time via build.rs.
-/// The signature format is: "{NGX_PTR_SIZE},{NGX_SIG_ATOMIC_T_SIZE},{NGX_TIME_T_SIZE},{feature_flags}"
+/// The signature format is: "{`NGX_PTR_SIZE},{NGX_SIG_ATOMIC_T_SIZE},{NGX_TIME_T_SIZE},{feature_flags`}"
 ///
-/// The signature is built from objs/ngx_auto_config.h by extracting the necessary
-/// defines and constructing the signature according to the logic in src/core/ngx_module.h.
+/// The signature is built from `objs/ngx_auto_config.h` by extracting the necessary
+/// defines and constructing the signature according to the logic in `src/core/ngx_module.h`.
 ///
 /// Requires nginx 1.10.0 or later (released April 2016).
 /// This ensures binary compatibility with the target nginx binary by matching its exact configuration.
@@ -273,10 +273,10 @@ pub static mut ngx_http_x402_module: ngx::ffi::ngx_module_t = ngx::ffi::ngx_modu
     // The signature is built from objs/ngx_auto_config.h according to the logic in src/core/ngx_module.h
     // Requires nginx 1.10.0 or later (released April 2016)
     // This ensures binary compatibility with the target nginx binary by matching its exact configuration
-    signature: MODULE_SIGNATURE.as_ptr() as *const c_char,
-    name: c"ngx_http_x402_module".as_ptr() as *mut c_char,
+    signature: MODULE_SIGNATURE.as_ptr().cast::<c_char>(),
+    name: c"ngx_http_x402_module".as_ptr().cast_mut(),
     ctx: &raw const ngx_http_x402_module_ctx as *mut _,
-    commands: unsafe { &raw mut ngx_http_x402_commands[0] as *mut _ },
+    commands: unsafe { (&raw mut ngx_http_x402_commands[0]).cast() },
     type_: ngx::ffi::NGX_HTTP_MODULE as usize,
     init_master: None,
     init_module: None,
@@ -295,12 +295,12 @@ pub static mut ngx_http_x402_module: ngx::ffi::ngx_module_t = ngx::ffi::ngx_modu
     spare_hook7: 0,
 };
 
-/// Export ngx_modules array for dynamic module loading
+/// Export `ngx_modules` array for dynamic module loading
 ///
 /// Nginx requires this array to be exported for dynamic modules.
-/// This allows nginx to discover and load the module when using load_module.
+/// This allows nginx to discover and load the module when using `load_module`.
 ///
-/// NOTE: This should ideally use ngx::ngx_modules! macro, but we need to fix
+/// NOTE: This should ideally use `ngx::ngx_modules`! macro, but we need to fix
 /// the module structure first (commands, ctx, etc.)
 #[no_mangle]
 pub static mut ngx_modules: [*const ngx::ffi::ngx_module_t; 2] =
@@ -335,7 +335,7 @@ pub static mut ngx_module_order: [*const core::ffi::c_char; 1] = [core::ptr::nul
 /// The fallback unsafe block is only used when the safe API is unavailable.
 /// All pointer operations are validated before use:
 /// - Request pointer is checked for null
-/// - loc_conf pointer is checked for null
+/// - `loc_conf` pointer is checked for null
 /// - Configuration pointer is checked for null
 /// - Context index is validated to be within bounds (implicitly by ngx-rust)
 pub fn get_module_config(req: &Request) -> Result<X402Config> {
@@ -357,8 +357,7 @@ pub fn get_module_config(req: &Request) -> Result<X402Config> {
         // Validate context index is reasonable (should be < 256 for typical Nginx setups)
         if ctx_index >= 256 {
             return Err(ConfigError::from(format!(
-                "Invalid context index: {} (too large)",
-                ctx_index
+                "Invalid context index: {ctx_index} (too large)"
             )));
         }
 
@@ -374,8 +373,7 @@ pub fn get_module_config(req: &Request) -> Result<X402Config> {
         let conf_ptr_raw = loc_conf_raw.add(ctx_index);
         if conf_ptr_raw.is_null() {
             return Err(ConfigError::from(format!(
-                "Invalid configuration pointer at index {}: null",
-                ctx_index
+                "Invalid configuration pointer at index {ctx_index}: null"
             )));
         }
 
@@ -384,20 +382,19 @@ pub fn get_module_config(req: &Request) -> Result<X402Config> {
         let conf_ptr_void = *conf_ptr_raw;
         if conf_ptr_void.is_null() {
             return Err(ConfigError::from(format!(
-                "Configuration pointer at index {} is null",
-                ctx_index
+                "Configuration pointer at index {ctx_index} is null"
             )));
         }
 
         // Cast to our configuration type
         // Safety: We know this pointer should point to X402Config based on module registration
-        let conf_ptr = conf_ptr_void as *mut X402Config;
+        let conf_ptr = conf_ptr_void.cast::<X402Config>();
 
         // Validate the configuration structure by checking a known field offset
         // This is a basic sanity check - if the pointer is invalid, this might fail
         // Note: We can't easily validate the structure without knowing its layout,
         // but we can at least ensure the pointer is aligned and accessible
-        let _ = std::ptr::read_volatile(&(*conf_ptr).enabled);
+        let _ = std::ptr::read_volatile(&raw const (*conf_ptr).enabled);
 
         // Clone the configuration
         // Safety: We've validated that conf_ptr is non-null and points to valid memory

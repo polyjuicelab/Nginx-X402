@@ -28,8 +28,7 @@ mod tests {
             let result = validate_ethereum_address(address);
             assert!(
                 result.is_ok(),
-                "Valid address '{}' should pass validation",
-                address
+                "Valid address '{address}' should pass validation"
             );
         }
     }
@@ -62,16 +61,12 @@ mod tests {
             let result = validate_ethereum_address(address);
             assert!(
                 result.is_err(),
-                "Invalid address '{}' should fail validation",
-                address
+                "Invalid address '{address}' should fail validation"
             );
             let error = result.unwrap_err().to_string();
             assert!(
                 error.contains(expected_error),
-                "Error for '{}' should contain '{}', got: {}",
-                address,
-                expected_error,
-                error
+                "Error for '{address}' should contain '{expected_error}', got: {error}"
             );
         }
     }
@@ -87,7 +82,7 @@ mod tests {
 
         for url in valid_urls {
             let result = validate_url(url);
-            assert!(result.is_ok(), "Valid URL '{}' should pass validation", url);
+            assert!(result.is_ok(), "Valid URL '{url}' should pass validation");
         }
     }
 
@@ -107,16 +102,12 @@ mod tests {
             let result = validate_url(url);
             assert!(
                 result.is_err(),
-                "Invalid URL '{}' should fail validation",
-                url
+                "Invalid URL '{url}' should fail validation"
             );
             let error = result.unwrap_err().to_string();
             assert!(
                 error.contains(expected_error),
-                "Error for '{}' should contain '{}', got: {}",
-                url,
-                expected_error,
-                error
+                "Error for '{url}' should contain '{expected_error}', got: {error}"
             );
         }
     }
@@ -128,8 +119,7 @@ mod tests {
             let result = validate_network(network);
             assert!(
                 result.is_ok(),
-                "Supported network '{}' should pass validation",
-                network
+                "Supported network '{network}' should pass validation"
             );
         }
     }
@@ -147,16 +137,12 @@ mod tests {
             let result = validate_network(network);
             assert!(
                 result.is_err(),
-                "Unsupported network '{}' should fail validation",
-                network
+                "Unsupported network '{network}' should fail validation"
             );
             let error = result.unwrap_err().to_string();
             assert!(
                 error.contains(expected_error),
-                "Error for '{}' should contain '{}', got: {}",
-                network,
-                expected_error,
-                error
+                "Error for '{network}' should contain '{expected_error}', got: {error}"
             );
         }
     }
@@ -182,8 +168,7 @@ mod tests {
             let result = validate_amount(amount);
             assert!(
                 result.is_ok(),
-                "Valid amount '{}' should pass validation",
-                amount
+                "Valid amount '{amount}' should pass validation"
             );
         }
     }
@@ -200,14 +185,12 @@ mod tests {
             let result = validate_amount(amount);
             assert!(
                 result.is_err(),
-                "Negative amount '{}' should fail validation",
-                amount
+                "Negative amount '{amount}' should fail validation"
             );
             let error = result.unwrap_err().to_string();
             assert!(
                 error.contains("negative") || error.contains("cannot be negative"),
-                "Error should mention negative, got: {}",
-                error
+                "Error should mention negative, got: {error}"
             );
         }
     }
@@ -224,14 +207,12 @@ mod tests {
             let result = validate_amount(amount);
             assert!(
                 result.is_err(),
-                "Amount '{}' exceeding maximum should fail validation",
-                amount
+                "Amount '{amount}' exceeding maximum should fail validation"
             );
             let error = result.unwrap_err().to_string();
             assert!(
                 error.contains("too large") || error.contains("maximum"),
-                "Error should mention amount limit, got: {}",
-                error
+                "Error should mention amount limit, got: {error}"
             );
         }
     }
@@ -249,14 +230,12 @@ mod tests {
             let result = validate_amount(amount);
             assert!(
                 result.is_err(),
-                "Amount '{}' with too many decimals should fail validation",
-                amount
+                "Amount '{amount}' with too many decimals should fail validation"
             );
             let error = result.unwrap_err().to_string();
             assert!(
                 error.contains("decimal places") || error.contains("precision"),
-                "Error should mention decimal places, got: {}",
-                error
+                "Error should mention decimal places, got: {error}"
             );
         }
     }

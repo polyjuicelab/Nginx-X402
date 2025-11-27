@@ -6,7 +6,7 @@
 //! To run manually:
 //!   1. Build the module: cargo build --release
 //!   2. Set up nginx with the module loaded
-//!   3. Run: cargo test --test integration_test
+//!   3. Run: cargo test --test `integration_test`
 
 #[cfg(test)]
 mod tests {
@@ -88,8 +88,7 @@ mod tests {
         assert_eq!(
             status_code.trim(),
             "402",
-            "Expected 402, got {}",
-            status_code
+            "Expected 402, got {status_code}"
         );
     }
 
@@ -118,8 +117,7 @@ mod tests {
         assert_eq!(
             status_code.trim(),
             "200",
-            "Expected 200, got {}",
-            status_code
+            "Expected 200, got {status_code}"
         );
     }
 
@@ -170,8 +168,7 @@ mod tests {
         assert_eq!(
             status_code.trim(),
             "402",
-            "Expected 402 response when no payment header provided with proxy_pass, got {}",
-            status_code
+            "Expected 402 response when no payment header provided with proxy_pass, got {status_code}"
         );
     }
 
@@ -202,8 +199,7 @@ mod tests {
         assert_eq!(
             status_code.trim(),
             "402",
-            "Payment verification should happen before proxy_pass. Expected 402, got {}",
-            status_code
+            "Payment verification should happen before proxy_pass. Expected 402, got {status_code}"
         );
 
         // Verify that backend was NOT called by checking response body
@@ -216,8 +212,7 @@ mod tests {
         // Should not contain backend response JSON
         assert!(
             !body.contains("\"status\":\"ok\"") && !body.contains("Backend response"),
-            "Backend should not be called when payment verification fails. Got backend response: {}",
-            body
+            "Backend should not be called when payment verification fails. Got backend response: {body}"
         );
     }
 }

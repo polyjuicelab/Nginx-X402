@@ -17,7 +17,7 @@ use rust_x402::types::{networks, PaymentRequirements};
 ///
 /// # Errors
 /// - Returns error if amount is not configured
-/// - Returns error if pay_to address is not configured
+/// - Returns error if `pay_to` address is not configured
 /// - Returns error if network is not supported
 /// - Returns error if USDC info cannot be set
 pub fn create_requirements(
@@ -51,7 +51,7 @@ pub fn create_requirements(
 
     // Get USDC address for the network
     let usdc_address = networks::get_usdc_address(network)
-        .ok_or_else(|| ConfigError::from(format!("Network not supported: {}", network)))?;
+        .ok_or_else(|| ConfigError::from(format!("Network not supported: {network}")))?;
 
     // Use configured resource or fall back to provided resource
     // Validate and sanitize the resource path to prevent path traversal attacks

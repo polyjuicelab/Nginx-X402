@@ -83,8 +83,7 @@ mod tests {
 
             assert!(
                 config.timeout.is_some(),
-                "Timeout should be set for duration {:?}",
-                timeout
+                "Timeout should be set for duration {timeout:?}"
             );
             assert_eq!(
                 config.timeout.unwrap(),

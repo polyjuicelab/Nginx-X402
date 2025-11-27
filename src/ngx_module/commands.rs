@@ -58,7 +58,7 @@ unsafe fn copy_string_to_pool(cf: *mut ngx_conf_t, src: ngx_str_t) -> Option<ngx
         Ok(s) => {
             let len = s.len();
             // Allocate memory from the pool using alloc
-            let data = pool.alloc(len) as *mut u8;
+            let data = pool.alloc(len).cast::<u8>();
             if data.is_null() {
                 return None;
             }
@@ -97,7 +97,7 @@ unsafe extern "C" fn ngx_http_x402(
     _cmd: *mut ngx_command_t,
     conf: *mut core::ffi::c_void,
 ) -> *mut c_char {
-    let conf = conf as *mut X402Config;
+    let conf = conf.cast::<X402Config>();
     if conf.is_null() {
         return ptr::null_mut();
     }
@@ -109,17 +109,17 @@ unsafe extern "C" fn ngx_http_x402(
 
     // Get the second argument (value: "on" or "off")
     // elts is a pointer to an array of ngx_str_t, not an array of pointers
-    let elts = (*args).elts as *mut ngx_str_t;
+    let elts = (*args).elts.cast::<ngx_str_t>();
     let value_str = NgxStr::from_ngx_str(*elts.add(1));
 
-    match value_str.to_str().ok().map(|s| s.to_lowercase()) {
+    match value_str.to_str().ok().map(str::to_lowercase) {
         Some(ref s) if s == "on" => {
             (*conf).enabled = 1;
 
             // CRITICAL: Verify we're in location context before setting handler
             // Handler MUST be set in location context, not in server or main context
             // Check context by verifying loc_conf is available
-            let ctx = (*cf).ctx as *mut ngx::ffi::ngx_http_conf_ctx_t;
+            let ctx = (*cf).ctx.cast::<ngx::ffi::ngx_http_conf_ctx_t>();
             if ctx.is_null() {
                 // Not in HTTP context - cannot set handler
                 // This should not happen for HTTP module, but we check anyway
@@ -137,10 +137,10 @@ unsafe extern "C" fn ngx_http_x402(
                 let pool = Pool::from_ngx_pool((*cf).pool);
                 let error_msg = "\"x402\" directive is not allowed here";
                 let msg_len = error_msg.len();
-                let msg_ptr = pool.alloc(msg_len) as *mut u8;
+                let msg_ptr = pool.alloc(msg_len).cast::<u8>();
                 if !msg_ptr.is_null() {
                     ptr::copy_nonoverlapping(error_msg.as_ptr(), msg_ptr, msg_len);
-                    return msg_ptr as *mut c_char;
+                    return msg_ptr.cast::<c_char>();
                 }
                 return ptr::null_mut();
             }
@@ -155,7 +155,7 @@ unsafe extern "C" fn ngx_http_x402(
                 if !ptr_to_ptr.is_null() {
                     // Read the pointer value
                     let clcf_void: *mut core::ffi::c_void =
-                        ptr::read(ptr_to_ptr as *const *mut core::ffi::c_void);
+                        ptr::read(ptr_to_ptr.cast_const());
                     if !clcf_void.is_null() {
                         let clcf: *mut ngx_http_core_loc_conf_t = core::mem::transmute(clcf_void);
 
@@ -172,10 +172,10 @@ unsafe extern "C" fn ngx_http_x402(
                             let pool = Pool::from_ngx_pool((*cf).pool);
                             let error_msg = "failed to set x402 handler";
                             let msg_len = error_msg.len();
-                            let msg_ptr = pool.alloc(msg_len) as *mut u8;
+                            let msg_ptr = pool.alloc(msg_len).cast::<u8>();
                             if !msg_ptr.is_null() {
                                 ptr::copy_nonoverlapping(error_msg.as_ptr(), msg_ptr, msg_len);
-                                return msg_ptr as *mut c_char;
+                                return msg_ptr.cast::<c_char>();
                             }
                             return ptr::null_mut();
                         }
@@ -187,7 +187,7 @@ unsafe extern "C" fn ngx_http_x402(
             (*conf).enabled = 0;
 
             // Clear the content handler only if we're in a location context
-            let ctx = (*cf).ctx as *mut ngx::ffi::ngx_http_conf_ctx_t;
+            let ctx = (*cf).ctx.cast::<ngx::ffi::ngx_http_conf_ctx_t>();
             if !ctx.is_null() {
                 let loc_conf = (*ctx).loc_conf;
                 if !loc_conf.is_null() {
@@ -197,7 +197,7 @@ unsafe extern "C" fn ngx_http_x402(
                         if !ptr_to_ptr.is_null() {
                             // Dereference to get *mut c_void
                             let clcf_void: *mut core::ffi::c_void =
-                                ptr::read(ptr_to_ptr as *const *mut core::ffi::c_void);
+                                ptr::read(ptr_to_ptr.cast_const());
                             if !clcf_void.is_null() {
                                 let clcf: *mut ngx_http_core_loc_conf_t =
                                     core::mem::transmute(clcf_void);
@@ -217,24 +217,24 @@ unsafe extern "C" fn ngx_http_x402(
     ptr::null_mut()
 }
 
-/// Parse x402_amount directive
+/// Parse `x402_amount` directive
 unsafe extern "C" fn ngx_http_x402_amount(
     cf: *mut ngx_conf_t,
     _cmd: *mut ngx_command_t,
     conf: *mut core::ffi::c_void,
 ) -> *mut c_char {
-    let conf = conf as *mut X402Config;
+    let conf = conf.cast::<X402Config>();
     if conf.is_null() {
-        return ngx::core::NGX_CONF_ERROR as *mut c_char;
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
     }
 
     let args = (*cf).args;
     if args.is_null() || (*args).nelts < 2 {
-        return ngx::core::NGX_CONF_ERROR as *mut c_char;
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
     }
 
     // elts is a pointer to an array of ngx_str_t, not an array of pointers
-    let elts = (*args).elts as *mut ngx_str_t;
+    let elts = (*args).elts.cast::<ngx_str_t>();
     let value_str = *elts.add(1);
 
     match copy_string_to_pool(cf, value_str) {
@@ -242,31 +242,31 @@ unsafe extern "C" fn ngx_http_x402_amount(
             (*conf).amount_str = allocated_str;
         }
         None => {
-            return ngx::core::NGX_CONF_ERROR as *mut c_char;
+            return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
         }
     }
 
     ptr::null_mut()
 }
 
-/// Parse x402_pay_to directive
+/// Parse `x402_pay_to` directive
 unsafe extern "C" fn ngx_http_x402_pay_to(
     cf: *mut ngx_conf_t,
     _cmd: *mut ngx_command_t,
     conf: *mut core::ffi::c_void,
 ) -> *mut c_char {
-    let conf = conf as *mut X402Config;
+    let conf = conf.cast::<X402Config>();
     if conf.is_null() {
-        return ngx::core::NGX_CONF_ERROR as *mut c_char;
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
     }
 
     let args = (*cf).args;
     if args.is_null() || (*args).nelts < 2 {
-        return ngx::core::NGX_CONF_ERROR as *mut c_char;
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
     }
 
     // elts is a pointer to an array of ngx_str_t, not an array of pointers
-    let elts = (*args).elts as *mut ngx_str_t;
+    let elts = (*args).elts.cast::<ngx_str_t>();
     let value_str = *elts.add(1);
 
     match copy_string_to_pool(cf, value_str) {
@@ -274,31 +274,31 @@ unsafe extern "C" fn ngx_http_x402_pay_to(
             (*conf).pay_to_str = allocated_str;
         }
         None => {
-            return ngx::core::NGX_CONF_ERROR as *mut c_char;
+            return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
         }
     }
 
     ptr::null_mut()
 }
 
-/// Parse x402_facilitator_url directive
+/// Parse `x402_facilitator_url` directive
 unsafe extern "C" fn ngx_http_x402_facilitator_url(
     cf: *mut ngx_conf_t,
     _cmd: *mut ngx_command_t,
     conf: *mut core::ffi::c_void,
 ) -> *mut c_char {
-    let conf = conf as *mut X402Config;
+    let conf = conf.cast::<X402Config>();
     if conf.is_null() {
-        return ngx::core::NGX_CONF_ERROR as *mut c_char;
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
     }
 
     let args = (*cf).args;
     if args.is_null() || (*args).nelts < 2 {
-        return ngx::core::NGX_CONF_ERROR as *mut c_char;
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
     }
 
     // elts is a pointer to an array of ngx_str_t, not an array of pointers
-    let elts = (*args).elts as *mut ngx_str_t;
+    let elts = (*args).elts.cast::<ngx_str_t>();
     let value_str = *elts.add(1);
 
     match copy_string_to_pool(cf, value_str) {
@@ -306,31 +306,31 @@ unsafe extern "C" fn ngx_http_x402_facilitator_url(
             (*conf).facilitator_url_str = allocated_str;
         }
         None => {
-            return ngx::core::NGX_CONF_ERROR as *mut c_char;
+            return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
         }
     }
 
     ptr::null_mut()
 }
 
-/// Parse x402_description directive
+/// Parse `x402_description` directive
 unsafe extern "C" fn ngx_http_x402_description(
     cf: *mut ngx_conf_t,
     _cmd: *mut ngx_command_t,
     conf: *mut core::ffi::c_void,
 ) -> *mut c_char {
-    let conf = conf as *mut X402Config;
+    let conf = conf.cast::<X402Config>();
     if conf.is_null() {
-        return ngx::core::NGX_CONF_ERROR as *mut c_char;
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
     }
 
     let args = (*cf).args;
     if args.is_null() || (*args).nelts < 2 {
-        return ngx::core::NGX_CONF_ERROR as *mut c_char;
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
     }
 
     // elts is a pointer to an array of ngx_str_t, not an array of pointers
-    let elts = (*args).elts as *mut ngx_str_t;
+    let elts = (*args).elts.cast::<ngx_str_t>();
     let value_str = *elts.add(1);
 
     match copy_string_to_pool(cf, value_str) {
@@ -338,31 +338,31 @@ unsafe extern "C" fn ngx_http_x402_description(
             (*conf).description_str = allocated_str;
         }
         None => {
-            return ngx::core::NGX_CONF_ERROR as *mut c_char;
+            return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
         }
     }
 
     ptr::null_mut()
 }
 
-/// Parse x402_network directive
+/// Parse `x402_network` directive
 unsafe extern "C" fn ngx_http_x402_network(
     cf: *mut ngx_conf_t,
     _cmd: *mut ngx_command_t,
     conf: *mut core::ffi::c_void,
 ) -> *mut c_char {
-    let conf = conf as *mut X402Config;
+    let conf = conf.cast::<X402Config>();
     if conf.is_null() {
-        return ngx::core::NGX_CONF_ERROR as *mut c_char;
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
     }
 
     let args = (*cf).args;
     if args.is_null() || (*args).nelts < 2 {
-        return ngx::core::NGX_CONF_ERROR as *mut c_char;
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
     }
 
     // elts is a pointer to an array of ngx_str_t, not an array of pointers
-    let elts = (*args).elts as *mut ngx_str_t;
+    let elts = (*args).elts.cast::<ngx_str_t>();
     let value_str = *elts.add(1);
 
     match copy_string_to_pool(cf, value_str) {
@@ -370,31 +370,31 @@ unsafe extern "C" fn ngx_http_x402_network(
             (*conf).network_str = allocated_str;
         }
         None => {
-            return ngx::core::NGX_CONF_ERROR as *mut c_char;
+            return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
         }
     }
 
     ptr::null_mut()
 }
 
-/// Parse x402_resource directive
+/// Parse `x402_resource` directive
 unsafe extern "C" fn ngx_http_x402_resource(
     cf: *mut ngx_conf_t,
     _cmd: *mut ngx_command_t,
     conf: *mut core::ffi::c_void,
 ) -> *mut c_char {
-    let conf = conf as *mut X402Config;
+    let conf = conf.cast::<X402Config>();
     if conf.is_null() {
-        return ngx::core::NGX_CONF_ERROR as *mut c_char;
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
     }
 
     let args = (*cf).args;
     if args.is_null() || (*args).nelts < 2 {
-        return ngx::core::NGX_CONF_ERROR as *mut c_char;
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
     }
 
     // elts is a pointer to an array of ngx_str_t, not an array of pointers
-    let elts = (*args).elts as *mut ngx_str_t;
+    let elts = (*args).elts.cast::<ngx_str_t>();
     let value_str = *elts.add(1);
 
     match copy_string_to_pool(cf, value_str) {
@@ -402,31 +402,31 @@ unsafe extern "C" fn ngx_http_x402_resource(
             (*conf).resource_str = allocated_str;
         }
         None => {
-            return ngx::core::NGX_CONF_ERROR as *mut c_char;
+            return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
         }
     }
 
     ptr::null_mut()
 }
 
-/// Parse x402_timeout directive
+/// Parse `x402_timeout` directive
 unsafe extern "C" fn ngx_http_x402_timeout(
     cf: *mut ngx_conf_t,
     _cmd: *mut ngx_command_t,
     conf: *mut core::ffi::c_void,
 ) -> *mut c_char {
-    let conf = conf as *mut X402Config;
+    let conf = conf.cast::<X402Config>();
     if conf.is_null() {
-        return ngx::core::NGX_CONF_ERROR as *mut c_char;
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
     }
 
     let args = (*cf).args;
     if args.is_null() || (*args).nelts < 2 {
-        return ngx::core::NGX_CONF_ERROR as *mut c_char;
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
     }
 
     // elts is a pointer to an array of ngx_str_t, not an array of pointers
-    let elts = (*args).elts as *mut ngx_str_t;
+    let elts = (*args).elts.cast::<ngx_str_t>();
     let value_str = *elts.add(1);
 
     match copy_string_to_pool(cf, value_str) {
@@ -434,31 +434,31 @@ unsafe extern "C" fn ngx_http_x402_timeout(
             (*conf).timeout_str = allocated_str;
         }
         None => {
-            return ngx::core::NGX_CONF_ERROR as *mut c_char;
+            return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
         }
     }
 
     ptr::null_mut()
 }
 
-/// Parse x402_facilitator_fallback directive
+/// Parse `x402_facilitator_fallback` directive
 unsafe extern "C" fn ngx_http_x402_facilitator_fallback(
     cf: *mut ngx_conf_t,
     _cmd: *mut ngx_command_t,
     conf: *mut core::ffi::c_void,
 ) -> *mut c_char {
-    let conf = conf as *mut X402Config;
+    let conf = conf.cast::<X402Config>();
     if conf.is_null() {
-        return ngx::core::NGX_CONF_ERROR as *mut c_char;
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
     }
 
     let args = (*cf).args;
     if args.is_null() || (*args).nelts < 2 {
-        return ngx::core::NGX_CONF_ERROR as *mut c_char;
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
     }
 
     // elts is a pointer to an array of ngx_str_t, not an array of pointers
-    let elts = (*args).elts as *mut ngx_str_t;
+    let elts = (*args).elts.cast::<ngx_str_t>();
     let value_str = *elts.add(1);
 
     match copy_string_to_pool(cf, value_str) {
@@ -466,14 +466,14 @@ unsafe extern "C" fn ngx_http_x402_facilitator_fallback(
             (*conf).facilitator_fallback_str = allocated_str;
         }
         None => {
-            return ngx::core::NGX_CONF_ERROR as *mut c_char;
+            return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
         }
     }
 
     ptr::null_mut()
 }
 
-/// Parse x402_metrics directive
+/// Parse `x402_metrics` directive
 unsafe extern "C" fn ngx_http_x402_metrics(
     cf: *mut ngx_conf_t,
     _cmd: *mut ngx_command_t,
@@ -483,7 +483,7 @@ unsafe extern "C" fn ngx_http_x402_metrics(
     // Similar to how x402 on; sets the payment handler
 
     // Verify we're in location context before setting handler
-    let ctx = (*cf).ctx as *mut ngx::ffi::ngx_http_conf_ctx_t;
+    let ctx = (*cf).ctx.cast::<ngx::ffi::ngx_http_conf_ctx_t>();
     if ctx.is_null() {
         return ptr::null_mut();
     }
@@ -494,10 +494,10 @@ unsafe extern "C" fn ngx_http_x402_metrics(
         let pool = Pool::from_ngx_pool((*cf).pool);
         let error_msg = "\"x402_metrics\" directive is not allowed here";
         let msg_len = error_msg.len();
-        let msg_ptr = pool.alloc(msg_len) as *mut u8;
+        let msg_ptr = pool.alloc(msg_len).cast::<u8>();
         if !msg_ptr.is_null() {
             ptr::copy_nonoverlapping(error_msg.as_ptr(), msg_ptr, msg_len);
-            return msg_ptr as *mut c_char;
+            return msg_ptr.cast::<c_char>();
         }
         return ptr::null_mut();
     }
@@ -508,7 +508,7 @@ unsafe extern "C" fn ngx_http_x402_metrics(
         let ptr_to_ptr = loc_conf.add(core_ctx_index);
         if !ptr_to_ptr.is_null() {
             let clcf_void: *mut core::ffi::c_void =
-                ptr::read(ptr_to_ptr as *const *mut core::ffi::c_void);
+                ptr::read(ptr_to_ptr.cast_const());
             if !clcf_void.is_null() {
                 let clcf: *mut ngx_http_core_loc_conf_t = core::mem::transmute(clcf_void);
 

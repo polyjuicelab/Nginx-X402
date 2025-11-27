@@ -2,7 +2,7 @@
 //!
 //! These tests verify that the facilitator client pool works correctly,
 //! covering the fix for:
-//! - fix-3: FacilitatorClient connection pool
+//! - fix-3: `FacilitatorClient` connection pool
 
 mod tests {
 

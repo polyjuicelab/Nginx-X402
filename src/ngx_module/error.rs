@@ -26,7 +26,7 @@ impl From<String> for ConfigError {
 
 impl From<rust_x402::X402Error> for ConfigError {
     fn from(e: rust_x402::X402Error) -> Self {
-        ConfigError(format!("{}", e))
+        ConfigError(format!("{e}"))
     }
 }
 

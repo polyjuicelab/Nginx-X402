@@ -21,7 +21,7 @@ pub static FACILITATOR_CLIENTS: OnceLock<Mutex<HashMap<String, FacilitatorClient
 /// Default timeout for facilitator requests (10 seconds)
 pub const DEFAULT_FACILITATOR_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Maximum size for X-PAYMENT header (64KB to prevent DoS)
+/// Maximum size for X-PAYMENT header (64KB to prevent `DoS`)
 pub const MAX_PAYMENT_HEADER_SIZE: usize = 64 * 1024;
 
 /// Get or initialize the global tokio runtime
@@ -35,7 +35,7 @@ pub const MAX_PAYMENT_HEADER_SIZE: usize = 64 * 1024;
 pub fn get_runtime() -> Result<&'static tokio::runtime::Runtime> {
     RUNTIME.get_or_init(|| {
         tokio::runtime::Runtime::new()
-            .unwrap_or_else(|e| panic!("Failed to create tokio runtime: {}", e))
+            .unwrap_or_else(|e| panic!("Failed to create tokio runtime: {e}"))
     });
     RUNTIME
         .get()
@@ -66,14 +66,14 @@ pub fn get_facilitator_client(url: &str) -> Result<&'static FacilitatorClient> {
             // SAFETY: The client is stored in a static OnceLock, so it lives for 'static
             // We need to use unsafe to convert the reference, but the client is guaranteed
             // to live as long as the program runs.
-            return unsafe { Ok(&*(client as *const FacilitatorClient)) };
+            return unsafe { Ok(&*std::ptr::from_ref::<FacilitatorClient>(client)) };
         }
     }
 
     // Create new client
     let config = FacilitatorConfig::new(url);
     let client = FacilitatorClient::new(config)
-        .map_err(|e| ConfigError::from(format!("Failed to create facilitator client: {}", e)))?;
+        .map_err(|e| ConfigError::from(format!("Failed to create facilitator client: {e}")))?;
 
     // Store in pool
     {
@@ -89,7 +89,7 @@ pub fn get_facilitator_client(url: &str) -> Result<&'static FacilitatorClient> {
         .map_err(|_| ConfigError::from("Lock poisoned"))?;
     guard
         .get(url)
-        .map(|client| unsafe { &*(client as *const FacilitatorClient) })
+        .map(|client| unsafe { &*std::ptr::from_ref::<FacilitatorClient>(client) })
         .ok_or_else(|| ConfigError::from("Failed to retrieve facilitator client"))
 }
 
@@ -126,7 +126,7 @@ pub async fn verify_payment(
     // Parse payment payload - use generic error for users
     let payment_payload = PaymentPayload::from_base64(payment_b64).map_err(|e| {
         // Log internal error details
-        log_error(None, &format!("Failed to parse payment payload: {}", e));
+        log_error(None, &format!("Failed to parse payment payload: {e}"));
         // User gets generic error
         ConfigError::from(user_errors::INVALID_PAYMENT)
     })?;
@@ -143,14 +143,14 @@ pub async fn verify_payment(
         Ok(Ok(response)) => Ok(response.is_valid),
         Ok(Err(e)) => {
             // Verification failure - log internal details, user gets generic error
-            log_error(None, &format!("Payment verification failed: {}", e));
+            log_error(None, &format!("Payment verification failed: {e}"));
             Err(ConfigError::from(user_errors::PAYMENT_VERIFICATION_FAILED))
         }
         Err(_) => {
             // Timeout - log and return user-facing error
             log_warn(
                 None,
-                &format!("Payment verification timeout after {:?}", timeout_duration),
+                &format!("Payment verification timeout after {timeout_duration:?}"),
             );
             Err(ConfigError::from(user_errors::TIMEOUT))
         }

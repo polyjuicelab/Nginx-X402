@@ -4,7 +4,7 @@ use rust_decimal::Decimal;
 use rust_x402::types::PaymentRequirements;
 use std::str::FromStr;
 
-/// Test configuration structure that mirrors ParsedX402Config
+/// Test configuration structure that mirrors `ParsedX402Config`
 /// but doesn't depend on ngx-rust types
 #[allow(dead_code)]
 pub struct TestConfig {
@@ -39,7 +39,7 @@ impl Default for TestConfig {
     }
 }
 
-/// Helper function that mirrors create_requirements logic
+/// Helper function that mirrors `create_requirements` logic
 pub fn create_requirements_test(
     config: &TestConfig,
     resource: &str,
@@ -73,7 +73,7 @@ pub fn create_requirements_test(
     };
 
     let usdc_address = networks::get_usdc_address(network)
-        .ok_or_else(|| format!("Network not supported: {}", network))?;
+        .ok_or_else(|| format!("Network not supported: {network}"))?;
 
     // Use configured resource or fall back to provided resource
     let resource = if let Some(ref resource_url) = config.resource {
