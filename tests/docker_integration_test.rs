@@ -272,8 +272,7 @@ mod tests {
             return;
         }
 
-        let status = http_request("/api/protected-proxy")
-            .expect("Failed to make HTTP request");
+        let status = http_request("/api/protected-proxy").expect("Failed to make HTTP request");
 
         assert_eq!(
             status, "402",
@@ -333,8 +332,7 @@ mod tests {
         }
 
         // Request without payment should return 402, not reach backend
-        let status = http_request("/api/protected-proxy")
-            .expect("Failed to make HTTP request");
+        let status = http_request("/api/protected-proxy").expect("Failed to make HTTP request");
 
         assert_eq!(
             status, "402",
