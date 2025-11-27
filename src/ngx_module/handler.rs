@@ -15,6 +15,17 @@ use ngx::http::{HTTPStatus, Request};
 use rust_decimal::prelude::ToPrimitive;
 use std::time::Instant;
 
+/// Handler result indicating what action was taken
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HandlerResult {
+    /// Payment verified successfully, request should proceed
+    PaymentValid,
+    /// Response was sent (402 or error), request processing should stop
+    ResponseSent,
+    /// Error occurred during processing
+    Error,
+}
+
 /// Core payment verification handler implementation
 ///
 /// This function contains the main business logic for payment verification.
@@ -33,9 +44,10 @@ use std::time::Instant;
 ///
 /// # Returns
 ///
-/// * `Ok(())` - Request should proceed (payment valid or module disabled)
-/// * `Ok(())` - 402 response was sent (payment invalid or missing)
-/// * `Err` - Error occurred during processing
+/// * `Ok(HandlerResult::PaymentValid)` - Payment verified, request should proceed
+/// * `Ok(HandlerResult::ResponseSent)` - Response was sent (402 or error), request processing should stop
+/// * `Ok(HandlerResult::Error)` - Error occurred during processing
+/// * `Err` - Error occurred during processing (configuration error, etc.)
 ///
 /// # Errors
 ///
@@ -44,13 +56,13 @@ use std::time::Instant;
 /// * Facilitator URL is not configured
 /// * Payment verification fails (depending on fallback mode)
 /// * 402 response cannot be sent
-pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<()> {
+pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<HandlerResult> {
     // Record request metric
     let metrics = X402Metrics::get();
     metrics.record_request();
 
     if !config.enabled {
-        return Ok(()); // Module disabled, pass through
+        return Ok(HandlerResult::PaymentValid); // Module disabled, pass through
     }
 
     let resource = config
@@ -110,7 +122,7 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<(
                 config,
                 Some(user_errors::PAYMENT_VERIFICATION_FAILED),
             )?;
-            return Ok(());
+            return Ok(HandlerResult::ResponseSent);
         }
 
         // Verify payment
@@ -151,12 +163,12 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<(
                                 ConfigError::from("Failed to set Content-Type header")
                             })?;
                         send_response_body(r, b"Internal server error")?;
-                        return Ok(());
+                        return Ok(HandlerResult::ResponseSent);
                     }
                     FacilitatorFallback::Pass => {
                         // Pass through as if middleware doesn't exist
                         log_info(Some(r), "Facilitator error, passing through request");
-                        return Ok(());
+                        return Ok(HandlerResult::PaymentValid);
                     }
                 }
             }
@@ -166,7 +178,7 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<(
             // Payment valid, allow request to proceed
             log_info(Some(r), "Payment verification successful, allowing request");
             metrics.record_verification_success();
-            Ok(())
+            Ok(HandlerResult::PaymentValid)
         } else {
             // Payment invalid - send user-facing error message
             log_warn(Some(r), "Payment verification failed, sending 402 response");
@@ -178,14 +190,14 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<(
                 config,
                 Some(user_errors::PAYMENT_VERIFICATION_FAILED),
             )?;
-            Ok(())
+            Ok(HandlerResult::ResponseSent)
         }
     } else {
         // No payment header, send 402
         log_debug(Some(r), "No X-PAYMENT header found, sending 402 response");
         metrics.record_402_response();
         send_402_response(r, requirements_slice, config, None)?;
-        Ok(())
+        Ok(HandlerResult::ResponseSent)
     }
 }
 
@@ -199,15 +211,16 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<(
 ///
 /// # Returns
 ///
-/// * `Status::NGX_OK` - Handler completed successfully
+/// * `Status::NGX_OK` - Payment verified, request should proceed
+/// * `Status::NGX_DECLINED` - Response was sent (402 or error), request processing should stop
 /// * `Status::NGX_ERROR` - Error occurred (configuration error or handler failure)
-pub fn x402_ngx_handler_impl(req: &mut Request) -> Status {
+pub fn x402_ngx_handler_impl(req: &mut Request) -> (Status, HandlerResult) {
     // Get module configuration from request
     let conf = match get_module_config(req) {
         Ok(c) => c,
         Err(e) => {
             log_error(Some(req), &format!("Failed to get module config: {}", e));
-            return Status::NGX_ERROR;
+            return (Status::NGX_ERROR, HandlerResult::Error);
         }
     };
 
@@ -215,16 +228,18 @@ pub fn x402_ngx_handler_impl(req: &mut Request) -> Status {
         Ok(c) => c,
         Err(e) => {
             log_error(Some(req), &format!("Failed to parse config: {}", e));
-            return Status::NGX_ERROR;
+            return (Status::NGX_ERROR, HandlerResult::Error);
         }
     };
 
     // Call the core handler
     match x402_handler_impl(req, &parsed_config) {
-        Ok(()) => Status::NGX_OK,
+        Ok(HandlerResult::PaymentValid) => (Status::NGX_OK, HandlerResult::PaymentValid),
+        Ok(HandlerResult::ResponseSent) => (Status::NGX_DECLINED, HandlerResult::ResponseSent),
+        Ok(HandlerResult::Error) => (Status::NGX_ERROR, HandlerResult::Error),
         Err(e) => {
             log_error(Some(req), &format!("Handler error: {}", e));
-            Status::NGX_ERROR
+            (Status::NGX_ERROR, HandlerResult::Error)
         }
     }
 }
