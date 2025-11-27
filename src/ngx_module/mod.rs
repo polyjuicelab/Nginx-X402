@@ -109,7 +109,10 @@ pub unsafe extern "C" fn x402_phase_handler(
 
     // Skip payment verification for special request types
     // These requests should bypass payment verification:
-    // 1. WebSocket upgrades - long-lived connections
+    // 1. WebSocket upgrades - long-lived connections that use special HTTP Upgrade mechanism.
+    //    Payment verification would interfere with WebSocket handshake, and subsequent
+    //    WebSocket frames are not HTTP requests, so payment verification is not applicable.
+    //    Payment should be handled at application layer for WebSocket connections.
     // 2. Subrequests (auth_request, etc.) - detected via raw request pointer
     // 3. Internal redirects - detected via raw request pointer
 
