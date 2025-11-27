@@ -202,11 +202,13 @@ pub unsafe extern "C" fn x402_phase_handler(
                 let r_raw = r as *mut ngx_http_request_t;
                 if !r_raw.is_null() {
                     extern "C" {
-                        fn x402_ngx_handler(r: *mut ngx::ffi::ngx_http_request_t) -> ngx::ffi::ngx_int_t;
+                        fn x402_ngx_handler(
+                            r: *mut ngx::ffi::ngx_http_request_t,
+                        ) -> ngx::ffi::ngx_int_t;
                     }
                     let x402_handler_fn: ngx::ffi::ngx_http_handler_pt = Some(x402_ngx_handler);
                     let current_handler = (*r_raw).content_handler;
-                    
+
                     // Check if content handler is x402_ngx_handler
                     if current_handler == x402_handler_fn {
                         // Clear content handler to prevent duplicate verification
