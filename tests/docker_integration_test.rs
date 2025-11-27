@@ -400,16 +400,22 @@ mod tests {
         // If detection works correctly, we should get 200 (backend response) or 101 (upgrade success)
         // If detection fails, we might get 402 (payment required)
         assert!(
-            status == "200" || status == "101" || status == "402" || status == "426" || status == "502",
+            status == "200"
+                || status == "101"
+                || status == "402"
+                || status == "426"
+                || status == "502",
             "Unexpected status for WebSocket handshake: {}",
             status
         );
-        
+
         // Verify that WebSocket detection is working: if status is 200 or 101, detection worked
         if status == "200" || status == "101" {
             println!("✓ WebSocket detection working: payment verification skipped, request proceeded to backend");
         } else if status == "402" {
-            println!("⚠ WebSocket detection may not be working: payment verification was not skipped");
+            println!(
+                "⚠ WebSocket detection may not be working: payment verification was not skipped"
+            );
         }
     }
 
