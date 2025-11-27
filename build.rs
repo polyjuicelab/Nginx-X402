@@ -70,6 +70,25 @@ fn main() {
         std::process::exit(1);
     });
 
+    // Extract and generate nginx HTTP phase constants
+    // Phase constants MUST be extracted from nginx source to ensure correctness.
+    // No hardcoded fallback values are allowed - they could be incorrect for different nginx versions.
+    extract_and_generate_phase_constants().unwrap_or_else(|e| {
+        eprintln!("cargo:error=Failed to extract nginx HTTP phase constants");
+        eprintln!("cargo:error=Error: {e}");
+        eprintln!("cargo:error=");
+        eprintln!("cargo:error=Phase constants MUST be extracted from nginx source headers to ensure correctness.");
+        eprintln!("cargo:error=Please ensure:");
+        eprintln!("cargo:error=");
+        eprintln!("cargo:error=1. NGINX_SOURCE_DIR is set to a configured nginx source directory");
+        eprintln!("cargo:error=2. The nginx source has been configured (./configure has been run)");
+        eprintln!("cargo:error=3. src/http/ngx_http_core_module.h exists in the source directory");
+        eprintln!("cargo:error=");
+        eprintln!("cargo:error=Note: Hardcoded phase constants are not allowed - they may be incorrect");
+        eprintln!("cargo:error=      for different nginx versions or configurations.");
+        std::process::exit(1);
+    });
+
     // Configure linker flags for dynamic nginx modules
     configure_linker_flags();
 }
@@ -92,6 +111,221 @@ pub const MODULE_SIGNATURE: &[u8] = b"{signature}\0";
     fs::write(&signature_file, signature_code)?;
     println!("cargo:rerun-if-changed={}", signature_file.display());
 
+    Ok(())
+}
+
+/// Extract nginx HTTP phase constants from nginx source header file using C preprocessor.
+///
+/// Uses a C program compiled at build time to extract enum values directly from the header,
+/// ensuring we get the exact values as defined in nginx source, not hardcoded numbers.
+fn extract_and_generate_phase_constants() -> io::Result<()> {
+    let nginx_source_dir = if let Ok(dir) = env::var("NGINX_SOURCE_DIR") {
+        PathBuf::from(dir)
+    } else {
+        auto_download_nginx_source().map_err(|e| {
+            io::Error::other(format!(
+                "NGINX_SOURCE_DIR not set and failed to auto-download nginx source: {e}"
+            ))
+        })?
+    };
+
+    let core_module_h = nginx_source_dir.join("src/http/ngx_http_core_module.h");
+    if !core_module_h.exists() {
+        return Err(io::Error::other(format!(
+            "nginx core module header not found: {}",
+            core_module_h.display()
+        )));
+    }
+
+    let out_dir =
+        env::var("OUT_DIR").map_err(|e| io::Error::other(format!("OUT_DIR not set: {e}")))?;
+    let out_dir_path = PathBuf::from(&out_dir);
+
+    // Create a C program that extracts phase enum values at compile time
+    let extractor_c = out_dir_path.join("extract_phases.c");
+    let extractor_output = out_dir_path.join("extract_phases");
+
+    // Write C program that uses preprocessor to extract enum values
+    let c_program = format!(
+        r#"#include <stdio.h>
+#include "{core_module_h}"
+
+int main() {{
+    // Extract phase enum values using preprocessor
+    // These are compile-time constants from nginx source
+    printf("ACCESS_PHASE=%d\n", NGX_HTTP_ACCESS_PHASE);
+    printf("CONTENT_PHASE=%d\n", NGX_HTTP_CONTENT_PHASE);
+    return 0;
+}}
+"#,
+        core_module_h = core_module_h.display()
+    );
+
+    fs::write(&extractor_c, c_program)?;
+
+    // Compile and run the C program to extract phase values
+    let compile_status = Command::new("cc")
+        .arg("-o")
+        .arg(&extractor_output)
+        .arg(&extractor_c)
+        .arg("-I")
+        .arg(nginx_source_dir.join("src/core"))
+        .arg("-I")
+        .arg(nginx_source_dir.join("src/event"))
+        .arg("-I")
+        .arg(nginx_source_dir.join("src/event/modules"))
+        .arg("-I")
+        .arg(nginx_source_dir.join("src/os/unix"))
+        .arg("-I")
+        .arg(nginx_source_dir.join("objs"))
+        .status();
+
+    let (access_phase, content_phase) = match compile_status {
+        Ok(status) if status.success() => {
+            // Run the extractor program
+            let output = Command::new(&extractor_output).output()?;
+            if !output.status.success() {
+                return Err(io::Error::other("Failed to run phase extractor"));
+            }
+
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            let mut access_value = None;
+            let mut content_value = None;
+
+            for line in output_str.lines() {
+                if let Some(value) = line.strip_prefix("ACCESS_PHASE=") {
+                    access_value = value.parse::<usize>().ok();
+                } else if let Some(value) = line.strip_prefix("CONTENT_PHASE=") {
+                    content_value = value.parse::<usize>().ok();
+                }
+            }
+
+            (
+                access_value
+                    .ok_or_else(|| io::Error::other("Failed to extract ACCESS_PHASE value"))?,
+                content_value
+                    .ok_or_else(|| io::Error::other("Failed to extract CONTENT_PHASE value"))?,
+            )
+        }
+        _ => {
+            // Fallback: try to parse from header file directly
+            // This is less ideal but works if C compiler is not available
+            return extract_phases_from_header_file(&core_module_h, &out_dir_path);
+        }
+    };
+
+    // Generate Rust constants file with extracted values
+    let phase_file = out_dir_path.join("nginx_phases.rs");
+    let phase_code = format!(
+        r"// Auto-generated nginx HTTP phase constants
+// This file is generated by build.rs using C preprocessor to extract enum values
+// DO NOT EDIT MANUALLY - changes will be overwritten
+//
+// These values are extracted directly from nginx source headers at build time
+// using the C preprocessor, ensuring they match the exact enum values in nginx.
+
+/// Nginx HTTP phase constants extracted from nginx source
+/// These correspond to the ngx_http_phases enum in nginx
+/// Values are extracted at build time using C preprocessor, not hardcoded
+pub mod nginx_phases {{
+    /// NGX_HTTP_ACCESS_PHASE - Access control phase
+    /// Extracted from nginx source at build time: {access_phase}
+    pub const ACCESS_PHASE: usize = {access_phase};
+
+    /// NGX_HTTP_CONTENT_PHASE - Content generation phase
+    /// Extracted from nginx source at build time: {content_phase}
+    pub const CONTENT_PHASE: usize = {content_phase};
+}}
+"
+    );
+
+    fs::write(&phase_file, phase_code)?;
+    println!("cargo:rerun-if-changed={}", phase_file.display());
+    println!("cargo:rerun-if-changed={}", core_module_h.display());
+
+    Ok(())
+}
+
+/// Fallback: Extract phase constants by parsing header file directly.
+///
+/// This is used when C compiler is not available. Less ideal but functional.
+fn extract_phases_from_header_file(
+    core_module_h: &std::path::Path,
+    out_dir: &std::path::Path,
+) -> io::Result<()> {
+    let content = fs::read_to_string(core_module_h)?;
+
+    let mut phases = std::collections::HashMap::new();
+    let mut current_value = 0u32;
+    let mut in_enum = false;
+
+    for line in content.lines() {
+        let line = line.trim();
+
+        if line.contains("typedef enum") || (line.contains("enum") && line.contains('{')) {
+            in_enum = true;
+            current_value = 0;
+            continue;
+        }
+
+        if in_enum && (line.contains("} ngx_http_phases") || line.contains("} ngx_http_phases;")) {
+            break;
+        }
+
+        if in_enum && line.starts_with("NGX_HTTP_") && line.contains("_PHASE") {
+            let parts: Vec<&str> = line.split('=').collect();
+            let phase_part = parts[0].trim();
+
+            if let Some(phase_name) = phase_part.strip_prefix("NGX_HTTP_") {
+                let phase_name_clean = phase_name
+                    .trim_end_matches(',')
+                    .trim_end_matches(' ')
+                    .strip_suffix("_PHASE");
+                if let Some(phase_name_final) = phase_name_clean {
+                    if parts.len() > 1 {
+                        let value_part =
+                            parts[1].trim().trim_end_matches(',').trim_end_matches(' ');
+                        if let Ok(value) = value_part.parse::<u32>() {
+                            current_value = value;
+                        }
+                    }
+                    phases.insert(phase_name_final.to_string(), current_value);
+                    current_value += 1;
+                }
+            }
+        }
+    }
+
+    let access_phase = phases
+        .get("ACCESS")
+        .copied()
+        .ok_or_else(|| io::Error::other("ACCESS phase not found"))?;
+    let content_phase = phases
+        .get("CONTENT")
+        .copied()
+        .ok_or_else(|| io::Error::other("CONTENT phase not found"))?;
+
+    let phase_file = out_dir.join("nginx_phases.rs");
+    let phase_code = format!(
+        r"// Auto-generated nginx HTTP phase constants (parsed from header)
+// This file is generated by build.rs by parsing nginx header file
+// DO NOT EDIT MANUALLY - changes will be overwritten
+//
+// NOTE: These values were extracted by parsing the header file.
+// Ideally, values should be extracted using C preprocessor for accuracy.
+
+/// Nginx HTTP phase constants extracted from nginx source
+pub mod nginx_phases {{
+    /// NGX_HTTP_ACCESS_PHASE - Access control phase
+    pub const ACCESS_PHASE: usize = {access_phase};
+
+    /// NGX_HTTP_CONTENT_PHASE - Content generation phase
+    pub const CONTENT_PHASE: usize = {content_phase};
+}}
+"
+    );
+
+    fs::write(&phase_file, phase_code)?;
     Ok(())
 }
 

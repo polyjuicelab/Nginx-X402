@@ -221,7 +221,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "requires Docker"]
     fn test_402_response() {
         if !ensure_container_running() {
             eprintln!("Failed to start container. Skipping test.");
@@ -234,7 +234,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "requires Docker"]
     fn test_health_endpoint() {
         if !ensure_container_running() {
             eprintln!("Failed to start container. Skipping test.");
@@ -247,7 +247,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "requires Docker"]
     fn test_metrics_endpoint() {
         if !ensure_container_running() {
             eprintln!("Failed to start container. Skipping test.");
@@ -263,7 +263,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "requires Docker"]
     fn test_proxy_pass_without_payment() {
         // Test that x402 handler works correctly with proxy_pass
         // When no payment header is provided, should return 402 (not proxy to backend)
@@ -281,7 +281,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "requires Docker"]
     fn test_proxy_pass_with_invalid_payment() {
         // Test that x402 handler works correctly with proxy_pass
         // When invalid payment header is provided, should return 402 (not proxy to backend)
@@ -320,7 +320,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "requires Docker"]
     fn test_proxy_pass_verification_order() {
         // Test that payment verification happens before proxy_pass
         // This is the key test: x402 handler in ACCESS_PHASE should run before proxy_pass handler
@@ -350,7 +350,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "requires Docker"]
     fn test_websocket_upgrade() {
         // Test Case 5: WebSocket Upgrade header
         // WebSocket requests should ideally skip payment verification
@@ -415,7 +415,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "requires Docker"]
     fn test_subrequest_detection() {
         // Test Case 6: Subrequest detection
         // Subrequests have r->parent != NULL
@@ -445,7 +445,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "requires Docker"]
     fn test_internal_redirect_error_page() {
         // Test Case 7: Internal redirect (error_page)
         // When error_page triggers internal redirect, payment verification may run again
