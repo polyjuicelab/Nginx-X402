@@ -40,7 +40,7 @@ fn main() {
     //           2. Nginx source configuration (if NGINX_SOURCE_DIR is set)
     let signature = extract_nginx_module_signature().unwrap_or_else(|e| {
         eprintln!("cargo:error=Failed to extract nginx module signature");
-        eprintln!("cargo:error=Error: {}", e);
+        eprintln!("cargo:error=Error: {e}");
         eprintln!("cargo:error=");
         eprintln!("cargo:error=Module signature MUST be extracted to ensure binary compatibility.");
         eprintln!("cargo:error=Please ensure one of the following:");
@@ -61,15 +61,12 @@ fn main() {
     });
 
     // Print extracted signature for debugging
-    eprintln!(
-        "cargo:warning=Extracted nginx module signature: {}",
-        signature
-    );
+    eprintln!("cargo:warning=Extracted nginx module signature: {signature}");
     eprintln!("cargo:warning=Signature format: {{NGX_PTR_SIZE}},{{NGX_SIG_ATOMIC_T_SIZE}},{{NGX_TIME_T_SIZE}},{{feature_flags}}");
 
     // Generate a Rust file with the signature
     generate_signature_file(&signature).unwrap_or_else(|e| {
-        eprintln!("cargo:error=Failed to generate signature file: {}", e);
+        eprintln!("cargo:error=Failed to generate signature file: {e}");
         std::process::exit(1);
     });
 
@@ -80,7 +77,7 @@ fn main() {
 /// Generate the module signature Rust file.
 fn generate_signature_file(signature: &str) -> io::Result<()> {
     let out_dir =
-        env::var("OUT_DIR").map_err(|e| io::Error::other(format!("OUT_DIR not set: {}", e)))?;
+        env::var("OUT_DIR").map_err(|e| io::Error::other(format!("OUT_DIR not set: {e}")))?;
 
     let signature_file = PathBuf::from(&out_dir).join("module_signature.rs");
 
@@ -269,11 +266,10 @@ fn extract_nginx_module_signature() -> io::Result<String> {
                 }
 
                 return Ok(binary_signature);
-            } else {
-                eprintln!(
-                    "cargo:warning=Failed to extract signature from binary, falling back to source"
-                );
             }
+            eprintln!(
+                "cargo:warning=Failed to extract signature from binary, falling back to source"
+            );
         } else {
             eprintln!(
                 "cargo:warning=NGINX_BINARY_PATH set but file does not exist: {}",
@@ -367,10 +363,10 @@ fn extract_nginx_module_signature() -> io::Result<String> {
                 let has_module_sig = config_content.contains("NGX_MODULE_SIGNATURE_1");
 
                 eprintln!("cargo:warning=ngx_auto_config.h content check:");
-                eprintln!("cargo:warning=  NGX_PTR_SIZE: {}", has_ptr_size);
-                eprintln!("cargo:warning=  NGX_SIG_ATOMIC_T_SIZE: {}", has_sig_atomic);
-                eprintln!("cargo:warning=  NGX_TIME_T_SIZE: {}", has_time_size);
-                eprintln!("cargo:warning=  NGX_MODULE_SIGNATURE_1: {}", has_module_sig);
+                eprintln!("cargo:warning=  NGX_PTR_SIZE: {has_ptr_size}");
+                eprintln!("cargo:warning=  NGX_SIG_ATOMIC_T_SIZE: {has_sig_atomic}");
+                eprintln!("cargo:warning=  NGX_TIME_T_SIZE: {has_time_size}");
+                eprintln!("cargo:warning=  NGX_MODULE_SIGNATURE_1: {has_module_sig}");
 
                 // Try to extract feature flags - they might be in a different format
                 // Check for NGX_MODULE_SIGNATURE defines (might be numbered differently)
@@ -392,18 +388,17 @@ fn extract_nginx_module_signature() -> io::Result<String> {
                         signature
                     );
                     return Ok(signature);
-                } else {
-                    eprintln!(
-                        "cargo:warning=Failed to build signature from ngx_auto_config.h content"
-                    );
-                    eprintln!("cargo:warning=One or more required defines are missing or feature flags are empty");
-
-                    // Note: We cannot use default feature flags as they may not match the actual nginx build.
-                    // The signature MUST be extracted from the actual nginx source configuration.
                 }
+                eprintln!(
+                    "cargo:warning=Failed to build signature from ngx_auto_config.h content"
+                );
+                eprintln!("cargo:warning=One or more required defines are missing or feature flags are empty");
+
+                // Note: We cannot use default feature flags as they may not match the actual nginx build.
+                // The signature MUST be extracted from the actual nginx source configuration.
             }
             Err(e) => {
-                eprintln!("cargo:warning=Could not read ngx_auto_config.h: {}", e);
+                eprintln!("cargo:warning=Could not read ngx_auto_config.h: {e}");
             }
         }
     } else {
@@ -1333,9 +1328,8 @@ fn extract_signature_from_binary(binary_path: &PathBuf) -> io::Result<String> {
         .output()
         .map_err(|e| {
             io::Error::other(format!(
-                "Failed to run 'strings' command: {}. \
-                 Please ensure 'strings' command is available (usually in binutils package)",
-                e
+                "Failed to run 'strings' command: {e}. \
+                 Please ensure 'strings' command is available (usually in binutils package)"
             ))
         })?;
 
@@ -1364,7 +1358,7 @@ fn extract_signature_from_binary(binary_path: &PathBuf) -> io::Result<String> {
                 {
                     // Verify fourth part is binary flags (only 0 and 1)
                     if parts[3].chars().all(|c| c == '0' || c == '1') && !parts[3].is_empty() {
-                        eprintln!("cargo:warning=Found signature in binary: {}", trimmed);
+                        eprintln!("cargo:warning=Found signature in binary: {trimmed}");
                         return Ok(trimmed.to_string());
                     }
                 }
