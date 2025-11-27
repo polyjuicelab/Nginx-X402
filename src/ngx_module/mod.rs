@@ -103,6 +103,70 @@ pub unsafe extern "C" fn x402_phase_handler(
 
     use crate::ngx_module::logging::log_debug;
     use crate::ngx_module::module::get_module_config;
+    use crate::ngx_module::request::is_websocket_request;
+
+    // Skip payment verification for special request types
+    // These requests should bypass payment verification:
+    // 1. WebSocket upgrades - long-lived connections
+    // 2. Subrequests (auth_request, etc.) - detected via raw request pointer
+    // 3. Internal redirects - detected via raw request pointer
+    
+    // Check for WebSocket upgrade (can be detected via headers)
+    if is_websocket_request(req_mut) {
+        log_debug(
+            Some(req_mut),
+            "[x402] Phase handler: WebSocket upgrade detected, skipping payment verification",
+        );
+        return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
+    }
+
+    // Check for subrequest using raw request pointer
+    // Subrequests have r->parent != NULL
+    unsafe {
+        use ngx::ffi::ngx_http_request_t;
+        let r_raw = r as *const ngx_http_request_t;
+        if !r_raw.is_null() {
+            let parent = (*r_raw).parent;
+            if !parent.is_null() {
+                log_debug(
+                    Some(req_mut),
+                    "[x402] Phase handler: Subrequest detected (parent != NULL), skipping payment verification",
+                );
+                return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
+            }
+        }
+    }
+
+    // Check for internal redirect using raw request pointer
+    // Internal redirects have r->internal = 1 (unsigned flag)
+    // In nginx C code, internal is a field in ngx_http_request_t structure
+    unsafe {
+        use ngx::ffi::ngx_http_request_t;
+        let r_raw = r as *const ngx_http_request_t;
+        if !r_raw.is_null() {
+            // Access internal field directly from C structure
+            // internal is an unsigned integer field in ngx_http_request_t
+            // We need to access it via pointer dereference
+            // Note: This is accessing the raw C structure, so we need to be careful
+            let request_struct = &*r_raw;
+            // Try to access internal field - it should be a field, not a method
+            // If this doesn't compile, we may need to use offset_of! macro or other approach
+            // For now, we'll use a workaround: check if uri.data starts with @ (named locations)
+            // Named locations (like @fallback) are always internal redirects
+            let uri = request_struct.uri;
+            if !uri.data.is_null() && uri.len > 0 {
+                // Check if URI starts with '@' which indicates named location (always internal)
+                let uri_slice = std::slice::from_raw_parts(uri.data as *const u8, uri.len.min(1));
+                if uri_slice[0] == b'@' {
+                    log_debug(
+                        Some(req_mut),
+                        "[x402] Phase handler: Internal redirect detected (named location @), skipping payment verification",
+                    );
+                    return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
+                }
+            }
+        }
+    }
 
     // Check if module is enabled for this location
     let conf = match get_module_config(req_mut) {
