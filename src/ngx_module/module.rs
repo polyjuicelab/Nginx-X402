@@ -106,15 +106,17 @@ unsafe extern "C" fn postconfiguration(cf: *mut ngx::ffi::ngx_conf_t) -> ngx::ff
             fn x402_phase_handler(r: *mut ngx::ffi::ngx_http_request_t) -> ngx::ffi::ngx_int_t;
         }
 
-        // Register phase handler in CONTENT phase
-        // This serves as a fallback if clcf->handler is not set or was overwritten
+        // Register phase handler in ACCESS phase
+        // This ensures payment verification happens BEFORE proxy_pass sets its handler
+        // ACCESS_PHASE (index 6) runs before CONTENT_PHASE (index 10)
+        // This allows x402 to verify payment even when proxy_pass is configured
         let phases = &(*cmcf).phases;
-        let content_phase_index = 10usize; // NGX_HTTP_CONTENT_PHASE
+        let access_phase_index = 6usize; // NGX_HTTP_ACCESS_PHASE
 
-        if content_phase_index < phases.len() {
-            let content_phase = &phases[content_phase_index];
+        if access_phase_index < phases.len() {
+            let access_phase = &phases[access_phase_index];
             use ngx::ffi::ngx_array_push;
-            let handlers_ptr = &content_phase.handlers as *const _ as *mut _;
+            let handlers_ptr = &access_phase.handlers as *const _ as *mut _;
             let handler_ptr = ngx_array_push(handlers_ptr);
             if handler_ptr.is_null() {
                 return ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t;

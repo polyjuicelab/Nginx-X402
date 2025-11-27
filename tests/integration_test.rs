@@ -143,4 +143,81 @@ mod tests {
             "Metrics endpoint should return Prometheus metrics"
         );
     }
+
+    #[test]
+    #[ignore]
+    fn test_proxy_pass_without_payment() {
+        // Test that x402 handler works correctly with proxy_pass
+        // When no payment header is provided, should return 402 (not proxy to backend)
+        if !wait_for_nginx(Duration::from_secs(5)) {
+            eprintln!("Nginx is not running. Skipping test.");
+            return;
+        }
+
+        let output = Command::new("curl")
+            .args([
+                "-s",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code}",
+                "http://localhost:8080/api/protected-proxy",
+            ])
+            .output()
+            .expect("Failed to run curl");
+
+        let status_code = String::from_utf8_lossy(&output.stdout);
+        assert_eq!(
+            status_code.trim(),
+            "402",
+            "Expected 402 response when no payment header provided with proxy_pass, got {}",
+            status_code
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_proxy_pass_verification_order() {
+        // Test that payment verification happens before proxy_pass
+        // This is the key test: x402 handler in ACCESS_PHASE should run before proxy_pass handler
+        if !wait_for_nginx(Duration::from_secs(5)) {
+            eprintln!("Nginx is not running. Skipping test.");
+            return;
+        }
+
+        // Request without payment should return 402, not reach backend
+        let output = Command::new("curl")
+            .args([
+                "-s",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code}",
+                "http://localhost:8080/api/protected-proxy",
+            ])
+            .output()
+            .expect("Failed to run curl");
+
+        let status_code = String::from_utf8_lossy(&output.stdout);
+        assert_eq!(
+            status_code.trim(),
+            "402",
+            "Payment verification should happen before proxy_pass. Expected 402, got {}",
+            status_code
+        );
+
+        // Verify that backend was NOT called by checking response body
+        let body_output = Command::new("curl")
+            .args(["-s", "http://localhost:8080/api/protected-proxy"])
+            .output()
+            .expect("Failed to run curl");
+
+        let body = String::from_utf8_lossy(&body_output.stdout);
+        // Should not contain backend response JSON
+        assert!(
+            !body.contains("\"status\":\"ok\"") && !body.contains("Backend response"),
+            "Backend should not be called when payment verification fails. Got backend response: {}",
+            body
+        );
+    }
 }

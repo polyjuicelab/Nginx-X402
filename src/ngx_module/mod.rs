@@ -77,16 +77,17 @@ pub unsafe extern "C" fn x402_metrics_handler(
     }
 }
 
-/// Phase handler for CONTENT phase
+/// Phase handler for ACCESS phase
 ///
-/// This handler is registered as a phase handler in the postconfiguration hook.
-/// It serves as a fallback mechanism if the content handler (`clcf->handler`) is not
-/// set or was overwritten during configuration merging.
+/// This handler is registered as a phase handler in ACCESS_PHASE (before CONTENT_PHASE).
+/// This ensures payment verification happens BEFORE proxy_pass or other content handlers
+/// set their handlers, allowing x402 to work correctly even when proxy_pass is configured.
 ///
-/// The handler checks:
-/// 1. If `content_handler` is already set (decline to let nginx call it)
-/// 2. If the module is enabled for the current location
-/// 3. If enabled, calls the main handler directly
+/// The handler:
+/// 1. Checks if the module is enabled for the current location
+/// 2. If enabled, performs payment verification
+/// 3. If payment is valid, returns NGX_OK to allow request to proceed
+/// 4. If payment is invalid or missing, sends 402 response and finalizes request
 ///
 /// # Safety
 ///
@@ -103,21 +104,11 @@ pub unsafe extern "C" fn x402_phase_handler(
     use crate::ngx_module::logging::log_debug;
     use crate::ngx_module::module::get_module_config;
 
-    // Phase handler should only be called if content_handler is NOT set
-    // If content_handler is already set, decline and let nginx call the content handler
-    if req_mut.as_ref().content_handler.is_some() {
-        log_debug(
-            Some(req_mut),
-            "[x402] Phase handler: content_handler already set, declining",
-        );
-        return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
-    }
-
     // Check if module is enabled for this location
     let conf = match get_module_config(req_mut) {
         Ok(c) => c,
         Err(_) => {
-            // Module not configured for this location, decline
+            // Module not configured for this location, decline to let other handlers process
             return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
         }
     };
@@ -127,9 +118,29 @@ pub unsafe extern "C" fn x402_phase_handler(
         return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
     }
 
-    // Module is enabled but content_handler is not set (fallback case)
-    // Call the handler directly as a fallback
-    x402_ngx_handler(r)
+    // Module is enabled - perform payment verification
+    // This will verify payment and send 402 if needed, or allow request to proceed
+    match x402_ngx_handler_impl(req_mut) {
+        ngx::core::Status::NGX_OK => {
+            // Payment verified or module passed through - allow request to continue
+            // This will proceed to CONTENT_PHASE where proxy_pass handler will run
+            ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t
+        }
+        ngx::core::Status::NGX_DECLINED => {
+            // Handler declined - should not happen, but allow request to continue
+            ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t
+        }
+        ngx::core::Status::NGX_ERROR => {
+            // Error occurred during payment verification
+            // The handler should have sent an appropriate response (402 or 500)
+            // Return OK to indicate we handled the request and prevent further processing
+            ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t
+        }
+        _ => {
+            // Unexpected status - return OK to prevent further processing
+            ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t
+        }
+    }
 }
 
 /// Main content handler C export
