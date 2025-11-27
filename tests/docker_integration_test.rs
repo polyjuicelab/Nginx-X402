@@ -392,9 +392,9 @@ mod tests {
         // 2. Return 426 (Upgrade Required) - if WebSocket not supported
         // 3. Return 101 (Switching Protocols) - if WebSocket works
         // 4. Return 502 (Bad Gateway) - if backend doesn't support WebSocket
-        
+
         println!("WebSocket handshake status: {}", status);
-        
+
         // Document the behavior - WebSocket may not work correctly with payment verification
         // This test documents current behavior, not necessarily expected behavior
         assert!(
@@ -418,11 +418,10 @@ mod tests {
         // Test endpoint that may create subrequests
         // Note: Actual subrequest creation requires specific nginx modules or configurations
         // This test documents current behavior
-        let status = http_request("/api/subrequest-test")
-            .expect("Failed to make HTTP request");
+        let status = http_request("/api/subrequest-test").expect("Failed to make HTTP request");
 
         println!("Subrequest test endpoint status (no payment): {}", status);
-        
+
         // Current behavior: Should return 402 if subrequest detection doesn't work
         // If subrequest detection works, it may return different status
         // Document the behavior for now
@@ -431,7 +430,7 @@ mod tests {
             "Unexpected status: {}",
             status
         );
-        
+
         println!("Note: Subrequest detection requires r->parent != NULL check");
         println!("This is implemented in phase handler using raw request pointer");
     }
@@ -448,16 +447,15 @@ mod tests {
         }
 
         // Test endpoint that triggers 404 and internal redirect
-        let status = http_request("/api/error-test")
-            .expect("Failed to make HTTP request");
+        let status = http_request("/api/error-test").expect("Failed to make HTTP request");
 
         println!("Error page test status: {}", status);
-        
+
         // Behavior depends on implementation:
         // 1. Return 402 (payment required) - payment verification runs before return
         // 2. Return 404 then redirect to @fallback - internal redirect may bypass payment
         // 3. Return 502 (Bad Gateway) - if @fallback tries to proxy without payment
-        
+
         // Document current behavior
         assert!(
             status == "402" || status == "404" || status == "502" || status == "200",
@@ -481,11 +479,17 @@ mod tests {
             .expect("Failed to run curl");
 
         let status_with_payment = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        println!("Error page test status (with invalid payment): {}", status_with_payment);
-        
+        println!(
+            "Error page test status (with invalid payment): {}",
+            status_with_payment
+        );
+
         // Document behavior
         assert!(
-            status_with_payment == "402" || status_with_payment == "404" || status_with_payment == "502" || status_with_payment == "200",
+            status_with_payment == "402"
+                || status_with_payment == "404"
+                || status_with_payment == "502"
+                || status_with_payment == "200",
             "Unexpected status: {}",
             status_with_payment
         );

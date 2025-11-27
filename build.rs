@@ -389,9 +389,7 @@ fn extract_nginx_module_signature() -> io::Result<String> {
                     );
                     return Ok(signature);
                 }
-                eprintln!(
-                    "cargo:warning=Failed to build signature from ngx_auto_config.h content"
-                );
+                eprintln!("cargo:warning=Failed to build signature from ngx_auto_config.h content");
                 eprintln!("cargo:warning=One or more required defines are missing or feature flags are empty");
 
                 // Note: We cannot use default feature flags as they may not match the actual nginx build.

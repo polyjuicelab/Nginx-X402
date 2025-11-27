@@ -153,17 +153,17 @@ pub fn is_browser_request(r: &Request) -> bool {
 pub fn is_websocket_request(r: &Request) -> bool {
     let upgrade = get_header_value(r, "Upgrade");
     let connection = get_header_value(r, "Connection");
-    
+
     // Check for WebSocket upgrade headers
     let has_upgrade = upgrade
         .as_ref()
         .map(|u| u.to_lowercase() == "websocket")
         .unwrap_or(false);
-    
+
     let has_connection_upgrade = connection
         .as_ref()
         .map(|c| c.to_lowercase().contains("upgrade"))
         .unwrap_or(false);
-    
+
     has_upgrade && has_connection_upgrade
 }

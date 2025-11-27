@@ -39,7 +39,9 @@ pub mod runtime;
 // Re-export public types and functions
 pub use config::{FacilitatorFallback, ParsedX402Config, X402Config};
 pub use error::{user_errors, ConfigError, Result};
-pub use handler::{x402_handler_impl, x402_metrics_handler_impl, x402_ngx_handler_impl, HandlerResult};
+pub use handler::{
+    x402_handler_impl, x402_metrics_handler_impl, x402_ngx_handler_impl, HandlerResult,
+};
 pub use logging::{log_debug, log_error, log_info, log_warn};
 pub use metrics::{collect_metrics, X402Metrics};
 pub use module::{get_module_config, ngx_http_x402_module};
@@ -110,7 +112,7 @@ pub unsafe extern "C" fn x402_phase_handler(
     // 1. WebSocket upgrades - long-lived connections
     // 2. Subrequests (auth_request, etc.) - detected via raw request pointer
     // 3. Internal redirects - detected via raw request pointer
-    
+
     // Check for WebSocket upgrade (can be detected via headers)
     if is_websocket_request(req_mut) {
         log_debug(
