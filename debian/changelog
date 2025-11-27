@@ -1,3 +1,15 @@
+nginx-x402 (1.1.0-1) unstable; urgency=medium
+
+  * Version bump to 1.1.0
+  * Added support for proxy_pass directive alongside x402 payment verification
+  * Moved payment verification to ACCESS_PHASE to ensure it runs before proxy_pass
+  * Fixed issue where proxy_pass would override x402 handler
+  * Improved error handling for invalid payment headers
+  * Added integration tests for proxy_pass compatibility
+  * Added mock backend server for testing proxy_pass scenarios
+
+ -- Ryan Kung <ryan@polyjuice.io>  Mon, 27 Nov 2025 00:00:00 +0000
+
 nginx-x402 (1.0.4-1) unstable; urgency=medium
 
   * Version bump to 1.0.4

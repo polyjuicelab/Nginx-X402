@@ -97,10 +97,21 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<(
         metrics.record_verification_attempt();
 
         // Validate payment header format and size
-        validate_payment_header(&payment_b64).map_err(|e| {
+        // If validation fails, send 402 response instead of returning error
+        // This ensures that invalid payment headers don't cause the request to be
+        // proxied to the backend (when proxy_pass is configured)
+        if let Err(e) = validate_payment_header(&payment_b64) {
             log_warn(Some(r), &format!("Invalid payment header format: {}", e));
-            ConfigError::from(e)
-        })?;
+            metrics.record_verification_failed();
+            metrics.record_402_response();
+            send_402_response(
+                r,
+                requirements_slice,
+                config,
+                Some(user_errors::PAYMENT_VERIFICATION_FAILED),
+            )?;
+            return Ok(());
+        }
 
         // Verify payment
         let facilitator_url = config.facilitator_url.as_deref().ok_or_else(|| {

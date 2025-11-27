@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y \
     libpcre3-dev \
     zlib1g-dev \
     wget \
+    python3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Rust toolchain (cached separately from system packages)
@@ -99,6 +100,14 @@ COPY tests/nginx.test.conf /etc/nginx/nginx.conf
 # Create test directories
 RUN mkdir -p /var/www/html /var/log/nginx
 
+# Copy mock backend server script
+COPY tests/mock-backend.py /usr/local/bin/mock-backend.py
+RUN chmod +x /usr/local/bin/mock-backend.py
+
+# Copy startup script that starts both backend and nginx
+COPY tests/start-services.sh /usr/local/bin/start-services.sh
+RUN chmod +x /usr/local/bin/start-services.sh
+
 # Expose port
 EXPOSE 80
 
@@ -106,5 +115,5 @@ EXPOSE 80
 HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost/health || exit 1
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Start both backend and nginx
+CMD ["/usr/local/bin/start-services.sh"]
