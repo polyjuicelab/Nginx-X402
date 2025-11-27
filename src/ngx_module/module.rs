@@ -108,10 +108,11 @@ unsafe extern "C" fn postconfiguration(cf: *mut ngx::ffi::ngx_conf_t) -> ngx::ff
 
         // Register phase handler in ACCESS phase
         // This ensures payment verification happens BEFORE proxy_pass sets its handler
-        // ACCESS_PHASE (index 6) runs before CONTENT_PHASE (index 10)
+        // ACCESS_PHASE runs before CONTENT_PHASE
         // This allows x402 to verify payment even when proxy_pass is configured
         let phases = &(*cmcf).phases;
-        let access_phase_index = 6usize; // NGX_HTTP_ACCESS_PHASE
+        // Use phase constants extracted from nginx source headers instead of hardcoded values
+        let access_phase_index = nginx_phases::ACCESS_PHASE;
 
         if access_phase_index < phases.len() {
             let access_phase = &phases[access_phase_index];
@@ -238,6 +239,11 @@ unsafe extern "C" fn merge_loc_conf(
 // This signature is extracted from the nginx source configuration
 // to ensure binary compatibility with the target nginx binary
 include!(concat!(env!("OUT_DIR"), "/module_signature.rs"));
+
+// Include the auto-generated nginx HTTP phase constants from build.rs
+// These constants are extracted from nginx source headers to ensure
+// we use the correct phase indices instead of hardcoded values
+include!(concat!(env!("OUT_DIR"), "/nginx_phases.rs"));
 
 /// Module structure for x402 HTTP module
 ///

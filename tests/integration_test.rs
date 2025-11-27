@@ -64,7 +64,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "requires nginx setup"]
     fn test_402_response_without_payment() {
         // Test that a request without X-PAYMENT header returns 402
         if !wait_for_nginx(Duration::from_secs(5)) {
@@ -89,7 +89,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "requires nginx setup"]
     fn test_public_endpoint_accessible() {
         // Test that public endpoints (without x402) are accessible
         if !wait_for_nginx(Duration::from_secs(5)) {
@@ -114,7 +114,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "requires nginx setup"]
     fn test_metrics_endpoint() {
         // Test that metrics endpoint is accessible
         if !wait_for_nginx(Duration::from_secs(5)) {
@@ -135,7 +135,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "requires nginx setup"]
     fn test_proxy_pass_without_payment() {
         // Test that x402 handler works correctly with proxy_pass
         // When no payment header is provided, should return 402 (not proxy to backend)
@@ -165,7 +165,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "requires nginx setup"]
     fn test_proxy_pass_verification_order() {
         // Test that payment verification happens before proxy_pass
         // This is the key test: x402 handler in ACCESS_PHASE should run before proxy_pass handler
