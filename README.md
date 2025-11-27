@@ -79,7 +79,7 @@ http {
         location /protected {
             x402 on;
             x402_amount 0.0001;
-            x402_pay_to 0x209693Bc6afc0C5328bA36FaF03C514EF312287C;
+            x402_pay_to 0xYourWalletAddress;
             x402_facilitator_url https://x402.org/facilitator;
         }
     }
