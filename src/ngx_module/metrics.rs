@@ -164,7 +164,7 @@ pub fn get_registry() -> &'static Registry {
 }
 
 /// Collect all metrics in Prometheus text format
-#[must_use] 
+#[must_use]
 pub fn collect_metrics() -> String {
     let registry = get_registry();
     let encoder = prometheus::TextEncoder::new();

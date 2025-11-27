@@ -255,9 +255,7 @@ mod tests {
             let config = NginxX402Config::new(amount, "0x209693Bc6afc0C5328bA36FaF03C514EF312287C");
             let requirements = config
                 .create_payment_requirements("/test")
-                .unwrap_or_else(|_| {
-                    panic!("Should create requirements for amount: {amount_str}")
-                });
+                .unwrap_or_else(|_| panic!("Should create requirements for amount: {amount_str}"));
             assert!(
                 !requirements.max_amount_required.is_empty(),
                 "max_amount_required should not be empty for amount: {amount_str}"

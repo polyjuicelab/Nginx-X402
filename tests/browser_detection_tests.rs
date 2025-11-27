@@ -17,7 +17,10 @@ mod tests {
         // Test HTML priority parsing
         let accept = "text/html, application/json;q=0.9";
         assert!(float_eq(parse_accept_priority(accept, "text/html"), 1.0));
-        assert!(float_eq(parse_accept_priority(accept, "application/json"), 0.9));
+        assert!(float_eq(
+            parse_accept_priority(accept, "application/json"),
+            0.9
+        ));
     }
 
     #[test]
@@ -45,7 +48,10 @@ mod tests {
         // Test wildcard matching
         let accept = "*/*;q=0.8";
         assert!(float_eq(parse_accept_priority(accept, "text/html"), 0.8));
-        assert!(float_eq(parse_accept_priority(accept, "application/json"), 0.8));
+        assert!(float_eq(
+            parse_accept_priority(accept, "application/json"),
+            0.8
+        ));
         assert!(float_eq(parse_accept_priority(accept, "*/*"), 0.8));
     }
 
@@ -68,8 +74,14 @@ mod tests {
         // Test complex Accept header
         let accept = "text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8";
         assert!(float_eq(parse_accept_priority(accept, "text/html"), 1.0));
-        assert!(float_eq(parse_accept_priority(accept, "application/xhtml+xml"), 1.0));
-        assert!(float_eq(parse_accept_priority(accept, "application/xml"), 0.9));
+        assert!(float_eq(
+            parse_accept_priority(accept, "application/xhtml+xml"),
+            1.0
+        ));
+        assert!(float_eq(
+            parse_accept_priority(accept, "application/xml"),
+            0.9
+        ));
         assert!(float_eq(parse_accept_priority(accept, "image/png"), 0.8)); // Falls back to */*
     }
 
@@ -92,8 +104,14 @@ mod tests {
     fn test_parse_accept_priority_complex() {
         // Test real-world browser Accept header
         let browser_accept = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7";
-        assert!(float_eq(parse_accept_priority(browser_accept, "text/html"), 1.0));
-        assert!(float_eq(parse_accept_priority(browser_accept, "image/webp"), 1.0));
+        assert!(float_eq(
+            parse_accept_priority(browser_accept, "text/html"),
+            1.0
+        ));
+        assert!(float_eq(
+            parse_accept_priority(browser_accept, "image/webp"),
+            1.0
+        ));
         assert!(float_eq(
             parse_accept_priority(browser_accept, "application/json"),
             0.8
@@ -104,7 +122,13 @@ mod tests {
     fn test_parse_accept_priority_api_client() {
         // Test API client Accept header (JSON preferred)
         let api_accept = "application/json, text/plain;q=0.9, */*;q=0.8";
-        assert!(float_eq(parse_accept_priority(api_accept, "application/json"), 1.0));
-        assert!(float_eq(parse_accept_priority(api_accept, "text/html"), 0.8)); // Falls back to */*
+        assert!(float_eq(
+            parse_accept_priority(api_accept, "application/json"),
+            1.0
+        ));
+        assert!(float_eq(
+            parse_accept_priority(api_accept, "text/html"),
+            0.8
+        )); // Falls back to */*
     }
 }

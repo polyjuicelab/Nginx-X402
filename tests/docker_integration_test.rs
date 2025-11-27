@@ -487,9 +487,7 @@ mod tests {
             .expect("Failed to run curl");
 
         let status_with_payment = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        println!(
-            "Error page test status (with invalid payment): {status_with_payment}"
-        );
+        println!("Error page test status (with invalid payment): {status_with_payment}");
 
         // Document behavior
         assert!(

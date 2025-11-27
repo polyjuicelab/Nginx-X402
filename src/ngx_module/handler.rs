@@ -297,10 +297,7 @@ pub fn x402_metrics_handler_impl(req: &mut Request) -> Status {
     match send_response_body(req, metrics_text.as_bytes()) {
         Ok(()) => Status::NGX_OK,
         Err(e) => {
-            log_error(
-                Some(req),
-                &format!("Failed to send metrics response: {e}"),
-            );
+            log_error(Some(req), &format!("Failed to send metrics response: {e}"));
             Status::NGX_ERROR
         }
     }
