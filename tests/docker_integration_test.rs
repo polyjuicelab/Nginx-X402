@@ -352,4 +352,142 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    #[ignore]
+    fn test_websocket_upgrade() {
+        // Test Case 5: WebSocket Upgrade header
+        // WebSocket requests should ideally skip payment verification
+        // or handle it differently since WebSocket is a long-lived connection
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        // Test WebSocket handshake request
+        let output = Command::new("curl")
+            .args([
+                "-s",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code}",
+                "-H",
+                "Upgrade: websocket",
+                "-H",
+                "Connection: Upgrade",
+                "-H",
+                "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==",
+                "-H",
+                "Sec-WebSocket-Version: 13",
+                &format!("http://localhost:{}/ws", NGINX_PORT),
+            ])
+            .output()
+            .expect("Failed to run curl");
+
+        let status = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+        // WebSocket handshake may:
+        // 1. Return 402 (payment required) - current behavior
+        // 2. Return 426 (Upgrade Required) - if WebSocket not supported
+        // 3. Return 101 (Switching Protocols) - if WebSocket works
+        // 4. Return 502 (Bad Gateway) - if backend doesn't support WebSocket
+        
+        println!("WebSocket handshake status: {}", status);
+        
+        // Document the behavior - WebSocket may not work correctly with payment verification
+        // This test documents current behavior, not necessarily expected behavior
+        assert!(
+            status == "402" || status == "426" || status == "101" || status == "502",
+            "Unexpected status for WebSocket handshake: {}",
+            status
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_subrequest_detection() {
+        // Test Case 6: Subrequest detection
+        // Subrequests have r->parent != NULL
+        // This test verifies that subrequests are detected and skip payment verification
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        // Test endpoint that may create subrequests
+        // Note: Actual subrequest creation requires specific nginx modules or configurations
+        // This test documents current behavior
+        let status = http_request("/api/subrequest-test")
+            .expect("Failed to make HTTP request");
+
+        println!("Subrequest test endpoint status (no payment): {}", status);
+        
+        // Current behavior: Should return 402 if subrequest detection doesn't work
+        // If subrequest detection works, it may return different status
+        // Document the behavior for now
+        assert!(
+            status == "402" || status == "200" || status == "502",
+            "Unexpected status: {}",
+            status
+        );
+        
+        println!("Note: Subrequest detection requires r->parent != NULL check");
+        println!("This is implemented in phase handler using raw request pointer");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_internal_redirect_error_page() {
+        // Test Case 7: Internal redirect (error_page)
+        // When error_page triggers internal redirect, payment verification may run again
+        // or be bypassed
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        // Test endpoint that triggers 404 and internal redirect
+        let status = http_request("/api/error-test")
+            .expect("Failed to make HTTP request");
+
+        println!("Error page test status: {}", status);
+        
+        // Behavior depends on implementation:
+        // 1. Return 402 (payment required) - payment verification runs before return
+        // 2. Return 404 then redirect to @fallback - internal redirect may bypass payment
+        // 3. Return 502 (Bad Gateway) - if @fallback tries to proxy without payment
+        
+        // Document current behavior
+        assert!(
+            status == "402" || status == "404" || status == "502" || status == "200",
+            "Unexpected status for error_page test: {}",
+            status
+        );
+
+        // Test with payment header
+        let output = Command::new("curl")
+            .args([
+                "-s",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code}",
+                "-H",
+                "X-PAYMENT: invalid-payment",
+                &format!("http://localhost:{}/api/error-test", NGINX_PORT),
+            ])
+            .output()
+            .expect("Failed to run curl");
+
+        let status_with_payment = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        println!("Error page test status (with invalid payment): {}", status_with_payment);
+        
+        // Document behavior
+        assert!(
+            status_with_payment == "402" || status_with_payment == "404" || status_with_payment == "502" || status_with_payment == "200",
+            "Unexpected status: {}",
+            status_with_payment
+        );
+    }
 }

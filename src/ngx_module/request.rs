@@ -138,3 +138,32 @@ pub fn is_browser_request(r: &Request) -> bool {
                     "text/html",
                 ) > 0.0))
 }
+
+/// Check if request is a WebSocket upgrade request
+///
+/// WebSocket requests use the HTTP Upgrade mechanism and should typically
+/// skip payment verification since they are long-lived connections.
+///
+/// # Arguments
+/// - `r`: Nginx request object
+///
+/// # Returns
+/// - `true` if request is a WebSocket upgrade request
+/// - `false` otherwise
+pub fn is_websocket_request(r: &Request) -> bool {
+    let upgrade = get_header_value(r, "Upgrade");
+    let connection = get_header_value(r, "Connection");
+    
+    // Check for WebSocket upgrade headers
+    let has_upgrade = upgrade
+        .as_ref()
+        .map(|u| u.to_lowercase() == "websocket")
+        .unwrap_or(false);
+    
+    let has_connection_upgrade = connection
+        .as_ref()
+        .map(|c| c.to_lowercase().contains("upgrade"))
+        .unwrap_or(false);
+    
+    has_upgrade && has_connection_upgrade
+}
