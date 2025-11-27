@@ -154,8 +154,7 @@ unsafe extern "C" fn ngx_http_x402(
                 let ptr_to_ptr = loc_conf.add(core_ctx_index);
                 if !ptr_to_ptr.is_null() {
                     // Read the pointer value
-                    let clcf_void: *mut core::ffi::c_void =
-                        ptr::read(ptr_to_ptr.cast_const());
+                    let clcf_void: *mut core::ffi::c_void = ptr::read(ptr_to_ptr.cast_const());
                     if !clcf_void.is_null() {
                         let clcf: *mut ngx_http_core_loc_conf_t = core::mem::transmute(clcf_void);
 
@@ -507,8 +506,7 @@ unsafe extern "C" fn ngx_http_x402_metrics(
     unsafe {
         let ptr_to_ptr = loc_conf.add(core_ctx_index);
         if !ptr_to_ptr.is_null() {
-            let clcf_void: *mut core::ffi::c_void =
-                ptr::read(ptr_to_ptr.cast_const());
+            let clcf_void: *mut core::ffi::c_void = ptr::read(ptr_to_ptr.cast_const());
             if !clcf_void.is_null() {
                 let clcf: *mut ngx_http_core_loc_conf_t = core::mem::transmute(clcf_void);
 

@@ -128,7 +128,6 @@ pub unsafe extern "C" fn x402_phase_handler(
     // Check for subrequest using raw request pointer
     // Subrequests have r->parent != NULL
     unsafe {
-        
         let r_raw = r.cast_const();
         if !r_raw.is_null() {
             let parent = (*r_raw).parent;
@@ -146,7 +145,6 @@ pub unsafe extern "C" fn x402_phase_handler(
     // Internal redirects have r->internal = 1 (unsigned flag)
     // In nginx C code, internal is a field in ngx_http_request_t structure
     unsafe {
-        
         let r_raw = r.cast_const();
         if !r_raw.is_null() {
             // Access internal field directly from C structure
@@ -211,11 +209,12 @@ pub unsafe extern "C" fn x402_phase_handler(
 
                     // Check if content handler is x402_ngx_handler
                     // Compare function pointers using std::ptr::fn_addr_eq for safety
-                    let is_x402_handler = if let (Some(current), Some(x402)) = (current_handler, x402_handler_fn) {
-                        std::ptr::fn_addr_eq(current, x402)
-                    } else {
-                        false
-                    };
+                    let is_x402_handler =
+                        if let (Some(current), Some(x402)) = (current_handler, x402_handler_fn) {
+                            std::ptr::fn_addr_eq(current, x402)
+                        } else {
+                            false
+                        };
                     if is_x402_handler {
                         // Clear content handler to prevent duplicate verification
                         // Payment was already verified in ACCESS_PHASE

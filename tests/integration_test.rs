@@ -85,11 +85,7 @@ mod tests {
             .expect("Failed to run curl");
 
         let status_code = String::from_utf8_lossy(&output.stdout);
-        assert_eq!(
-            status_code.trim(),
-            "402",
-            "Expected 402, got {status_code}"
-        );
+        assert_eq!(status_code.trim(), "402", "Expected 402, got {status_code}");
     }
 
     #[test]
@@ -114,11 +110,7 @@ mod tests {
             .expect("Failed to run curl");
 
         let status_code = String::from_utf8_lossy(&output.stdout);
-        assert_eq!(
-            status_code.trim(),
-            "200",
-            "Expected 200, got {status_code}"
-        );
+        assert_eq!(status_code.trim(), "200", "Expected 200, got {status_code}");
     }
 
     #[test]

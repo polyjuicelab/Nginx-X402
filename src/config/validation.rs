@@ -216,7 +216,7 @@ pub fn validate_resource_path(resource: &str) -> Result<String> {
 /// # Examples
 /// - `text/html, application/json;q=0.9` -> returns 1.0 for "text/html", 0.9 for "application/json"
 /// - `*/*;q=0.8` -> returns 0.8 for any media type
-#[must_use] 
+#[must_use]
 pub fn parse_accept_priority(accept_header: &str, media_type: &str) -> f64 {
     // Split by comma and parse each media range
     for part in accept_header.split(',') {

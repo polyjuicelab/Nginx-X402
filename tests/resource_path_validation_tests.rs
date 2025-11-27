@@ -21,10 +21,7 @@ mod tests {
 
         for path in valid_paths {
             let result = validate_resource_path(path);
-            assert!(
-                result.is_ok(),
-                "Valid path '{path}' should pass validation"
-            );
+            assert!(result.is_ok(), "Valid path '{path}' should pass validation");
             let sanitized = result.unwrap();
             // Paths should start with /
             assert!(
