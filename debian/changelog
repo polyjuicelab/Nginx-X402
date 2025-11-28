@@ -1,3 +1,16 @@
+nginx-x402 (1.2.0-1) unstable; urgency=medium
+
+  * Version bump to 1.2.0
+  * Add x402_asset directive to support custom token/contract addresses
+  * Add x402_network_id directive to specify network by chainId (8453, 84532)
+  * Implement chainId to network name mapping (Base Mainnet: 8453, Base Sepolia: 84532)
+  * Add fallback logic: custom asset > default USDC, network_id > network name > default
+  * Update configuration parsing to support both network name and chainId
+  * Add comprehensive integration tests for asset fallback and network_id
+  * Update documentation and examples
+
+ -- Ryan Kung <ryan@polyjuice.io>  Thu, 28 Nov 2025 00:00:00 +0000
+
 nginx-x402 (1.1.2-1) unstable; urgency=medium
 
   * Version bump to 1.1.2

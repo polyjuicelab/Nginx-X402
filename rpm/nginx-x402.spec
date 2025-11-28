@@ -2,7 +2,7 @@
 %define moduledir %{_libdir}/nginx/modules
 
 Name:           nginx-x402
-Version:        1.1.1
+Version:        1.2.0
 Release:        1%{?dist}
 Summary:        Pure Rust Nginx module for x402 HTTP micropayment protocol
 License:        AGPL-3.0
@@ -673,6 +673,16 @@ fi
 %{_datadir}/%{name}/
 
 %changelog
+* Thu Nov 28 2025 Ryan Kung <ryan@polyjuice.io> - 1.2.0-1
+- Version bump to 1.2.0
+- Add x402_asset directive to support custom token/contract addresses
+- Add x402_network_id directive to specify network by chainId (8453, 84532)
+- Implement chainId to network name mapping (Base Mainnet: 8453, Base Sepolia: 84532)
+- Add fallback logic: custom asset > default USDC, network_id > network name > default
+- Update configuration parsing to support both network name and chainId
+- Add comprehensive integration tests for asset fallback and network_id
+- Update documentation and examples
+
 * Thu Nov 28 2025 Ryan Kung <ryan@polyjuice.io> - 1.1.2-1
 - Version bump to 1.1.2
 - Add support for skipping payment verification for OPTIONS and HEAD requests
