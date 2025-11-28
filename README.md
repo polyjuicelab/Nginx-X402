@@ -110,7 +110,9 @@ http {
 - `x402_facilitator_url <url>` - Facilitator service URL
 - `x402_description <text>` - Payment description
 - `x402_network <network>` - Network identifier (e.g., "base", "base-sepolia")
+- `x402_network_id <chainId>` - Network chainId (e.g., 8453 for Base Mainnet, 84532 for Base Sepolia). Takes precedence over `x402_network` if both are specified.
 - `x402_resource <path>` - Resource path (default: request URI)
+- `x402_asset <address>` - Custom token/contract address (optional, defaults to USDC for the network)
 - `x402_timeout <seconds>` - Facilitator API timeout (1-300, default: 10)
 - `x402_facilitator_fallback <mode>` - Fallback on error: `error` (500) or `pass` (default: `error`)
 - `x402_metrics on|off` - Enable Prometheus metrics endpoint

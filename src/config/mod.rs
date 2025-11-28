@@ -3,8 +3,8 @@
 mod validation;
 
 pub use validation::{
-    parse_accept_priority, validate_amount, validate_ethereum_address, validate_network,
-    validate_payment_header, validate_resource_path, validate_url,
+    chain_id_to_network, parse_accept_priority, validate_amount, validate_ethereum_address,
+    validate_network, validate_payment_header, validate_resource_path, validate_url,
 };
 
 use rust_decimal::Decimal;
