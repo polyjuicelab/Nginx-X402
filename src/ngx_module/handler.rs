@@ -6,7 +6,7 @@ use crate::ngx_module::error::{user_errors, ConfigError, Result};
 use crate::ngx_module::logging::{log_debug, log_error, log_info, log_warn};
 use crate::ngx_module::metrics::X402Metrics;
 use crate::ngx_module::module::get_module_config;
-use crate::ngx_module::request::get_header_value;
+use crate::ngx_module::request::{build_full_url, get_header_value};
 use crate::ngx_module::requirements::create_requirements;
 use crate::ngx_module::response::{send_402_response, send_response_body};
 use crate::ngx_module::runtime::{get_runtime, verify_payment};
@@ -65,11 +65,19 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<H
         return Ok(HandlerResult::PaymentValid); // Module disabled, pass through
     }
 
-    let resource = config
-        .resource
-        .as_deref()
-        .or_else(|| r.path().to_str().ok())
-        .unwrap_or("/");
+    // Determine resource URL:
+    // 1. Use configured resource if set
+    // 2. Otherwise, build full URL from request (scheme://host/path)
+    // 3. Fallback to relative path if full URL cannot be built
+    let resource = if let Some(ref configured_resource) = config.resource {
+        configured_resource.as_str()
+    } else {
+        // Try to build full URL automatically
+        build_full_url(r).unwrap_or_else(|| {
+            // Fallback to relative path if full URL cannot be built
+            r.path().to_str().unwrap_or("/")
+        })
+    };
 
     log_debug(
         Some(r),

@@ -136,10 +136,12 @@ http {
 - `x402_asset_decimals <decimals>` - Token decimals (default: 6 for USDC, typically 18 for ERC-20 tokens). **Required when using custom tokens** to ensure correct amount calculation.
 
 **Advanced Configuration:**
-- `x402_resource <path>` - Resource path (default: request URI)
+- `x402_resource <path>` - Resource path or full URL (default: automatically builds full URL from request: `scheme://host/path`)
 - `x402_timeout <seconds>` - Facilitator API timeout (1-300, default: 10)
 - `x402_facilitator_fallback <mode>` - Fallback on error: `error` (500) or `pass` (default: `error`)
 - `x402_metrics on|off` - Enable Prometheus metrics endpoint
+
+**Note:** If `x402_resource` is not configured, the module automatically builds a full URL from the request (`scheme://host/path`). This ensures compatibility with facilitator APIs that require full URLs instead of relative paths. If you need a relative path or custom URL, explicitly set `x402_resource`.
 
 **Note:** When using custom tokens, always specify `x402_asset_decimals` to match your token's decimal precision. Most ERC-20 tokens use 18 decimals, while USDC uses 6 decimals.
 
