@@ -280,9 +280,26 @@ mod tests {
             return;
         }
 
-        let status = http_request("/health").expect("Failed to make HTTP request");
+        // Retry logic to handle timing issues
+        let mut status = String::new();
+        let mut retries = 10;
+        while retries > 0 {
+            status = http_request("/health").unwrap_or_else(|| "000".to_string());
+            if status == "200" {
+                break;
+            }
+            if status != "000" {
+                // Got a response but not 200, fail immediately
+                break;
+            }
+            retries -= 1;
+            thread::sleep(Duration::from_millis(500));
+        }
 
-        assert_eq!(status, "200", "Expected 200 response, got {status}");
+        assert_eq!(
+            status, "200",
+            "Expected 200 response from /health endpoint, got {status} after retries"
+        );
     }
 
     #[test]
