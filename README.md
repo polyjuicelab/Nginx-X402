@@ -69,11 +69,27 @@ sudo systemctl reload nginx
 
 ## Configuration
 
-Add to your `nginx.conf`:
+**IMPORTANT: Module Loading**
 
+You have two options to load the module. Choose **ONE** method only:
+
+**Option 1: Using modules-enabled (Recommended for Debian/Ubuntu)**
+```bash
+sudo ln -s /etc/nginx/modules-available/x402.conf /etc/nginx/modules-enabled/x402.conf
+```
+This automatically loads the module via `/etc/nginx/modules-enabled/x402.conf`.
+
+**Option 2: Manual load_module in nginx.conf**
+Add this line to your `/etc/nginx/nginx.conf` (at the top level, before `http` block):
 ```nginx
 load_module /usr/lib/nginx/modules/libnginx_x402.so;
+```
 
+**⚠️ DO NOT use both methods - this will cause "module already loaded" errors.**
+
+After loading the module, add x402 configuration to your `nginx.conf`:
+
+```nginx
 http {
     server {
         location /protected {

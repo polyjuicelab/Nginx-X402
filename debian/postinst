@@ -545,6 +545,20 @@ rm -rf "$BUILD_DIR"
 
 echo "Module built and installed successfully!"
 echo "Module location: $MODULE_DIR/libnginx_x402.so"
+echo ""
+echo "=== Module Loading Instructions ==="
+echo "To enable the module, use ONE of these methods:"
+echo ""
+echo "Option 1: Using modules-enabled (Recommended)"
+echo "  sudo ln -s /etc/nginx/modules-available/x402.conf /etc/nginx/modules-enabled/x402.conf"
+echo ""
+echo "Option 2: Manual load_module in nginx.conf"
+echo "  Add this line to /etc/nginx/nginx.conf (before 'http' block):"
+echo "  load_module /usr/lib/nginx/modules/libnginx_x402.so;"
+echo ""
+echo "⚠️  IMPORTANT: Use ONLY ONE method. Using both will cause"
+echo "   'module already loaded' errors when running 'nginx -t'."
+echo ""
 
 exit 0
 

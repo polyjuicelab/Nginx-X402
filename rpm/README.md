@@ -85,15 +85,19 @@ sudo dnf install ~/rpmbuild/RPMS/x86_64/nginx-x402-0.1.4-1.fc*.x86_64.rpm
 
 ## Module Configuration
 
-After installation, enable the module in Nginx:
+After installation, enable the module in Nginx using **ONE** of these methods:
 
+**Option 1: Using modules-enabled (Recommended)**
 ```bash
-# Copy module configuration
 sudo cp /etc/nginx/modules-available/x402.conf /etc/nginx/modules-enabled/
+```
 
-# Or add to nginx.conf directly
+**Option 2: Manual load_module in nginx.conf**
+```bash
 echo "load_module /usr/lib64/nginx/modules/libnginx_x402.so;" | sudo tee -a /etc/nginx/nginx.conf
 ```
+
+**⚠️ IMPORTANT: Use ONLY ONE method. Using both will cause "module already loaded" errors.**
 
 ## Environment Variables
 
