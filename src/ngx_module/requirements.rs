@@ -131,7 +131,7 @@ pub fn create_requirements(
             // Note: Rust Decimal supports up to 28 decimal places
             let mut result = Decimal::from(1u64);
             for _ in 0..decimals {
-                result = result * Decimal::from(10u64);
+                result *= Decimal::from(10u64);
             }
             result
         }
