@@ -159,7 +159,7 @@ mod tests {
     /// Make HTTP request with custom headers and return response body
     fn http_request_with_headers(path: &str, headers: &[(&str, &str)]) -> Option<String> {
         let url = format!("http://localhost:{NGINX_PORT}{path}");
-        let mut header_strings: Vec<String> = headers
+        let header_strings: Vec<String> = headers
             .iter()
             .map(|(name, value)| format!("{}: {}", name, value))
             .collect();
@@ -178,7 +178,7 @@ mod tests {
     /// Make HTTP request with custom headers and return status code
     fn http_request_with_headers_status(path: &str, headers: &[(&str, &str)]) -> Option<String> {
         let url = format!("http://localhost:{NGINX_PORT}{path}");
-        let mut header_strings: Vec<String> = headers
+        let header_strings: Vec<String> = headers
             .iter()
             .map(|(name, value)| format!("{}: {}", name, value))
             .collect();
