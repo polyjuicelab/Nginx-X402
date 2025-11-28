@@ -247,6 +247,43 @@ pub unsafe fn get_http_method(r: *const ngx::ffi::ngx_http_request_t) -> Option<
     }
 }
 
+/// Build full URL from request
+///
+/// Constructs a complete URL from the request's scheme, host, and URI.
+/// This is useful for x402 resource requirements that need a full URL instead of a relative path.
+///
+/// # Arguments
+/// - `r`: Nginx request object
+///
+/// # Returns
+/// - `Some(String)` with the full URL if all components are available
+/// - `None` if any required component (scheme, host, or URI) is missing
+#[must_use]
+pub fn build_full_url(r: &Request) -> Option<String> {
+    // Get scheme (http or https)
+    let scheme = if r.is_ssl() {
+        "https"
+    } else {
+        "http"
+    };
+
+    // Get host from Host header
+    let host = get_header_value(r, "Host")?;
+
+    // Get URI path (ensure it starts with /)
+    let uri = r.path().to_str().ok()?;
+    let uri = if uri.starts_with('/') {
+        uri
+    } else {
+        // If URI doesn't start with /, add it
+        format!("/{}", uri)
+    };
+
+    // Build full URL: scheme://host/uri
+    // Note: URI already starts with /, so no need to add another /
+    Some(format!("{}://{}{}", scheme, host, uri))
+}
+
 /// Check if HTTP method should skip payment verification
 ///
 /// Some HTTP methods are used for protocol-level operations and should
