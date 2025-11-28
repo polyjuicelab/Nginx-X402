@@ -156,6 +156,41 @@ mod tests {
             .map(|output| String::from_utf8_lossy(&output.stdout).to_string())
     }
 
+    /// Make HTTP request with custom headers and return response body
+    fn http_request_with_headers(path: &str, headers: &[(&str, &str)]) -> Option<String> {
+        let mut args = vec!["-s", &format!("http://localhost:{NGINX_PORT}{path}")];
+        for (name, value) in headers {
+            args.push("-H");
+            args.push(&format!("{}: {}", name, value));
+        }
+        Command::new("curl")
+            .args(args)
+            .output()
+            .ok()
+            .map(|output| String::from_utf8_lossy(&output.stdout).to_string())
+    }
+
+    /// Make HTTP request with custom headers and return status code
+    fn http_request_with_headers_status(path: &str, headers: &[(&str, &str)]) -> Option<String> {
+        let mut args = vec![
+            "-s",
+            "-o",
+            "/dev/null",
+            "-w",
+            "%{http_code}",
+            &format!("http://localhost:{NGINX_PORT}{path}"),
+        ];
+        for (name, value) in headers {
+            args.push("-H");
+            args.push(&format!("{}: {}", name, value));
+        }
+        Command::new("curl")
+            .args(args)
+            .output()
+            .ok()
+            .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+    }
+
     /// Ensure container is running, start it if needed
     fn ensure_container_running() -> bool {
         // Check if container is already running
@@ -497,5 +532,108 @@ mod tests {
                 || status_with_payment == "200",
             "Unexpected status: {status_with_payment}"
         );
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_content_type_json_returns_json_response() {
+        // Test Case: Content-Type: application/json should return JSON response, not HTML
+        // This test verifies the fix for issue where API requests with browser User-Agent
+        // were incorrectly returning HTML instead of JSON
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        // Make request with Content-Type: application/json and browser User-Agent
+        // This simulates a browser making an API request (e.g., fetch() with JSON)
+        let response_body = http_request_with_headers(
+            "/api/protected",
+            &[
+                ("Content-Type", "application/json"),
+                (
+                    "User-Agent",
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+                ),
+            ],
+        )
+        .expect("Failed to make HTTP request");
+
+        // Verify response is JSON, not HTML
+        assert!(
+            response_body.trim_start().starts_with('{') || response_body.trim_start().starts_with('['),
+            "Response should be JSON, but got: {}",
+            response_body.chars().take(200).collect::<String>()
+        );
+
+        // Verify response contains JSON structure (should have "accepts" array for payment requirements)
+        assert!(
+            response_body.contains("\"accepts\"") || response_body.contains("\"error\""),
+            "Response should contain JSON structure with 'accepts' or 'error' field"
+        );
+
+        // Verify response does NOT contain HTML tags
+        assert!(
+            !response_body.contains("<!DOCTYPE") && !response_body.contains("<html"),
+            "Response should not contain HTML, but got HTML content"
+        );
+
+        println!("✓ Content-Type: application/json correctly returns JSON response");
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_content_type_json_without_user_agent() {
+        // Test Case: Content-Type: application/json without User-Agent should return JSON
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        // Make request with only Content-Type: application/json (no User-Agent)
+        let response_body = http_request_with_headers(
+            "/api/protected",
+            &[("Content-Type", "application/json")],
+        )
+        .expect("Failed to make HTTP request");
+
+        // Verify response is JSON
+        assert!(
+            response_body.trim_start().starts_with('{') || response_body.trim_start().starts_with('['),
+            "Response should be JSON, but got: {}",
+            response_body.chars().take(200).collect::<String>()
+        );
+
+        println!("✓ Content-Type: application/json (no User-Agent) correctly returns JSON");
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_browser_request_without_content_type_returns_html() {
+        // Test Case: Browser request without Content-Type should return HTML
+        // This ensures we didn't break the existing browser behavior
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        // Make request with browser User-Agent but no Content-Type
+        let response_body = http_request_with_headers(
+            "/api/protected",
+            &[(
+                "User-Agent",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+            )],
+        )
+        .expect("Failed to make HTTP request");
+
+        // Verify response is HTML
+        assert!(
+            response_body.contains("<!DOCTYPE") || response_body.contains("<html"),
+            "Browser request without Content-Type should return HTML, but got: {}",
+            response_body.chars().take(200).collect::<String>()
+        );
+
+        println!("✓ Browser request (no Content-Type) correctly returns HTML");
     }
 }

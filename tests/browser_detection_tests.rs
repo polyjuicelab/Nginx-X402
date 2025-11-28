@@ -3,6 +3,7 @@
 //! These tests verify that browser detection works correctly,
 //! covering the fix for:
 //! - fix-9: Browser detection improvements (strict logic, Accept header priority)
+//! - fix/content-type-json-api-detection: Content-Type: application/json should be treated as API request
 
 mod tests {
     use nginx_x402::parse_accept_priority;

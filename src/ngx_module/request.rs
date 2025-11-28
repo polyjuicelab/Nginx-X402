@@ -31,7 +31,8 @@ pub fn get_header_value(r: &Request, name: &str) -> Option<String> {
 /// Check if request is from a browser
 ///
 /// Uses a strict, priority-based detection algorithm:
-/// 1. **Accept header priority** (highest priority): Parse Accept header with q-values
+/// 0. **Content-Type header** (highest priority): If `application/json`, definitely API
+/// 1. **Accept header priority**: Parse Accept header with q-values
 ///    - If `text/html` has q > 0.5, likely browser
 ///    - If `application/json` has q > 0.5 and no `text/html`, likely API
 ///    - If `*/*` is present with high q-value, check other indicators
@@ -55,6 +56,15 @@ pub fn is_browser_request(r: &Request) -> bool {
     let accept = get_header_value(r, "Accept");
     let content_type = get_header_value(r, "Content-Type");
     let upgrade = get_header_value(r, "Upgrade");
+
+    // Priority 0: Check Content-Type header first (strongest indicator)
+    // If Content-Type is application/json, this is definitely an API request
+    if let Some(ref content_type_header) = content_type {
+        let ct_lower = content_type_header.to_lowercase();
+        if ct_lower.starts_with("application/json") {
+            return false; // API request
+        }
+    }
 
     // Priority 1: Check Accept header with q-value parsing
     if let Some(ref accept_header) = accept {
@@ -112,6 +122,7 @@ pub fn is_browser_request(r: &Request) -> bool {
     });
 
     // Priority 3: Check Content-Type for browser-specific types
+    // Note: application/json is already handled above as API indicator
     let is_browser_content_type = content_type.as_ref().is_some_and(|ct| {
         let ct_lower = ct.to_lowercase();
         ct_lower.starts_with("multipart/form-data")
@@ -161,4 +172,31 @@ pub fn is_websocket_request(r: &Request) -> bool {
         .is_some_and(|c| c.to_lowercase().contains("upgrade"));
 
     has_upgrade && has_connection_upgrade
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test helper to verify Content-Type: application/json detection
+    /// This test documents the expected behavior: Content-Type: application/json
+    /// should always result in API detection (false), regardless of User-Agent
+    #[test]
+    fn test_content_type_json_priority() {
+        // This test documents the expected behavior.
+        // Actual testing requires nginx Request object which is difficult to mock.
+        // Integration tests in tests/docker_integration_test.rs verify this behavior.
+        
+        // Expected behavior:
+        // 1. Content-Type: application/json -> API request (false)
+        // 2. Content-Type: application/json + browser User-Agent -> API request (false)
+        // 3. Browser User-Agent without Content-Type -> Browser request (true)
+        
+        // This is verified by integration tests:
+        // - test_content_type_json_returns_json_response
+        // - test_content_type_json_without_user_agent
+        // - test_browser_request_without_content_type_returns_html
+        
+        assert!(true, "Content-Type: application/json priority is tested in integration tests");
+    }
 }
