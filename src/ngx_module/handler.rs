@@ -6,7 +6,7 @@ use crate::ngx_module::error::{user_errors, ConfigError, Result};
 use crate::ngx_module::logging::{log_debug, log_error, log_info, log_warn};
 use crate::ngx_module::metrics::X402Metrics;
 use crate::ngx_module::module::get_module_config;
-use crate::ngx_module::request::{build_full_url, get_header_value};
+use crate::ngx_module::request::{build_full_url, get_header_value, infer_mime_type};
 use crate::ngx_module::requirements::create_requirements;
 use crate::ngx_module::response::{send_402_response, send_response_body};
 use crate::ngx_module::runtime::{get_runtime, verify_payment};
@@ -79,13 +79,16 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<H
         })
     };
 
+    // Infer MIME type from request headers
+    let mime_type = infer_mime_type(r);
+    
     log_debug(
         Some(r),
-        &format!("x402 handler processing request for resource: {resource}"),
+        &format!("x402 handler processing request for resource: {resource}, mimeType: {mime_type}"),
     );
 
     // Create payment requirements
-    let requirements = create_requirements(config, resource).map_err(|e| {
+    let requirements = create_requirements(config, resource, Some(&mime_type)).map_err(|e| {
         log_error(
             Some(r),
             &format!("Failed to create payment requirements: {e}"),

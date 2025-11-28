@@ -284,6 +284,76 @@ pub fn build_full_url(r: &Request) -> Option<String> {
     Some(format!("{}://{}{}", scheme, host, uri))
 }
 
+/// Infer MIME type from request headers
+///
+/// Attempts to determine the MIME type from the request's Accept or Content-Type headers.
+/// This is useful for x402 payment requirements that need a mimeType field.
+///
+/// Priority:
+/// 1. Content-Type header (if present)
+/// 2. Accept header (highest priority media type)
+/// 3. Default to "application/json" if neither is available
+///
+/// # Arguments
+/// - `r`: Nginx request object
+///
+/// # Returns
+/// - MIME type string (e.g., "application/json", "text/html")
+#[must_use]
+pub fn infer_mime_type(r: &Request) -> String {
+    // First, try Content-Type header
+    if let Some(content_type) = get_header_value(r, "Content-Type") {
+        // Extract MIME type from Content-Type (remove parameters like charset)
+        let mime_type = content_type
+            .split(';')
+            .next()
+            .unwrap_or("application/json")
+            .trim()
+            .to_string();
+        if !mime_type.is_empty() {
+            return mime_type;
+        }
+    }
+
+    // Second, try Accept header
+    if let Some(accept) = get_header_value(r, "Accept") {
+        // Parse Accept header to find highest priority media type
+        // Look for common MIME types in order of preference
+        let accept_lower = accept.to_lowercase();
+        
+        // Check for specific types first
+        if accept_lower.contains("application/json") {
+            return "application/json".to_string();
+        }
+        if accept_lower.contains("text/html") {
+            return "text/html".to_string();
+        }
+        if accept_lower.contains("application/xml") || accept_lower.contains("text/xml") {
+            return "application/xml".to_string();
+        }
+        if accept_lower.contains("text/plain") {
+            return "text/plain".to_string();
+        }
+        
+        // Try to extract first media type from Accept header
+        // Format: "type/subtype;q=value, type/subtype"
+        if let Some(first_type) = accept.split(',').next() {
+            let mime_type = first_type
+                .split(';')
+                .next()
+                .unwrap_or("application/json")
+                .trim()
+                .to_string();
+            if !mime_type.is_empty() && mime_type != "*/*" {
+                return mime_type;
+            }
+        }
+    }
+
+    // Default fallback
+    "application/json".to_string()
+}
+
 /// Check if HTTP method should skip payment verification
 ///
 /// Some HTTP methods are used for protocol-level operations and should

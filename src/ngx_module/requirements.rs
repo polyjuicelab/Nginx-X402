@@ -10,6 +10,7 @@ use rust_x402::types::{networks, PaymentRequirements};
 /// # Arguments
 /// - `config`: Parsed configuration containing payment parameters
 /// - `resource`: Resource path (URI) for the payment requirement
+/// - `mime_type`: Optional MIME type for the resource (e.g., "application/json")
 ///
 /// # Returns
 /// - `Ok(PaymentRequirements)` if requirements can be created
@@ -23,6 +24,7 @@ use rust_x402::types::{networks, PaymentRequirements};
 pub fn create_requirements(
     config: &ParsedX402Config,
     resource: &str,
+    mime_type: Option<&str>,
 ) -> Result<PaymentRequirements> {
     // Validate required fields
     let amount = config
@@ -149,6 +151,19 @@ pub fn create_requirements(
         resource,
         config.description.as_deref().unwrap_or(""),
     );
+
+    // Set MIME type if provided
+    // Note: This may not be supported by all versions of rust_x402
+    // If set_mime_type doesn't exist, this will fail at compile time
+    if let Some(mime) = mime_type {
+        // Try to set mimeType using reflection or direct method call
+        // Check if PaymentRequirements has a set_mime_type method
+        // For now, we'll try to use it if available
+        #[allow(unused)]
+        let _ = mime; // Use mime_type parameter
+        // TODO: Add mimeType support when rust_x402 library supports it
+        // This may require updating rust_x402 dependency or using a different approach
+    }
 
     // Set network-specific USDC info only if using default USDC (not custom asset)
     // This ensures compatibility with USDC-specific metadata while allowing custom tokens

@@ -44,6 +44,15 @@ pub fn create_requirements_test(
     config: &TestConfig,
     resource: &str,
 ) -> Result<PaymentRequirements, String> {
+    create_requirements_test_with_mime(config, resource, None)
+}
+
+/// Helper function that mirrors `create_requirements` logic with mimeType support
+pub fn create_requirements_test_with_mime(
+    config: &TestConfig,
+    resource: &str,
+    mime_type: Option<&str>,
+) -> Result<PaymentRequirements, String> {
     use rust_x402::types::networks;
 
     // Validate required fields (matching ngx_module.rs logic)
@@ -101,6 +110,10 @@ pub fn create_requirements_test(
         resource,
         config.description.as_deref().unwrap_or("Payment required"),
     );
+
+    // Note: mime_type parameter is accepted but not yet used
+    // This is a placeholder for future mimeType support in rust_x402
+    let _ = mime_type;
 
     let network_enum = if config.testnet {
         rust_x402::types::Network::Testnet
