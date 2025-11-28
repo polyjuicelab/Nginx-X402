@@ -561,7 +561,8 @@ mod tests {
 
         // Verify response is JSON, not HTML
         assert!(
-            response_body.trim_start().starts_with('{') || response_body.trim_start().starts_with('['),
+            response_body.trim_start().starts_with('{')
+                || response_body.trim_start().starts_with('['),
             "Response should be JSON, but got: {}",
             response_body.chars().take(200).collect::<String>()
         );
@@ -591,15 +592,14 @@ mod tests {
         }
 
         // Make request with only Content-Type: application/json (no User-Agent)
-        let response_body = http_request_with_headers(
-            "/api/protected",
-            &[("Content-Type", "application/json")],
-        )
-        .expect("Failed to make HTTP request");
+        let response_body =
+            http_request_with_headers("/api/protected", &[("Content-Type", "application/json")])
+                .expect("Failed to make HTTP request");
 
         // Verify response is JSON
         assert!(
-            response_body.trim_start().starts_with('{') || response_body.trim_start().starts_with('['),
+            response_body.trim_start().starts_with('{')
+                || response_body.trim_start().starts_with('['),
             "Response should be JSON, but got: {}",
             response_body.chars().take(200).collect::<String>()
         );
