@@ -572,8 +572,7 @@ mod tests {
             return;
         }
 
-        // Test OPTIONS request without payment header
-        // Should return 200/204 (success) instead of 402 (payment required)
+        // Test OPTIONS request with basic CORS preflight headers
         let status = http_request_with_method(
             "/api/protected",
             "OPTIONS",
@@ -607,51 +606,6 @@ mod tests {
 
     #[test]
     #[ignore = "requires Docker"]
-    fn test_options_request_with_cors_headers() {
-        // Test Case: OPTIONS request with CORS headers should be handled correctly
-        // This simulates a real browser CORS preflight request
-        if !ensure_container_running() {
-            eprintln!("Failed to start container. Skipping test.");
-            return;
-        }
-
-        // Test OPTIONS request with full CORS preflight headers
-        let status = http_request_with_method(
-            "/api/protected",
-            "OPTIONS",
-            &[
-                ("Origin", "http://example.com"),
-                ("Access-Control-Request-Method", "POST"),
-                (
-                    "Access-Control-Request-Headers",
-                    "content-type,authorization",
-                ),
-                (
-                    "User-Agent",
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-                ),
-            ],
-        )
-        .expect("Failed to make OPTIONS request");
-
-        println!("OPTIONS request with CORS headers status: {status}");
-
-        // Should succeed without payment verification
-        assert!(
-            status == "200" || status == "204" || status == "405",
-            "OPTIONS request with CORS headers should return 200/204/405, got {status}"
-        );
-
-        assert_ne!(
-            status, "402",
-            "OPTIONS request should not require payment even with CORS headers"
-        );
-
-        println!("✓ OPTIONS request with CORS headers correctly handled");
-    }
-
-    #[test]
-    #[ignore = "requires Docker"]
     fn test_head_request_skips_payment() {
         // Test Case: HEAD request should skip payment verification
         // HEAD requests are used to check resource existence without retrieving body
@@ -681,6 +635,40 @@ mod tests {
         );
 
         println!("✓ HEAD request correctly skipped payment verification");
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_trace_request_skips_payment() {
+        // Test Case: TRACE request should skip payment verification
+        // TRACE requests are used for diagnostic and debugging purposes
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        // Test TRACE request without payment header
+        let status = http_request_with_method("/api/protected", "TRACE", &[])
+            .expect("Failed to make TRACE request");
+
+        println!("TRACE request status (no payment): {status}");
+
+        // TRACE request should succeed or return appropriate status without payment verification
+        // It should NOT return 402, which would indicate payment verification was attempted
+        // Note: Many servers disable TRACE for security, so 405 (Method Not Allowed) is acceptable
+        assert!(
+            status == "200" || status == "404" || status == "405" || status == "204",
+            "TRACE request should skip payment verification and return appropriate status, got {status}"
+        );
+
+        // Verify that TRACE request does not require payment
+        assert_ne!(
+            status, "402",
+            "TRACE request should not require payment (got 402). \
+             Payment verification should be skipped for TRACE requests."
+        );
+
+        println!("✓ TRACE request correctly skipped payment verification");
     }
 
     #[test]

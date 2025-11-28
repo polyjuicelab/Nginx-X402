@@ -113,9 +113,10 @@ pub unsafe extern "C" fn x402_phase_handler(
 
     // Skip payment verification for special request types
     // These requests should bypass payment verification:
-    // 1. Certain HTTP methods (OPTIONS, HEAD) - used for protocol-level operations
+    // 1. Certain HTTP methods (OPTIONS, HEAD, TRACE) - used for protocol-level operations
     //    - OPTIONS: CORS preflight requests sent by browsers before cross-origin requests
     //    - HEAD: Used to check resource existence without retrieving body
+    //    - TRACE: Used for diagnostic and debugging purposes
     // 2. WebSocket upgrades - long-lived connections that use special HTTP Upgrade mechanism.
     //    Payment verification would interfere with WebSocket handshake, and subsequent
     //    WebSocket frames are not HTTP requests, so payment verification is not applicable.
@@ -124,8 +125,10 @@ pub unsafe extern "C" fn x402_phase_handler(
     // 4. Internal redirects - detected via raw request pointer
 
     // Check if HTTP method should skip payment verification
+    // This check happens early to avoid unnecessary processing
+    let detected_method = unsafe { get_http_method(r) };
     if unsafe { should_skip_payment_for_method(r) } {
-        let method = unsafe { get_http_method(r).unwrap_or("UNKNOWN") };
+        let method = detected_method.unwrap_or("UNKNOWN");
         log_debug(
             Some(req_mut),
             &format!(
@@ -134,6 +137,14 @@ pub unsafe extern "C" fn x402_phase_handler(
             ),
         );
         return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
+    }
+
+    // Debug: Log detected method for troubleshooting (only if method was detected)
+    if let Some(method) = detected_method {
+        log_debug(
+            Some(req_mut),
+            &format!("[x402] Phase handler: HTTP method detected: {}", method),
+        );
     }
 
     // Check for WebSocket upgrade (can be detected via headers)
