@@ -526,6 +526,187 @@ mod tests {
         println!("This is implemented in phase handler using raw request pointer");
     }
 
+    /// Make HTTP request with custom method and headers, return status code
+    fn http_request_with_method(
+        path: &str,
+        method: &str,
+        headers: &[(&str, &str)],
+    ) -> Option<String> {
+        let url = format!("http://localhost:{NGINX_PORT}{path}");
+        let header_strings: Vec<String> = headers
+            .iter()
+            .map(|(name, value)| format!("{}: {}", name, value))
+            .collect();
+
+        let mut args = vec![
+            "-s",
+            "-o",
+            "/dev/null",
+            "-w",
+            "%{http_code}",
+            "-X",
+            method,
+            &url,
+        ];
+
+        for header in &header_strings {
+            args.push("-H");
+            args.push(header);
+        }
+
+        Command::new("curl")
+            .args(args)
+            .output()
+            .ok()
+            .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_options_request_skips_payment() {
+        // Test Case: OPTIONS request (CORS preflight) should skip payment verification
+        // OPTIONS requests are sent by browsers before cross-origin requests to check CORS policy.
+        // These requests should bypass payment verification to allow CORS checks to complete.
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        // Test OPTIONS request without payment header
+        // Should return 200/204 (success) instead of 402 (payment required)
+        let status = http_request_with_method(
+            "/api/protected",
+            "OPTIONS",
+            &[
+                ("Origin", "http://127.0.0.1:8080"),
+                ("Access-Control-Request-Method", "GET"),
+                ("Access-Control-Request-Headers", "content-type"),
+            ],
+        )
+        .expect("Failed to make OPTIONS request");
+
+        println!("OPTIONS request status (no payment): {status}");
+
+        // OPTIONS request should succeed (200 or 204) without payment verification
+        // It should NOT return 402, which would indicate payment verification was attempted
+        assert!(
+            status == "200" || status == "204" || status == "405",
+            "OPTIONS request should skip payment verification and return 200/204/405, got {status}. \
+             If status is 402, payment verification was incorrectly applied to OPTIONS request."
+        );
+
+        // Verify that OPTIONS request does not require payment
+        assert_ne!(
+            status, "402",
+            "OPTIONS request should not require payment (got 402). \
+             Payment verification should be skipped for OPTIONS requests."
+        );
+
+        println!("✓ OPTIONS request correctly skipped payment verification");
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_options_request_with_cors_headers() {
+        // Test Case: OPTIONS request with CORS headers should be handled correctly
+        // This simulates a real browser CORS preflight request
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        // Test OPTIONS request with full CORS preflight headers
+        let status = http_request_with_method(
+            "/api/protected",
+            "OPTIONS",
+            &[
+                ("Origin", "http://example.com"),
+                ("Access-Control-Request-Method", "POST"),
+                (
+                    "Access-Control-Request-Headers",
+                    "content-type,authorization",
+                ),
+                (
+                    "User-Agent",
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+                ),
+            ],
+        )
+        .expect("Failed to make OPTIONS request");
+
+        println!("OPTIONS request with CORS headers status: {status}");
+
+        // Should succeed without payment verification
+        assert!(
+            status == "200" || status == "204" || status == "405",
+            "OPTIONS request with CORS headers should return 200/204/405, got {status}"
+        );
+
+        assert_ne!(
+            status, "402",
+            "OPTIONS request should not require payment even with CORS headers"
+        );
+
+        println!("✓ OPTIONS request with CORS headers correctly handled");
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_head_request_skips_payment() {
+        // Test Case: HEAD request should skip payment verification
+        // HEAD requests are used to check resource existence without retrieving body
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        // Test HEAD request without payment header
+        let status = http_request_with_method("/api/protected", "HEAD", &[])
+            .expect("Failed to make HEAD request");
+
+        println!("HEAD request status (no payment): {status}");
+
+        // HEAD request should succeed or return appropriate status without payment verification
+        // It should NOT return 402, which would indicate payment verification was attempted
+        assert!(
+            status == "200" || status == "404" || status == "405" || status == "204",
+            "HEAD request should skip payment verification and return appropriate status, got {status}"
+        );
+
+        // Verify that HEAD request does not require payment
+        assert_ne!(
+            status, "402",
+            "HEAD request should not require payment (got 402). \
+             Payment verification should be skipped for HEAD requests."
+        );
+
+        println!("✓ HEAD request correctly skipped payment verification");
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_get_request_still_requires_payment() {
+        // Test Case: Ensure GET requests still require payment verification
+        // This verifies that skipping payment for OPTIONS/HEAD doesn't affect GET requests
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        // Test GET request without payment header
+        let status = http_request("/api/protected").expect("Failed to make GET request");
+
+        println!("GET request status (no payment): {status}");
+
+        // GET request should still require payment
+        assert_eq!(
+            status, "402",
+            "GET request should still require payment verification (expected 402, got {status})"
+        );
+
+        println!("✓ GET request correctly requires payment verification");
+    }
+
     #[test]
     #[ignore = "requires Docker"]
     fn test_internal_redirect_error_page() {

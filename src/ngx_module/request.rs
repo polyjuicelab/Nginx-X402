@@ -174,6 +174,81 @@ pub fn is_websocket_request(r: &Request) -> bool {
     has_upgrade && has_connection_upgrade
 }
 
+/// Get HTTP method from request
+///
+/// Returns the HTTP method as a string slice (e.g., "GET", "POST", "OPTIONS").
+///
+/// # Safety
+/// This function accesses the raw request pointer to check the HTTP method.
+/// The caller must ensure the request pointer is valid.
+///
+/// # Arguments
+/// - `r`: Raw nginx request pointer
+///
+/// # Returns
+/// - `Some(&str)` with the HTTP method name (uppercase) if available
+/// - `None` if request pointer is null or method cannot be determined
+#[must_use]
+pub unsafe fn get_http_method(r: *const ngx::ffi::ngx_http_request_t) -> Option<&'static str> {
+    if r.is_null() {
+        return None;
+    }
+
+    let request_struct = &*r;
+    let method_name = request_struct.method_name;
+
+    if method_name.data.is_null() || method_name.len == 0 {
+        return None;
+    }
+
+    // Convert method_name to string slice for comparison
+    let method_slice = std::slice::from_raw_parts(method_name.data, method_name.len);
+
+    // Map common HTTP methods to static strings
+    // This avoids allocation and provides type-safe method checking
+    match method_slice {
+        b"GET" | b"get" => Some("GET"),
+        b"POST" | b"post" => Some("POST"),
+        b"PUT" | b"put" => Some("PUT"),
+        b"DELETE" | b"delete" => Some("DELETE"),
+        b"PATCH" | b"patch" => Some("PATCH"),
+        b"HEAD" | b"head" => Some("HEAD"),
+        b"OPTIONS" | b"options" => Some("OPTIONS"),
+        b"TRACE" | b"trace" => Some("TRACE"),
+        b"CONNECT" | b"connect" => Some("CONNECT"),
+        _ => {
+            // For unknown methods, try to convert to uppercase string
+            // Note: This is a fallback and may not work for all cases
+            None
+        }
+    }
+}
+
+/// Check if HTTP method should skip payment verification
+///
+/// Some HTTP methods are used for protocol-level operations and should
+/// not require payment verification:
+/// - **OPTIONS**: CORS preflight requests sent by browsers before cross-origin requests
+/// - **HEAD**: Used to check resource existence without retrieving body
+///
+/// These methods are typically used for infrastructure/checking purposes rather than
+/// actual resource access, so payment verification should be skipped.
+///
+/// # Safety
+/// This function accesses the raw request pointer to check the HTTP method.
+/// The caller must ensure the request pointer is valid.
+///
+/// # Arguments
+/// - `r`: Raw nginx request pointer
+///
+/// # Returns
+/// - `true` if the HTTP method should skip payment verification
+/// - `false` otherwise
+#[must_use]
+pub unsafe fn should_skip_payment_for_method(r: *const ngx::ffi::ngx_http_request_t) -> bool {
+    matches!(get_http_method(r), Some("OPTIONS") | Some("HEAD"))
+}
+
 #[cfg(test)]
 mod tests {
     // Note: Unit tests for `is_browser_request` require nginx Request objects

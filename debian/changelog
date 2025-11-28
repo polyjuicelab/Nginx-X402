@@ -1,3 +1,16 @@
+nginx-x402 (1.1.2-1) unstable; urgency=medium
+
+  * Version bump to 1.1.2
+  * Add support for skipping payment verification for OPTIONS and HEAD requests
+  * OPTIONS requests (CORS preflight) now bypass payment verification to allow CORS checks
+  * HEAD requests now bypass payment verification as they are protocol-level queries
+  * Add generic HTTP method detection and handling
+  * Add integration tests for OPTIONS and HEAD request handling
+  * Improve CORS support for browser-based API requests
+  * Fix clippy warnings: use is_ok_and and matches! macro
+
+ -- Ryan Kung <ryan@polyjuice.io>  Thu, 28 Nov 2025 00:00:00 +0000
+
 nginx-x402 (1.1.1-1) unstable; urgency=medium
 
   * Version bump to 1.1.1
