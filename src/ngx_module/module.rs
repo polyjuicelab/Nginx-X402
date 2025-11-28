@@ -222,6 +222,9 @@ unsafe extern "C" fn merge_loc_conf(
     if conf_mut.asset_str.len == 0 {
         conf_mut.asset_str = prev_conf.asset_str;
     }
+    if conf_mut.asset_decimals_str.len == 0 {
+        conf_mut.asset_decimals_str = prev_conf.asset_decimals_str;
+    }
     if conf_mut.timeout_str.len == 0 {
         conf_mut.timeout_str = prev_conf.timeout_str;
     }
