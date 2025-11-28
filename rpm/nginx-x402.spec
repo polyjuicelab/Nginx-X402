@@ -673,6 +673,16 @@ fi
 %{_datadir}/%{name}/
 
 %changelog
+* Thu Nov 28 2025 Ryan Kung <ryan@polyjuice.io> - 1.1.2-1
+- Version bump to 1.1.2
+- Add support for skipping payment verification for OPTIONS and HEAD requests
+- OPTIONS requests (CORS preflight) now bypass payment verification to allow CORS checks
+- HEAD requests now bypass payment verification as they are protocol-level queries
+- Add generic HTTP method detection and handling
+- Add integration tests for OPTIONS and HEAD request handling
+- Improve CORS support for browser-based API requests
+- Fix clippy warnings: use is_ok_and and matches! macro
+
 * Thu Nov 28 2025 Ryan Kung <ryan@polyjuice.io> - 1.1.1-1
 - Version bump to 1.1.1
 - Fix: Content-Type: application/json now correctly returns JSON response instead of HTML

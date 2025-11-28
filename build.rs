@@ -431,16 +431,11 @@ fn prepare_config_content(source_dir: &std::path::Path, mut config_content: Stri
         }
     }
     let autoconf_err_path = source_dir.join("objs/autoconf.err");
-    let has_so_acceptfilter = if autoconf_err_path.exists() {
-        if let Ok(autoconf_content) = fs::read_to_string(&autoconf_err_path) {
+    let has_so_acceptfilter = autoconf_err_path.exists()
+        && fs::read_to_string(&autoconf_err_path).is_ok_and(|autoconf_content| {
             !autoconf_content.contains("'SO_ACCEPTFILTER' undeclared")
                 && !autoconf_content.contains("SO_ACCEPTFILTER.*error")
-        } else {
-            false
-        }
-    } else {
-        false
-    };
+        });
     if has_so_acceptfilter {
         config_content.push_str("\n#define SO_ACCEPTFILTER_AVAILABLE 1");
     } else {

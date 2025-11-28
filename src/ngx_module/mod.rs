@@ -45,7 +45,9 @@ pub use handler::{
 pub use logging::{log_debug, log_error, log_info, log_warn};
 pub use metrics::{collect_metrics, X402Metrics};
 pub use module::{get_module_config, ngx_http_x402_module};
-pub use request::{get_header_value, is_browser_request};
+pub use request::{
+    get_header_value, get_http_method, is_browser_request, should_skip_payment_for_method,
+};
 pub use requirements::create_requirements;
 pub use response::{send_402_response, send_response_body};
 pub use runtime::{
@@ -105,16 +107,34 @@ pub unsafe extern "C" fn x402_phase_handler(
 
     use crate::ngx_module::logging::log_debug;
     use crate::ngx_module::module::get_module_config;
-    use crate::ngx_module::request::is_websocket_request;
+    use crate::ngx_module::request::{
+        get_http_method, is_websocket_request, should_skip_payment_for_method,
+    };
 
     // Skip payment verification for special request types
     // These requests should bypass payment verification:
-    // 1. WebSocket upgrades - long-lived connections that use special HTTP Upgrade mechanism.
+    // 1. Certain HTTP methods (OPTIONS, HEAD) - used for protocol-level operations
+    //    - OPTIONS: CORS preflight requests sent by browsers before cross-origin requests
+    //    - HEAD: Used to check resource existence without retrieving body
+    // 2. WebSocket upgrades - long-lived connections that use special HTTP Upgrade mechanism.
     //    Payment verification would interfere with WebSocket handshake, and subsequent
     //    WebSocket frames are not HTTP requests, so payment verification is not applicable.
     //    Payment should be handled at application layer for WebSocket connections.
-    // 2. Subrequests (auth_request, etc.) - detected via raw request pointer
-    // 3. Internal redirects - detected via raw request pointer
+    // 3. Subrequests (auth_request, etc.) - detected via raw request pointer
+    // 4. Internal redirects - detected via raw request pointer
+
+    // Check if HTTP method should skip payment verification
+    if unsafe { should_skip_payment_for_method(r) } {
+        let method = unsafe { get_http_method(r).unwrap_or("UNKNOWN") };
+        log_debug(
+            Some(req_mut),
+            &format!(
+                "[x402] Phase handler: {} request detected, skipping payment verification",
+                method
+            ),
+        );
+        return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
+    }
 
     // Check for WebSocket upgrade (can be detected via headers)
     if is_websocket_request(req_mut) {
