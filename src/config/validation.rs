@@ -77,6 +77,31 @@ pub fn validate_url(url: &str) -> Result<()> {
     Ok(())
 }
 
+/// Map chainId to network name
+///
+/// # Arguments
+/// - `chain_id`: Chain ID (e.g., 8453 for Base Mainnet, 84532 for Base Sepolia)
+///
+/// # Returns
+/// - `Ok(String)` with network name if chainId is supported
+/// - `Err` if chainId is not supported
+pub fn chain_id_to_network(chain_id: u64) -> Result<String> {
+    use rust_x402::types::networks;
+
+    let network = match chain_id {
+        8453 => networks::BASE_MAINNET,  // Base Mainnet
+        84532 => networks::BASE_SEPOLIA, // Base Sepolia
+        _ => {
+            return Err(X402Error::config(format!(
+                "Unsupported chainId: {}. Supported chainIds: 8453 (base), 84532 (base-sepolia)",
+                chain_id
+            )));
+        }
+    };
+
+    Ok(network.to_string())
+}
+
 /// Validate network name
 ///
 /// # Arguments

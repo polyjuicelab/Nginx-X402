@@ -376,6 +376,47 @@ unsafe extern "C" fn ngx_http_x402_network(
     ptr::null_mut()
 }
 
+/// Parse `x402_network_id` directive
+///
+/// Allows specifying network by chainId instead of network name.
+/// Takes precedence over `x402_network` if both are specified.
+///
+/// # Example
+/// ```nginx
+/// x402_network_id 8453;  # Base Mainnet
+/// x402_network_id 84532;  # Base Sepolia
+/// ```
+unsafe extern "C" fn ngx_http_x402_network_id(
+    cf: *mut ngx_conf_t,
+    _cmd: *mut ngx_command_t,
+    conf: *mut core::ffi::c_void,
+) -> *mut c_char {
+    let conf = conf.cast::<X402Config>();
+    if conf.is_null() {
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
+    }
+
+    let args = (*cf).args;
+    if args.is_null() || (*args).nelts < 2 {
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
+    }
+
+    // elts is a pointer to an array of ngx_str_t, not an array of pointers
+    let elts = (*args).elts.cast::<ngx_str_t>();
+    let value_str = *elts.add(1);
+
+    match copy_string_to_pool(cf, value_str) {
+        Some(allocated_str) => {
+            (*conf).network_id_str = allocated_str;
+        }
+        None => {
+            return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
+        }
+    }
+
+    ptr::null_mut()
+}
+
 /// Parse `x402_resource` directive
 unsafe extern "C" fn ngx_http_x402_resource(
     cf: *mut ngx_conf_t,
@@ -399,6 +440,46 @@ unsafe extern "C" fn ngx_http_x402_resource(
     match copy_string_to_pool(cf, value_str) {
         Some(allocated_str) => {
             (*conf).resource_str = allocated_str;
+        }
+        None => {
+            return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
+        }
+    }
+
+    ptr::null_mut()
+}
+
+/// Parse `x402_asset` directive
+///
+/// Allows specifying a custom token/contract address instead of using the default USDC address.
+/// This enables support for custom tokens or native ETH (using zero address).
+///
+/// # Example
+/// ```nginx
+/// x402_asset 0xYourCustomTokenAddress;
+/// ```
+unsafe extern "C" fn ngx_http_x402_asset(
+    cf: *mut ngx_conf_t,
+    _cmd: *mut ngx_command_t,
+    conf: *mut core::ffi::c_void,
+) -> *mut c_char {
+    let conf = conf.cast::<X402Config>();
+    if conf.is_null() {
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
+    }
+
+    let args = (*cf).args;
+    if args.is_null() || (*args).nelts < 2 {
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
+    }
+
+    // elts is a pointer to an array of ngx_str_t, not an array of pointers
+    let elts = (*args).elts.cast::<ngx_str_t>();
+    let value_str = *elts.add(1);
+
+    match copy_string_to_pool(cf, value_str) {
+        Some(allocated_str) => {
+            (*conf).asset_str = allocated_str;
         }
         None => {
             return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
@@ -531,7 +612,7 @@ unsafe extern "C" fn ngx_http_x402_metrics(
 /// - Offset: offset within the config structure
 /// - Post: post-processing function (if any)
 #[no_mangle]
-pub static mut ngx_http_x402_commands: [ngx_command_t; 11] = [
+pub static mut ngx_http_x402_commands: [ngx_command_t; 13] = [
     ngx_command_t {
         name: ngx_string!("x402"),
         type_: (ngx::ffi::NGX_HTTP_MAIN_CONF
@@ -584,9 +665,25 @@ pub static mut ngx_http_x402_commands: [ngx_command_t; 11] = [
         post: ptr::null_mut(),
     },
     ngx_command_t {
+        name: ngx_string!("x402_network_id"),
+        type_: (ngx::ffi::NGX_HTTP_LOC_CONF | ngx::ffi::NGX_CONF_TAKE1) as usize,
+        set: Some(ngx_http_x402_network_id),
+        conf: ngx::ffi::NGX_HTTP_LOC_CONF_OFFSET,
+        offset: 0,
+        post: ptr::null_mut(),
+    },
+    ngx_command_t {
         name: ngx_string!("x402_resource"),
         type_: (ngx::ffi::NGX_HTTP_LOC_CONF | ngx::ffi::NGX_CONF_TAKE1) as usize,
         set: Some(ngx_http_x402_resource),
+        conf: ngx::ffi::NGX_HTTP_LOC_CONF_OFFSET,
+        offset: 0,
+        post: ptr::null_mut(),
+    },
+    ngx_command_t {
+        name: ngx_string!("x402_asset"),
+        type_: (ngx::ffi::NGX_HTTP_LOC_CONF | ngx::ffi::NGX_CONF_TAKE1) as usize,
+        set: Some(ngx_http_x402_asset),
         conf: ngx::ffi::NGX_HTTP_LOC_CONF_OFFSET,
         offset: 0,
         post: ptr::null_mut(),

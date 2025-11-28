@@ -213,8 +213,14 @@ unsafe extern "C" fn merge_loc_conf(
     if conf_mut.network_str.len == 0 {
         conf_mut.network_str = prev_conf.network_str;
     }
+    if conf_mut.network_id_str.len == 0 {
+        conf_mut.network_id_str = prev_conf.network_id_str;
+    }
     if conf_mut.resource_str.len == 0 {
         conf_mut.resource_str = prev_conf.resource_str;
+    }
+    if conf_mut.asset_str.len == 0 {
+        conf_mut.asset_str = prev_conf.asset_str;
     }
     if conf_mut.timeout_str.len == 0 {
         conf_mut.timeout_str = prev_conf.timeout_str;

@@ -16,7 +16,9 @@ pub struct X402Config {
     pub facilitator_url_str: ngx_str_t,
     pub description_str: ngx_str_t,
     pub network_str: ngx_str_t,
+    pub network_id_str: ngx_str_t, // Chain ID (e.g., "8453", "84532")
     pub resource_str: ngx_str_t,
+    pub asset_str: ngx_str_t, // Custom token/contract address (e.g., "0x...")
     pub timeout_str: ngx_str_t, // Timeout in seconds (e.g., "10")
     pub facilitator_fallback_str: ngx_str_t, // Fallback mode: "error" or "pass"
 }
@@ -38,7 +40,9 @@ pub struct ParsedX402Config {
     pub facilitator_url: Option<String>,
     pub description: Option<String>,
     pub network: Option<String>,
+    pub network_id: Option<u64>, // Chain ID (e.g., 8453, 84532)
     pub resource: Option<String>,
+    pub asset: Option<String>, // Custom token/contract address (overrides USDC default)
     pub timeout: Option<Duration>, // Timeout for facilitator requests
     pub facilitator_fallback: FacilitatorFallback, // Fallback behavior when facilitator fails
 }
@@ -110,7 +114,31 @@ impl X402Config {
             ngx_str.to_str().ok().map(std::string::ToString::to_string)
         };
 
-        let network = if self.network_str.len == 0 {
+        // Parse network_id (chainId) - takes precedence over network name
+        let network_id = if self.network_id_str.len == 0 {
+            None
+        } else {
+            let ngx_str = unsafe { NgxStr::from_ngx_str(self.network_id_str) };
+            let network_id_str = ngx_str
+                .to_str()
+                .map_err(|_| ConfigError::from("Invalid network_id string encoding"))?;
+
+            let chain_id = network_id_str
+                .parse::<u64>()
+                .map_err(|e| ConfigError::from(format!("Invalid network_id format: {e}")))?;
+
+            // Validate chainId and convert to network name
+            crate::config::chain_id_to_network(chain_id)
+                .map_err(|e| ConfigError::from(e.to_string()))?;
+
+            Some(chain_id)
+        };
+
+        // Parse network name (only if network_id is not provided)
+        let network = if network_id.is_some() {
+            // If network_id is provided, ignore network_str
+            None
+        } else if self.network_str.len == 0 {
             None
         } else {
             let ngx_str = unsafe { NgxStr::from_ngx_str(self.network_str) };
@@ -130,6 +158,21 @@ impl X402Config {
         } else {
             let ngx_str = unsafe { NgxStr::from_ngx_str(self.resource_str) };
             ngx_str.to_str().ok().map(std::string::ToString::to_string)
+        };
+
+        let asset = if self.asset_str.len == 0 {
+            None
+        } else {
+            let ngx_str = unsafe { NgxStr::from_ngx_str(self.asset_str) };
+            let asset_str = ngx_str
+                .to_str()
+                .map_err(|_| ConfigError::from("Invalid asset string encoding"))?;
+
+            // Validate Ethereum address format
+            crate::config::validate_ethereum_address(asset_str)
+                .map_err(|e| ConfigError::from(e.to_string()))?;
+
+            Some(asset_str.to_string())
         };
 
         // Parse timeout (in seconds)
@@ -187,7 +230,9 @@ impl X402Config {
             facilitator_url,
             description,
             network,
+            network_id,
             resource,
+            asset,
             timeout,
             facilitator_fallback,
         })

@@ -21,7 +21,9 @@ mod tests {
             facilitator_url_str: ngx::ffi::ngx_str_t::default(),
             description_str: ngx::ffi::ngx_str_t::default(),
             network_str: ngx::ffi::ngx_str_t::default(),
+            network_id_str: ngx::ffi::ngx_str_t::default(),
             resource_str: ngx::ffi::ngx_str_t::default(),
+            asset_str: ngx::ffi::ngx_str_t::default(),
             timeout_str: ngx::ffi::ngx_str_t::default(),
             facilitator_fallback_str: ngx::ffi::ngx_str_t::default(),
         }
