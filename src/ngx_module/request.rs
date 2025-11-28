@@ -178,6 +178,9 @@ pub fn is_websocket_request(r: &Request) -> bool {
 ///
 /// Returns the HTTP method as a string slice (e.g., "GET", "POST", "OPTIONS").
 ///
+/// Uses the `method` field (integer ID) for reliable detection, falling back to
+/// `method_name` (string) if the method ID is not recognized.
+///
 /// # Safety
 /// This function accesses the raw request pointer to check the HTTP method.
 /// The caller must ensure the request pointer is valid.
@@ -195,31 +198,51 @@ pub unsafe fn get_http_method(r: *const ngx::ffi::ngx_http_request_t) -> Option<
     }
 
     let request_struct = &*r;
-    let method_name = request_struct.method_name;
 
-    if method_name.data.is_null() || method_name.len == 0 {
-        return None;
-    }
+    // Use method ID (integer) for reliable detection
+    // Nginx method IDs:
+    // NGX_HTTP_GET = 0x00000002
+    // NGX_HTTP_HEAD = 0x00000004
+    // NGX_HTTP_POST = 0x00000008
+    // NGX_HTTP_PUT = 0x00000010
+    // NGX_HTTP_DELETE = 0x00000020
+    // NGX_HTTP_OPTIONS = 0x00000200
+    // NGX_HTTP_PATCH = 0x00004000
+    // NGX_HTTP_TRACE = 0x00008000
+    // NGX_HTTP_CONNECT = 0x00010000
+    let method_id = request_struct.method;
 
-    // Convert method_name to string slice for comparison
-    let method_slice = std::slice::from_raw_parts(method_name.data, method_name.len);
-
-    // Map common HTTP methods to static strings
-    // This avoids allocation and provides type-safe method checking
-    match method_slice {
-        b"GET" | b"get" => Some("GET"),
-        b"POST" | b"post" => Some("POST"),
-        b"PUT" | b"put" => Some("PUT"),
-        b"DELETE" | b"delete" => Some("DELETE"),
-        b"PATCH" | b"patch" => Some("PATCH"),
-        b"HEAD" | b"head" => Some("HEAD"),
-        b"OPTIONS" | b"options" => Some("OPTIONS"),
-        b"TRACE" | b"trace" => Some("TRACE"),
-        b"CONNECT" | b"connect" => Some("CONNECT"),
+    match method_id {
+        0x00000002 => Some("GET"),
+        0x00000004 => Some("HEAD"),
+        0x00000008 => Some("POST"),
+        0x00000010 => Some("PUT"),
+        0x00000020 => Some("DELETE"),
+        0x00000200 => Some("OPTIONS"),
+        0x00004000 => Some("PATCH"),
+        0x00008000 => Some("TRACE"),
+        0x00010000 => Some("CONNECT"),
         _ => {
-            // For unknown methods, try to convert to uppercase string
-            // Note: This is a fallback and may not work for all cases
-            None
+            // Fallback to method_name if method ID is not recognized
+            // This handles custom HTTP methods or edge cases
+            let method_name = request_struct.method_name;
+            if method_name.data.is_null() || method_name.len == 0 {
+                return None;
+            }
+
+            let method_slice = std::slice::from_raw_parts(method_name.data, method_name.len);
+            match method_slice {
+                b"GET" | b"get" => Some("GET"),
+                b"POST" | b"post" => Some("POST"),
+                b"PUT" | b"put" => Some("PUT"),
+                b"DELETE" | b"delete" => Some("DELETE"),
+                b"PATCH" | b"patch" => Some("PATCH"),
+                b"HEAD" | b"head" => Some("HEAD"),
+                b"OPTIONS" | b"options" => Some("OPTIONS"),
+                b"TRACE" | b"trace" => Some("TRACE"),
+                b"CONNECT" | b"connect" => Some("CONNECT"),
+                _ => None,
+            }
         }
     }
 }
@@ -230,6 +253,7 @@ pub unsafe fn get_http_method(r: *const ngx::ffi::ngx_http_request_t) -> Option<
 /// not require payment verification:
 /// - **OPTIONS**: CORS preflight requests sent by browsers before cross-origin requests
 /// - **HEAD**: Used to check resource existence without retrieving body
+/// - **TRACE**: Used for diagnostic and debugging purposes
 ///
 /// These methods are typically used for infrastructure/checking purposes rather than
 /// actual resource access, so payment verification should be skipped.
@@ -246,7 +270,10 @@ pub unsafe fn get_http_method(r: *const ngx::ffi::ngx_http_request_t) -> Option<
 /// - `false` otherwise
 #[must_use]
 pub unsafe fn should_skip_payment_for_method(r: *const ngx::ffi::ngx_http_request_t) -> bool {
-    matches!(get_http_method(r), Some("OPTIONS") | Some("HEAD"))
+    matches!(
+        get_http_method(r),
+        Some("OPTIONS") | Some("HEAD") | Some("TRACE")
+    )
 }
 
 #[cfg(test)]
