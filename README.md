@@ -24,6 +24,9 @@ Pure Rust implementation of Nginx module for x402 HTTP micropayment protocol.
 - ✅ Type-safe Nginx API bindings
 - ✅ Payment verification and 402 response handling
 - ✅ Prometheus metrics support
+- ✅ Custom token support with configurable decimals (ERC-20 compatible)
+- ✅ Network identification via chainId (8453, 84532)
+- ✅ Automatic amount calculation based on token decimals
 
 ## Quick Start
 
@@ -92,11 +95,24 @@ After loading the module, add x402 configuration to your `nginx.conf`:
 ```nginx
 http {
     server {
+        # Basic USDC payment (default)
         location /protected {
             x402 on;
             x402_amount 0.0001;
             x402_pay_to 0xYourWalletAddress;
             x402_facilitator_url https://x402.org/facilitator;
+            x402_network base-sepolia;
+        }
+
+        # Custom ERC-20 token with 18 decimals
+        location /api/custom-token {
+            x402 on;
+            x402_amount 0.001;
+            x402_pay_to 0xYourWalletAddress;
+            x402_facilitator_url https://x402.org/facilitator;
+            x402_network_id 84532;  # Base Sepolia chainId
+            x402_asset 0xYourCustomTokenAddress;
+            x402_asset_decimals 18;  # Standard ERC-20
         }
     }
 }
@@ -104,19 +120,28 @@ http {
 
 ### Configuration Directives
 
+**Basic Configuration:**
 - `x402 on|off` - Enable/disable payment verification
 - `x402_amount <amount>` - Payment amount (e.g., "0.0001")
 - `x402_pay_to <address>` - Recipient wallet address
 - `x402_facilitator_url <url>` - Facilitator service URL
 - `x402_description <text>` - Payment description
+
+**Network Configuration:**
 - `x402_network <network>` - Network identifier (e.g., "base", "base-sepolia")
 - `x402_network_id <chainId>` - Network chainId (e.g., 8453 for Base Mainnet, 84532 for Base Sepolia). Takes precedence over `x402_network` if both are specified.
-- `x402_resource <path>` - Resource path (default: request URI)
+
+**Token Configuration:**
 - `x402_asset <address>` - Custom token/contract address (optional, defaults to USDC for the network)
-- `x402_asset_decimals <decimals>` - Token decimals (default: 6 for USDC, typically 18 for ERC-20 tokens). Required when using custom tokens to ensure correct amount calculation.
+- `x402_asset_decimals <decimals>` - Token decimals (default: 6 for USDC, typically 18 for ERC-20 tokens). **Required when using custom tokens** to ensure correct amount calculation.
+
+**Advanced Configuration:**
+- `x402_resource <path>` - Resource path (default: request URI)
 - `x402_timeout <seconds>` - Facilitator API timeout (1-300, default: 10)
 - `x402_facilitator_fallback <mode>` - Fallback on error: `error` (500) or `pass` (default: `error`)
 - `x402_metrics on|off` - Enable Prometheus metrics endpoint
+
+**Note:** When using custom tokens, always specify `x402_asset_decimals` to match your token's decimal precision. Most ERC-20 tokens use 18 decimals, while USDC uses 6 decimals.
 
 ## Monitoring
 
@@ -153,11 +178,19 @@ scrape_configs:
 
 ## Testing
 
+**Unit Tests:**
 ```bash
 cargo test
 ```
 
-All tests run without requiring nginx source or a running nginx instance.
+All unit tests run without requiring nginx source or a running nginx instance.
+
+**Integration Tests:**
+```bash
+cargo test --test docker_integration_test --features integration-test -- --ignored
+```
+
+Integration tests require Docker and will automatically build and run nginx in a container.
 
 ## Environment Variables
 
