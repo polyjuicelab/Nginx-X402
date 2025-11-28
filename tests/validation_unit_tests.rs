@@ -219,18 +219,18 @@ mod tests {
 
     #[test]
     fn test_validate_amount_too_many_decimals() {
-        // Create amounts with more than 6 decimal places
+        // Create amounts with more than 18 decimal places (max for ERC-20 tokens)
         let too_many_decimals = vec![
-            Decimal::from_str("0.0000001").unwrap(),  // 7 decimals
-            Decimal::from_str("0.00000001").unwrap(), // 8 decimals
-            Decimal::from_str("1.1234567").unwrap(),  // 7 decimals
+            Decimal::from_str("0.0000000000000000001").unwrap(),  // 19 decimals
+            Decimal::from_str("0.00000000000000000001").unwrap(), // 20 decimals
+            Decimal::from_str("1.1234567890123456789").unwrap(),  // 19 decimals
         ];
 
         for amount in too_many_decimals {
             let result = validate_amount(amount);
             assert!(
                 result.is_err(),
-                "Amount '{amount}' with too many decimals should fail validation"
+                "Amount '{amount}' with more than 18 decimals should fail validation"
             );
             let error = result.unwrap_err().to_string();
             assert!(
