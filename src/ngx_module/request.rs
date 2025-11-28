@@ -176,27 +176,14 @@ pub fn is_websocket_request(r: &Request) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    /// Test helper to verify Content-Type: application/json detection
-    /// This test documents the expected behavior: Content-Type: application/json
-    /// should always result in API detection (false), regardless of User-Agent
-    #[test]
-    fn test_content_type_json_priority() {
-        // This test documents the expected behavior.
-        // Actual testing requires nginx Request object which is difficult to mock.
-        // Integration tests in tests/docker_integration_test.rs verify this behavior.
-        
-        // Expected behavior:
-        // 1. Content-Type: application/json -> API request (false)
-        // 2. Content-Type: application/json + browser User-Agent -> API request (false)
-        // 3. Browser User-Agent without Content-Type -> Browser request (true)
-        
-        // This is verified by integration tests:
-        // - test_content_type_json_returns_json_response
-        // - test_content_type_json_without_user_agent
-        // - test_browser_request_without_content_type_returns_html
-        
-        assert!(true, "Content-Type: application/json priority is tested in integration tests");
-    }
+    // Note: Unit tests for `is_browser_request` require nginx Request objects
+    // which are difficult to mock. The behavior is verified by integration tests:
+    // - test_content_type_json_returns_json_response
+    // - test_content_type_json_without_user_agent
+    // - test_browser_request_without_content_type_returns_html
+    //
+    // Expected behavior:
+    // 1. Content-Type: application/json -> API request (false)
+    // 2. Content-Type: application/json + browser User-Agent -> API request (false)
+    // 3. Browser User-Agent without Content-Type -> Browser request (true)
 }
