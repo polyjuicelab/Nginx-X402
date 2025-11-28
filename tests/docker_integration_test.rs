@@ -158,10 +158,13 @@ mod tests {
 
     /// Make HTTP request with custom headers and return response body
     fn http_request_with_headers(path: &str, headers: &[(&str, &str)]) -> Option<String> {
-        let mut args = vec!["-s", &format!("http://localhost:{NGINX_PORT}{path}")];
+        let url = format!("http://localhost:{NGINX_PORT}{path}");
+        let mut args = vec!["-s", &url];
+        let mut header_strings = Vec::new();
         for (name, value) in headers {
             args.push("-H");
-            args.push(&format!("{}: {}", name, value));
+            header_strings.push(format!("{}: {}", name, value));
+            args.push(header_strings.last().unwrap());
         }
         Command::new("curl")
             .args(args)
@@ -172,17 +175,13 @@ mod tests {
 
     /// Make HTTP request with custom headers and return status code
     fn http_request_with_headers_status(path: &str, headers: &[(&str, &str)]) -> Option<String> {
-        let mut args = vec![
-            "-s",
-            "-o",
-            "/dev/null",
-            "-w",
-            "%{http_code}",
-            &format!("http://localhost:{NGINX_PORT}{path}"),
-        ];
+        let url = format!("http://localhost:{NGINX_PORT}{path}");
+        let mut args = vec!["-s", "-o", "/dev/null", "-w", "%{http_code}", &url];
+        let mut header_strings = Vec::new();
         for (name, value) in headers {
             args.push("-H");
-            args.push(&format!("{}: {}", name, value));
+            header_strings.push(format!("{}: {}", name, value));
+            args.push(header_strings.last().unwrap());
         }
         Command::new("curl")
             .args(args)
