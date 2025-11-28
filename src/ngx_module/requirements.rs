@@ -90,10 +90,55 @@ pub fn create_requirements(
             .map_err(|e| ConfigError::from(e.to_string()))?
     };
 
-    // Convert amount to max_amount_required (in smallest unit, e.g., wei for USDC)
-    let max_amount_required = (amount * rust_decimal::Decimal::from(1_000_000u64))
-        .normalize()
-        .to_string();
+    // Determine token decimals - use configured decimals or default to 6 (USDC)
+    // If custom asset is specified but decimals not provided, default to 6 (USDC standard)
+    // This ensures backward compatibility while allowing custom tokens to specify their precision
+    let decimals = config.asset_decimals.unwrap_or(6u8);
+
+    // Validate that amount precision doesn't exceed token decimals
+    let amount_scale = amount.scale();
+    if amount_scale > decimals as u32 {
+        return Err(ConfigError::from(format!(
+            "Amount has {amount_scale} decimal places, but token only supports {decimals} decimals"
+        )));
+    }
+
+    // Calculate multiplier based on decimals (10^decimals)
+    // For USDC (6 decimals): 10^6 = 1,000,000
+    // For standard ERC-20 (18 decimals): 10^18
+    let multiplier = match decimals {
+        0 => Decimal::from(1u64),
+        1 => Decimal::from(10u64),
+        2 => Decimal::from(100u64),
+        3 => Decimal::from(1_000u64),
+        4 => Decimal::from(10_000u64),
+        5 => Decimal::from(100_000u64),
+        6 => Decimal::from(1_000_000u64),
+        7 => Decimal::from(10_000_000u64),
+        8 => Decimal::from(100_000_000u64),
+        9 => Decimal::from(1_000_000_000u64),
+        10 => Decimal::from(10_000_000_000u64),
+        11 => Decimal::from(100_000_000_000u64),
+        12 => Decimal::from(1_000_000_000_000u64),
+        13 => Decimal::from(10_000_000_000_000u64),
+        14 => Decimal::from(100_000_000_000_000u64),
+        15 => Decimal::from(1_000_000_000_000_000u64),
+        16 => Decimal::from(10_000_000_000_000_000u64),
+        17 => Decimal::from(100_000_000_000_000_000u64),
+        18 => Decimal::from(1_000_000_000_000_000_000u64),
+        _ => {
+            // For decimals > 18, use power calculation
+            // Note: Rust Decimal supports up to 28 decimal places
+            let mut result = Decimal::from(1u64);
+            for _ in 0..decimals {
+                result = result * Decimal::from(10u64);
+            }
+            result
+        }
+    };
+
+    // Convert amount to max_amount_required (in smallest unit based on token decimals)
+    let max_amount_required = (amount * multiplier).normalize().to_string();
 
     let mut requirements = PaymentRequirements::new(
         rust_x402::types::schemes::EXACT,

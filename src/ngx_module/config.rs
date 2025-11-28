@@ -19,6 +19,7 @@ pub struct X402Config {
     pub network_id_str: ngx_str_t, // Chain ID (e.g., "8453", "84532")
     pub resource_str: ngx_str_t,
     pub asset_str: ngx_str_t, // Custom token/contract address (e.g., "0x...")
+    pub asset_decimals_str: ngx_str_t, // Token decimals (e.g., "6" for USDC, "18" for most ERC-20)
     pub timeout_str: ngx_str_t, // Timeout in seconds (e.g., "10")
     pub facilitator_fallback_str: ngx_str_t, // Fallback mode: "error" or "pass"
 }
@@ -43,6 +44,7 @@ pub struct ParsedX402Config {
     pub network_id: Option<u64>, // Chain ID (e.g., 8453, 84532)
     pub resource: Option<String>,
     pub asset: Option<String>, // Custom token/contract address (overrides USDC default)
+    pub asset_decimals: Option<u8>, // Token decimals (default: 6 for USDC, typically 18 for ERC-20)
     pub timeout: Option<Duration>, // Timeout for facilitator requests
     pub facilitator_fallback: FacilitatorFallback, // Fallback behavior when facilitator fails
 }
@@ -175,6 +177,30 @@ impl X402Config {
             Some(asset_str.to_string())
         };
 
+        // Parse asset decimals (token precision)
+        let asset_decimals = if self.asset_decimals_str.len == 0 {
+            None
+        } else {
+            let ngx_str = unsafe { NgxStr::from_ngx_str(self.asset_decimals_str) };
+            let decimals_str = ngx_str
+                .to_str()
+                .map_err(|_| ConfigError::from("Invalid asset_decimals string encoding"))?;
+
+            let decimals = decimals_str
+                .parse::<u8>()
+                .map_err(|e| ConfigError::from(format!("Invalid asset_decimals format: {e}")))?;
+
+            // Validate decimals range (typically 0-18 for ERC-20 tokens, max 28 for Decimal support)
+            // Most tokens use 18 decimals, but we allow up to 28 (Rust Decimal max precision)
+            if decimals > 28 {
+                return Err(ConfigError::from(
+                    "asset_decimals must be at most 28 (Decimal max precision)",
+                ));
+            }
+
+            Some(decimals)
+        };
+
         // Parse timeout (in seconds)
         let timeout = if self.timeout_str.len == 0 {
             None
@@ -233,6 +259,7 @@ impl X402Config {
             network_id,
             resource,
             asset,
+            asset_decimals,
             timeout,
             facilitator_fallback,
         })

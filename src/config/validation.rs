@@ -153,11 +153,17 @@ pub fn validate_amount(amount: Decimal) -> Result<()> {
         )));
     }
 
-    // Check for reasonable precision (max 6 decimal places for USDC)
+    // Check for reasonable precision
+    // Default: max 6 decimal places for USDC
+    // When using custom tokens, decimals can be up to 18 (standard ERC-20)
+    // The actual validation should be done at the requirements creation level
+    // based on the configured asset_decimals
     let scale = amount.scale();
-    if scale > 6 {
+    // Allow up to 18 decimals (standard ERC-20 maximum)
+    // Individual token validation happens in requirements creation
+    if scale > 18 {
         return Err(X402Error::config(format!(
-            "Amount has too many decimal places: maximum is 6, got {scale}"
+            "Amount has too many decimal places: maximum is 18, got {scale}"
         )));
     }
 

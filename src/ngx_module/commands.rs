@@ -489,6 +489,48 @@ unsafe extern "C" fn ngx_http_x402_asset(
     ptr::null_mut()
 }
 
+/// Parse `x402_asset_decimals` directive
+///
+/// Specifies the number of decimal places for the token (default: 6 for USDC).
+/// Most ERC-20 tokens use 18 decimals. This is required when using custom tokens
+/// to ensure correct amount calculation.
+///
+/// # Example
+/// ```nginx
+/// x402_asset_decimals 18;  # For standard ERC-20 tokens
+/// x402_asset_decimals 6;   # For USDC
+/// ```
+unsafe extern "C" fn ngx_http_x402_asset_decimals(
+    cf: *mut ngx_conf_t,
+    _cmd: *mut ngx_command_t,
+    conf: *mut core::ffi::c_void,
+) -> *mut c_char {
+    let conf = conf.cast::<X402Config>();
+    if conf.is_null() {
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
+    }
+
+    let args = (*cf).args;
+    if args.is_null() || (*args).nelts < 2 {
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
+    }
+
+    // elts is a pointer to an array of ngx_str_t, not an array of pointers
+    let elts = (*args).elts.cast::<ngx_str_t>();
+    let value_str = *elts.add(1);
+
+    match copy_string_to_pool(cf, value_str) {
+        Some(allocated_str) => {
+            (*conf).asset_decimals_str = allocated_str;
+        }
+        None => {
+            return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
+        }
+    }
+
+    ptr::null_mut()
+}
+
 /// Parse `x402_timeout` directive
 unsafe extern "C" fn ngx_http_x402_timeout(
     cf: *mut ngx_conf_t,
@@ -612,7 +654,7 @@ unsafe extern "C" fn ngx_http_x402_metrics(
 /// - Offset: offset within the config structure
 /// - Post: post-processing function (if any)
 #[no_mangle]
-pub static mut ngx_http_x402_commands: [ngx_command_t; 13] = [
+pub static mut ngx_http_x402_commands: [ngx_command_t; 14] = [
     ngx_command_t {
         name: ngx_string!("x402"),
         type_: (ngx::ffi::NGX_HTTP_MAIN_CONF
@@ -684,6 +726,14 @@ pub static mut ngx_http_x402_commands: [ngx_command_t; 13] = [
         name: ngx_string!("x402_asset"),
         type_: (ngx::ffi::NGX_HTTP_LOC_CONF | ngx::ffi::NGX_CONF_TAKE1) as usize,
         set: Some(ngx_http_x402_asset),
+        conf: ngx::ffi::NGX_HTTP_LOC_CONF_OFFSET,
+        offset: 0,
+        post: ptr::null_mut(),
+    },
+    ngx_command_t {
+        name: ngx_string!("x402_asset_decimals"),
+        type_: (ngx::ffi::NGX_HTTP_LOC_CONF | ngx::ffi::NGX_CONF_TAKE1) as usize,
+        set: Some(ngx_http_x402_asset_decimals),
         conf: ngx::ffi::NGX_HTTP_LOC_CONF_OFFSET,
         offset: 0,
         post: ptr::null_mut(),

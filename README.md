@@ -113,6 +113,7 @@ http {
 - `x402_network_id <chainId>` - Network chainId (e.g., 8453 for Base Mainnet, 84532 for Base Sepolia). Takes precedence over `x402_network` if both are specified.
 - `x402_resource <path>` - Resource path (default: request URI)
 - `x402_asset <address>` - Custom token/contract address (optional, defaults to USDC for the network)
+- `x402_asset_decimals <decimals>` - Token decimals (default: 6 for USDC, typically 18 for ERC-20 tokens). Required when using custom tokens to ensure correct amount calculation.
 - `x402_timeout <seconds>` - Facilitator API timeout (1-300, default: 10)
 - `x402_facilitator_fallback <mode>` - Fallback on error: `error` (500) or `pass` (default: `error`)
 - `x402_metrics on|off` - Enable Prometheus metrics endpoint
