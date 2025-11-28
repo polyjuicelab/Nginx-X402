@@ -2,7 +2,7 @@
 %define moduledir %{_libdir}/nginx/modules
 
 Name:           nginx-x402
-Version:        1.0.4
+Version:        1.1.1
 Release:        1%{?dist}
 Summary:        Pure Rust Nginx module for x402 HTTP micropayment protocol
 License:        AGPL-3.0
@@ -673,6 +673,12 @@ fi
 %{_datadir}/%{name}/
 
 %changelog
+* Thu Nov 28 2025 Ryan Kung <ryan@polyjuice.io> - 1.1.1-1
+- Version bump to 1.1.1
+- Fix: Content-Type: application/json now correctly returns JSON response instead of HTML
+- Improve browser detection logic to prioritize Content-Type header
+- Add integration tests for Content-Type: application/json behavior
+
 * Mon Nov 27 2025 Ryan Kung <ryan@polyjuice.io> - 1.0.4-1
 - Version bump to 1.0.4
 - Fixed workflow build errors by adding nginx source setup steps

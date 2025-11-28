@@ -1,3 +1,12 @@
+nginx-x402 (1.1.1-1) unstable; urgency=medium
+
+  * Version bump to 1.1.1
+  * Fix: Content-Type: application/json now correctly returns JSON response instead of HTML
+  * Improve browser detection logic to prioritize Content-Type header
+  * Add integration tests for Content-Type: application/json behavior
+
+ -- Ryan Kung <ryan@polyjuice.io>  Thu, 28 Nov 2025 00:00:00 +0000
+
 nginx-x402 (1.1.0-1) unstable; urgency=medium
 
   * Version bump to 1.1.0
