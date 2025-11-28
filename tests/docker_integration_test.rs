@@ -573,25 +573,51 @@ mod tests {
         }
 
         // Test OPTIONS request with basic CORS preflight headers
-        let status = http_request_with_method(
-            "/api/protected",
-            "OPTIONS",
-            &[
-                ("Origin", "http://127.0.0.1:8080"),
-                ("Access-Control-Request-Method", "GET"),
-                ("Access-Control-Request-Headers", "content-type"),
-            ],
-        )
-        .expect("Failed to make OPTIONS request");
+        // Retry logic: sometimes nginx needs a moment to be fully ready
+        let mut status = String::new();
+        let mut retries = 5;
+        while retries > 0 {
+            let result = http_request_with_method(
+                "/api/protected",
+                "OPTIONS",
+                &[
+                    ("Origin", "http://127.0.0.1:8080"),
+                    ("Access-Control-Request-Method", "GET"),
+                    ("Access-Control-Request-Headers", "content-type"),
+                ],
+            );
+            match result {
+                Some(s) if s != "000" => {
+                    status = s;
+                    break;
+                }
+                Some(s) => {
+                    status = s;
+                    retries -= 1;
+                    thread::sleep(Duration::from_millis(500));
+                }
+                None => {
+                    status = "000".to_string();
+                    retries -= 1;
+                    thread::sleep(Duration::from_millis(500));
+                }
+            }
+        }
 
         println!("OPTIONS request status (no payment): {status}");
 
-        // OPTIONS request should succeed (200 or 204) without payment verification
+        // OPTIONS request should skip payment verification
         // It should NOT return 402, which would indicate payment verification was attempted
+        // Acceptable status codes:
+        // - 200/204: Request succeeded (if backend supports OPTIONS)
+        // - 405: Method Not Allowed (if backend doesn't support OPTIONS, but payment was skipped)
+        // - 501: Not Implemented (if server doesn't support OPTIONS, but payment was skipped)
+        // - 000: Connection error (should not happen if container is running)
         assert!(
-            status == "200" || status == "204" || status == "405",
-            "OPTIONS request should skip payment verification and return 200/204/405, got {status}. \
-             If status is 402, payment verification was incorrectly applied to OPTIONS request."
+            status == "200" || status == "204" || status == "405" || status == "501",
+            "OPTIONS request should skip payment verification and return 200/204/405/501, got {status}. \
+             If status is 402, payment verification was incorrectly applied to OPTIONS request. \
+             If status is 000, there may be a connection issue."
         );
 
         // Verify that OPTIONS request does not require payment
@@ -599,6 +625,13 @@ mod tests {
             status, "402",
             "OPTIONS request should not require payment (got 402). \
              Payment verification should be skipped for OPTIONS requests."
+        );
+
+        // Verify that we didn't get a connection error
+        assert_ne!(
+            status, "000",
+            "OPTIONS request failed to connect (got 000). \
+             This may indicate the container is not running or nginx is not responding."
         );
 
         println!("✓ OPTIONS request correctly skipped payment verification");
@@ -615,16 +648,42 @@ mod tests {
         }
 
         // Test HEAD request without payment header
-        let status = http_request_with_method("/api/protected", "HEAD", &[])
-            .expect("Failed to make HEAD request");
+        // Retry logic: sometimes nginx needs a moment to be fully ready
+        let mut status = String::new();
+        let mut retries = 5;
+        while retries > 0 {
+            let result = http_request_with_method("/api/protected", "HEAD", &[]);
+            match result {
+                Some(s) if s != "000" => {
+                    status = s;
+                    break;
+                }
+                Some(s) => {
+                    status = s;
+                    retries -= 1;
+                    thread::sleep(Duration::from_millis(500));
+                }
+                None => {
+                    status = "000".to_string();
+                    retries -= 1;
+                    thread::sleep(Duration::from_millis(500));
+                }
+            }
+        }
 
         println!("HEAD request status (no payment): {status}");
 
-        // HEAD request should succeed or return appropriate status without payment verification
+        // HEAD request should skip payment verification
         // It should NOT return 402, which would indicate payment verification was attempted
+        // Acceptable status codes:
+        // - 200/204: Request succeeded (if backend supports HEAD)
+        // - 404: Not Found (if resource doesn't exist, but payment was skipped)
+        // - 405: Method Not Allowed (if backend doesn't support HEAD, but payment was skipped)
+        // - 501: Not Implemented (if server doesn't support HEAD, but payment was skipped)
+        // - 000: Connection error (should not happen if container is running)
         assert!(
-            status == "200" || status == "404" || status == "405" || status == "204",
-            "HEAD request should skip payment verification and return appropriate status, got {status}"
+            status == "200" || status == "404" || status == "405" || status == "204" || status == "501",
+            "HEAD request should skip payment verification and return appropriate status (200/204/404/405/501), got {status}"
         );
 
         // Verify that HEAD request does not require payment
@@ -632,6 +691,13 @@ mod tests {
             status, "402",
             "HEAD request should not require payment (got 402). \
              Payment verification should be skipped for HEAD requests."
+        );
+
+        // Verify that we didn't get a connection error
+        assert_ne!(
+            status, "000",
+            "HEAD request failed to connect (got 000). \
+             This may indicate the container is not running or nginx is not responding."
         );
 
         println!("✓ HEAD request correctly skipped payment verification");
