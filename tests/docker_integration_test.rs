@@ -328,22 +328,46 @@ mod tests {
             return;
         }
 
-        // Make request with invalid payment header
-        let output = Command::new("curl")
-            .args([
-                "-s",
-                "-o",
-                "/dev/null",
-                "-w",
-                "%{http_code}",
-                "-H",
-                "X-PAYMENT: invalid-payment-header",
-                &format!("http://localhost:{NGINX_PORT}/api/protected-proxy"),
-            ])
-            .output()
-            .expect("Failed to run curl");
+        // Retry logic: sometimes nginx needs a moment to be fully ready
+        let mut status = String::new();
+        let mut retries = 5;
+        while retries > 0 {
+            let output = Command::new("curl")
+                .args([
+                    "-s",
+                    "-o",
+                    "/dev/null",
+                    "-w",
+                    "%{http_code}",
+                    "-H",
+                    "X-PAYMENT: invalid-payment-header",
+                    &format!("http://localhost:{NGINX_PORT}/api/protected-proxy"),
+                ])
+                .output();
 
-        let status = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            match output {
+                Ok(output) => {
+                    status = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if status != "000" {
+                        break;
+                    }
+                }
+                Err(_) => {
+                    status = "000".to_string();
+                }
+            }
+            retries -= 1;
+            thread::sleep(Duration::from_millis(500));
+        }
+
+        // 000 means curl failed to connect, which shouldn't happen if container is running
+        if status == "000" {
+            eprintln!("Got 000 status code after retries - curl failed to connect");
+            eprintln!("Checking if nginx is still responding...");
+            let health_status = http_request("/health").unwrap_or_else(|| "000".to_string());
+            eprintln!("Health endpoint status: {health_status}");
+            panic!("Failed to connect to /api/protected-proxy (got 000), but health check returned: {health_status}");
+        }
 
         // Should return 402 (payment verification failed) or 500 (facilitator error)
         // but NOT proxy to backend (which would return 502 Bad Gateway)
