@@ -69,9 +69,14 @@ mod tests {
         match output {
             Ok(output) if output.status.success() => {
                 println!("Container started successfully");
-                // Wait for nginx to be ready
-                thread::sleep(Duration::from_secs(2));
-                true
+                // Wait for nginx to be ready (up to 30 seconds)
+                if wait_for_nginx(Duration::from_secs(30)) {
+                    println!("Nginx is ready");
+                    true
+                } else {
+                    eprintln!("Nginx did not become ready within 30 seconds");
+                    false
+                }
             }
             Ok(output) => {
                 let stderr = String::from_utf8_lossy(&output.stderr);
@@ -81,8 +86,14 @@ mod tests {
                         .args(["start", CONTAINER_NAME])
                         .output()
                         .ok();
-                    thread::sleep(Duration::from_secs(2));
-                    true
+                    // Wait for nginx to be ready (up to 30 seconds)
+                    if wait_for_nginx(Duration::from_secs(30)) {
+                        println!("Nginx is ready");
+                        true
+                    } else {
+                        eprintln!("Nginx did not become ready within 30 seconds");
+                        false
+                    }
                 } else {
                     eprintln!("Failed to start container: {stderr}");
                     false
@@ -122,9 +133,17 @@ mod tests {
     /// Wait for nginx to be ready
     fn wait_for_nginx(max_wait: Duration) -> bool {
         let start = std::time::Instant::now();
+        let mut consecutive_successes = 0;
+        const REQUIRED_SUCCESSES: usize = 3; // Require 3 consecutive successful health checks
+
         while start.elapsed() < max_wait {
             if nginx_is_ready() {
-                return true;
+                consecutive_successes += 1;
+                if consecutive_successes >= REQUIRED_SUCCESSES {
+                    return true;
+                }
+            } else {
+                consecutive_successes = 0; // Reset on failure
             }
             thread::sleep(Duration::from_millis(500));
         }
@@ -197,14 +216,15 @@ mod tests {
         if let Ok(output) = check_output {
             let status = String::from_utf8_lossy(&output.stdout);
             if status.contains("Up") {
-                // Container is running, wait for nginx
-                return wait_for_nginx(Duration::from_secs(10));
+                // Container is running, wait for nginx (up to 30 seconds)
+                return wait_for_nginx(Duration::from_secs(30));
             } else if !status.is_empty() {
                 // Container exists but is stopped, start it
                 let _ = Command::new("docker")
                     .args(["start", CONTAINER_NAME])
                     .output();
-                return wait_for_nginx(Duration::from_secs(10));
+                // Wait for nginx to be ready (up to 30 seconds)
+                return wait_for_nginx(Duration::from_secs(30));
             }
         }
 
