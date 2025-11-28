@@ -334,13 +334,13 @@ mod tests {
     #[test]
     fn test_validate_amount_too_many_decimals() {
         let mut config = create_test_config();
-        // 7 decimal places (max is 6)
-        config.amount_str = ngx_string("0.0000001");
+        // 19 decimal places (max is 18 for ERC-20 tokens)
+        config.amount_str = ngx_string("0.0000000000000000001");
 
         let result = config.parse();
         assert!(
             result.is_err(),
-            "Amount with too many decimal places should fail"
+            "Amount with more than 18 decimal places should fail"
         );
         let error = result.err().map(|e| e.to_string()).unwrap_or_default();
         assert!(
