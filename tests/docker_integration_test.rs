@@ -175,25 +175,6 @@ mod tests {
             .map(|output| String::from_utf8_lossy(&output.stdout).to_string())
     }
 
-    /// Make HTTP request with custom headers and return status code
-    fn http_request_with_headers_status(path: &str, headers: &[(&str, &str)]) -> Option<String> {
-        let url = format!("http://localhost:{NGINX_PORT}{path}");
-        let header_strings: Vec<String> = headers
-            .iter()
-            .map(|(name, value)| format!("{}: {}", name, value))
-            .collect();
-        let mut args = vec!["-s", "-o", "/dev/null", "-w", "%{http_code}", &url];
-        for header in &header_strings {
-            args.push("-H");
-            args.push(header);
-        }
-        Command::new("curl")
-            .args(args)
-            .output()
-            .ok()
-            .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
-    }
-
     /// Ensure container is running, start it if needed
     fn ensure_container_running() -> bool {
         // Check if container is already running
