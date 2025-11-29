@@ -114,6 +114,19 @@ http {
             x402_asset 0xYourCustomTokenAddress;
             x402_asset_decimals 18;  # Standard ERC-20
         }
+
+        # Handle OPTIONS requests (CORS preflight) - should be before x402 location
+        location /api/ {
+            if ($request_method = OPTIONS) {
+                add_header Access-Control-Allow-Origin $http_origin always;
+                add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
+                add_header Access-Control-Allow-Headers "content-type, authorization, x-payment" always;
+                add_header Access-Control-Allow-Credentials "true" always;
+                add_header Access-Control-Max-Age "86400" always;
+                return 204;
+            }
+            # x402 configuration continues here...
+        }
     }
 }
 ```

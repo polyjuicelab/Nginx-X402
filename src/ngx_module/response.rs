@@ -104,21 +104,29 @@ pub fn send_options_response(r: &mut Request) -> Result<()> {
             .ok_or_else(|| ConfigError::from("Failed to set Access-Control-Allow-Origin header"))?;
 
         // Get requested method and headers
-        let requested_method = crate::ngx_module::request::get_header_value(r, "Access-Control-Request-Method")
-            .unwrap_or_else(|| "GET, POST, PUT, DELETE, OPTIONS".to_string());
-        let requested_headers = crate::ngx_module::request::get_header_value(r, "Access-Control-Request-Headers")
-            .unwrap_or_else(|| "content-type, authorization, x-payment".to_string());
+        let requested_method =
+            crate::ngx_module::request::get_header_value(r, "Access-Control-Request-Method")
+                .unwrap_or_else(|| "GET, POST, PUT, DELETE, OPTIONS".to_string());
+        let requested_headers =
+            crate::ngx_module::request::get_header_value(r, "Access-Control-Request-Headers")
+                .unwrap_or_else(|| "content-type, authorization, x-payment".to_string());
 
         // Set CORS response headers
         r.add_header_out("Access-Control-Allow-Methods", &requested_method)
-            .ok_or_else(|| ConfigError::from("Failed to set Access-Control-Allow-Methods header"))?;
+            .ok_or_else(|| {
+                ConfigError::from("Failed to set Access-Control-Allow-Methods header")
+            })?;
 
         r.add_header_out("Access-Control-Allow-Headers", &requested_headers)
-            .ok_or_else(|| ConfigError::from("Failed to set Access-Control-Allow-Headers header"))?;
+            .ok_or_else(|| {
+                ConfigError::from("Failed to set Access-Control-Allow-Headers header")
+            })?;
 
         // Allow credentials if needed
         r.add_header_out("Access-Control-Allow-Credentials", "true")
-            .ok_or_else(|| ConfigError::from("Failed to set Access-Control-Allow-Credentials header"))?;
+            .ok_or_else(|| {
+                ConfigError::from("Failed to set Access-Control-Allow-Credentials header")
+            })?;
 
         // Set max age for preflight cache (24 hours)
         r.add_header_out("Access-Control-Max-Age", "86400")
