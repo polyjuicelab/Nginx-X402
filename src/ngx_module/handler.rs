@@ -81,7 +81,7 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<H
 
     // Infer MIME type from request headers
     let mime_type = infer_mime_type(r);
-    
+
     log_debug(
         Some(r),
         &format!("x402 handler processing request for resource: {resource}, mimeType: {mime_type}"),
