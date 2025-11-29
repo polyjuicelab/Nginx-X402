@@ -111,9 +111,10 @@ pub fn create_requirements_test_with_mime(
         config.description.as_deref().unwrap_or("Payment required"),
     );
 
-    // Note: mime_type parameter is accepted but not yet used
-    // This is a placeholder for future mimeType support in rust_x402
-    let _ = mime_type;
+    // Set MIME type if provided
+    if let Some(mime) = mime_type {
+        requirements.mime_type = Some(mime.to_string());
+    }
 
     let network_enum = if config.testnet {
         rust_x402::types::Network::Testnet
