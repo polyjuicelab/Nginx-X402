@@ -261,15 +261,28 @@ pub unsafe fn get_http_method(r: *const ngx::ffi::ngx_http_request_t) -> Option<
 #[must_use]
 pub fn build_full_url(r: &Request) -> Option<String> {
     // Get scheme (http or https)
-    let scheme = if r.is_ssl() { "https" } else { "http" };
+    // Check X-Forwarded-Proto header first (for reverse proxy scenarios)
+    // Default to http if header is not present (can be overridden by proxy_set_header)
+    let scheme = get_header_value(r, "X-Forwarded-Proto")
+        .and_then(|proto| {
+            let proto_lower = proto.to_lowercase();
+            if proto_lower == "https" {
+                Some("https")
+            } else if proto_lower == "http" {
+                Some("http")
+            } else {
+                None
+            }
+        })
+        .unwrap_or("http");
 
     // Get host from Host header
     let host = get_header_value(r, "Host")?;
 
     // Get URI path (ensure it starts with /)
     let uri = r.path().to_str().ok()?;
-    let uri = if uri.starts_with('/') {
-        uri
+    let uri_normalized = if uri.starts_with('/') {
+        uri.to_string()
     } else {
         // If URI doesn't start with /, add it
         format!("/{}", uri)
@@ -277,7 +290,7 @@ pub fn build_full_url(r: &Request) -> Option<String> {
 
     // Build full URL: scheme://host/uri
     // Note: URI already starts with /, so no need to add another /
-    Some(format!("{}://{}{}", scheme, host, uri))
+    Some(format!("{}://{}{}", scheme, host, uri_normalized))
 }
 
 /// Infer MIME type from request headers

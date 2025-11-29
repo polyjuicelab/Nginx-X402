@@ -69,14 +69,16 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<H
     // 1. Use configured resource if set
     // 2. Otherwise, build full URL from request (scheme://host/path)
     // 3. Fallback to relative path if full URL cannot be built
+    // Store the full URL in a variable that lives long enough for the function call
+    let full_url_owned = build_full_url(r);
     let resource = if let Some(ref configured_resource) = config.resource {
         configured_resource.as_str()
+    } else if let Some(ref url) = full_url_owned {
+        // Use the owned String's reference
+        url.as_str()
     } else {
-        // Try to build full URL automatically
-        build_full_url(r).unwrap_or_else(|| {
-            // Fallback to relative path if full URL cannot be built
-            r.path().to_str().unwrap_or("/")
-        })
+        // Fallback to relative path if full URL cannot be built
+        r.path().to_str().unwrap_or("/")
     };
 
     // Infer MIME type from request headers

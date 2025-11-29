@@ -75,20 +75,21 @@ fn test_mime_type_priority() {
     let accept = Some("text/html");
 
     // Content-Type should take priority
+    #[allow(clippy::unnecessary_literal_unwrap)]
     let inferred = content_type.unwrap_or_else(|| accept.unwrap_or("application/json"));
     assert_eq!(inferred, "application/json");
 
     // When Content-Type is None, use Accept
     let content_type_none: Option<&str> = None;
+    let accept_some = Some("text/html");
+    #[allow(clippy::unnecessary_literal_unwrap)]
     let inferred_from_accept =
-        content_type_none.unwrap_or_else(|| accept.unwrap_or("application/json"));
+        content_type_none.unwrap_or_else(|| accept_some.unwrap_or("application/json"));
     assert_eq!(inferred_from_accept, "text/html");
 
     // When both are None, use default
-    let content_type_none2: Option<&str> = None;
-    let accept_none: Option<&str> = None;
-    let inferred_default =
-        content_type_none2.unwrap_or_else(|| accept_none.unwrap_or("application/json"));
+    #[allow(clippy::unnecessary_literal_unwrap)]
+    let inferred_default = None::<&str>.unwrap_or("application/json");
     assert_eq!(inferred_default, "application/json");
 }
 
@@ -105,12 +106,12 @@ fn test_url_components() {
     let path1 = "/api/profiles";
     let path2 = "api/profiles";
     let normalized1 = if path1.starts_with('/') {
-        path1
+        path1.to_string()
     } else {
         format!("/{}", path1)
     };
     let normalized2 = if path2.starts_with('/') {
-        path2
+        path2.to_string()
     } else {
         format!("/{}", path2)
     };
@@ -124,7 +125,7 @@ fn test_full_url_edge_cases() {
     // Test edge cases for URL building
 
     // Test with root path
-    let url_root = format!("http://example.com/");
+    let url_root = "http://example.com/".to_string();
     assert_eq!(url_root, "http://example.com/");
 
     // Test with port in host
