@@ -197,28 +197,40 @@ pub unsafe extern "C" fn x402_phase_handler(
             ),
         );
 
-        // Check if there's a proxy_pass or other content handler (not x402 handler)
-        // If proxy_pass is configured, we should forward OPTIONS/HEAD/TRACE to backend
-        // so backend can handle CORS headers. Only send response if no proxy_pass.
+        // Check if there's a proxy_pass configured in this location
+        // In ACCESS_PHASE, proxy_pass's content_handler may not be set yet,
+        // so we check the upstream field instead (proxy_pass sets this)
         let has_proxy_pass = unsafe {
             let r_raw = r.cast::<ngx::ffi::ngx_http_request_t>();
             if r_raw.is_null() {
                 false
             } else {
-                let current_handler = (*r_raw).content_handler;
-                // If content_handler is set and not x402 handler, it's likely proxy_pass
-                if current_handler.is_some() {
-                    extern "C" {
-                        fn x402_ngx_handler(r: *mut ngx::ffi::ngx_http_request_t) -> ngx::ffi::ngx_int_t;
-                    }
-                    let x402_handler_fn: ngx::ffi::ngx_http_handler_pt = Some(x402_ngx_handler);
-                    if let (Some(current), Some(x402)) = (current_handler, x402_handler_fn) {
-                        !std::ptr::fn_addr_eq(current, x402)
-                    } else {
-                        true // Handler exists but can't compare, assume it's proxy_pass
-                    }
+                let request_struct = &*r_raw;
+                // Check if upstream is set (proxy_pass sets this)
+                // upstream is a raw pointer field in ngx_http_request_t
+                // If it's not null, proxy_pass is likely configured
+                let upstream = request_struct.upstream;
+                if !upstream.is_null() {
+                    true
                 } else {
-                    false // No content handler, no proxy_pass
+                    // Also check content_handler as fallback
+                    // In some cases, proxy_pass may have already set its handler
+                    let current_handler = request_struct.content_handler;
+                    if current_handler.is_some() {
+                        extern "C" {
+                            fn x402_ngx_handler(
+                                r: *mut ngx::ffi::ngx_http_request_t,
+                            ) -> ngx::ffi::ngx_int_t;
+                        }
+                        let x402_handler_fn: ngx::ffi::ngx_http_handler_pt = Some(x402_ngx_handler);
+                        if let (Some(current), Some(x402)) = (current_handler, x402_handler_fn) {
+                            !std::ptr::fn_addr_eq(current, x402)
+                        } else {
+                            false // Can't determine, assume no proxy_pass
+                        }
+                    } else {
+                        false // No upstream and no handler, no proxy_pass
+                    }
                 }
             }
         };
@@ -281,7 +293,10 @@ pub unsafe extern "C" fn x402_phase_handler(
                 if send_status == ngx::core::Status::NGX_OK {
                     log_debug(
                         Some(req_mut),
-                        &format!("[x402] {} request: sent {} response (no proxy_pass)", method, status_code),
+                        &format!(
+                            "[x402] {} request: sent {} response (no proxy_pass)",
+                            method, status_code
+                        ),
                     );
                     return ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t;
                 } else {

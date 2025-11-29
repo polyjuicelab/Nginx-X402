@@ -224,6 +224,13 @@ pub fn validate_resource_path(resource: &str) -> Result<String> {
     // Normalize path: remove leading/trailing whitespace
     let normalized = resource.trim().to_string();
 
+    // Check if this is already a full URL (starts with http:// or https://)
+    // If so, return it as-is without adding a leading slash
+    let normalized_lower = normalized.to_lowercase();
+    if normalized_lower.starts_with("http://") || normalized_lower.starts_with("https://") {
+        return Ok(normalized);
+    }
+
     // Ensure path starts with / (for absolute paths)
     // This prevents relative path issues
     let sanitized = if normalized.starts_with('/') {
