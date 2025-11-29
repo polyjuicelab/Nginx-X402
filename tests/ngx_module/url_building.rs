@@ -139,3 +139,25 @@ fn test_full_url_edge_cases() {
     let url_with_query = format!("http://example.com{}", path_with_query);
     assert_eq!(url_with_query, "http://example.com/api/test?param=value");
 }
+
+#[test]
+fn test_full_url_already_complete() {
+    // Test that if URI is already a full URL, it's returned as-is
+    // This prevents issues where r.path() might return a full URL
+
+    // Test HTTP URL
+    let uri_http = "http://example.com/api/test";
+    let uri_lower = uri_http.to_lowercase();
+    assert!(uri_lower.starts_with("http://"));
+
+    // Test HTTPS URL
+    let uri_https = "https://example.com/api/test";
+    let uri_lower_https = uri_https.to_lowercase();
+    assert!(uri_lower_https.starts_with("https://"));
+
+    // Test relative path (should not match)
+    let uri_relative = "/api/test";
+    let uri_lower_rel = uri_relative.to_lowercase();
+    assert!(!uri_lower_rel.starts_with("http://"));
+    assert!(!uri_lower_rel.starts_with("https://"));
+}

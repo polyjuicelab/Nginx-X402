@@ -260,6 +260,16 @@ pub unsafe fn get_http_method(r: *const ngx::ffi::ngx_http_request_t) -> Option<
 /// - `None` if any required component (scheme, host, or URI) is missing
 #[must_use]
 pub fn build_full_url(r: &Request) -> Option<String> {
+    // Get URI path first
+    let uri = r.path().to_str().ok()?;
+
+    // Check if URI is already a full URL (starts with http:// or https://)
+    // If so, return it as-is
+    let uri_lower = uri.to_lowercase();
+    if uri_lower.starts_with("http://") || uri_lower.starts_with("https://") {
+        return Some(uri.to_string());
+    }
+
     // Get scheme (http or https)
     // Check X-Forwarded-Proto header first (for reverse proxy scenarios)
     // Default to http if header is not present (can be overridden by proxy_set_header)
@@ -279,8 +289,7 @@ pub fn build_full_url(r: &Request) -> Option<String> {
     // Get host from Host header
     let host = get_header_value(r, "Host")?;
 
-    // Get URI path (ensure it starts with /)
-    let uri = r.path().to_str().ok()?;
+    // Normalize URI path (ensure it starts with /)
     let uri_normalized = if uri.starts_with('/') {
         uri.to_string()
     } else {
