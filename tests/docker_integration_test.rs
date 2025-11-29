@@ -578,6 +578,49 @@ mod tests {
             .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
 
+    /// Make HTTP request with custom method and headers, return status code and headers
+    fn http_request_with_method_and_headers(
+        path: &str,
+        method: &str,
+        headers: &[(&str, &str)],
+    ) -> Option<(String, String)> {
+        let url = format!("http://localhost:{NGINX_PORT}{path}");
+        let header_strings: Vec<String> = headers
+            .iter()
+            .map(|(name, value)| format!("{}: {}", name, value))
+            .collect();
+
+        let mut args = vec![
+            "-s",
+            "-i",
+            "-X",
+            method,
+            &url,
+        ];
+
+        for header in &header_strings {
+            args.push("-H");
+            args.push(header);
+        }
+
+        Command::new("curl")
+            .args(args)
+            .output()
+            .ok()
+            .map(|output| {
+                let response = String::from_utf8_lossy(&output.stdout).to_string();
+                // Extract status code from response headers
+                let status = response
+                    .lines()
+                    .next()
+                    .and_then(|line| {
+                        line.split_whitespace().nth(1).map(|s| s.to_string())
+                    })
+                    .unwrap_or_else(|| "000".to_string());
+                (status, response)
+            })
+    }
+
     #[test]
     #[ignore = "requires Docker"]
     fn test_options_request_skips_payment() {
@@ -757,6 +800,115 @@ mod tests {
         );
 
         println!("✓ TRACE request correctly skipped payment verification");
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_options_request_with_proxy_pass_returns_cors_headers() {
+        // Test Case: OPTIONS request with proxy_pass should be forwarded to backend
+        // Backend should return CORS headers, and we should verify they are present
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        // Test OPTIONS request to /api/protected-proxy (has proxy_pass)
+        let result = http_request_with_method_and_headers(
+            "/api/protected-proxy",
+            "OPTIONS",
+            &[
+                ("Origin", "http://127.0.0.1:8080"),
+                ("Access-Control-Request-Method", "GET"),
+                ("Access-Control-Request-Headers", "content-type,x-payment"),
+            ],
+        );
+
+        match result {
+            Some((status, headers)) => {
+                println!("OPTIONS request status (with proxy_pass): {status}");
+                println!("Response headers:\n{}", headers);
+
+                // OPTIONS request should skip payment verification and be forwarded to backend
+                assert_ne!(
+                    status, "402",
+                    "OPTIONS request should not require payment (got 402). \
+                     Payment verification should be skipped for OPTIONS requests."
+                );
+
+                // Verify CORS headers are present (from backend)
+                assert!(
+                    headers.contains("Access-Control-Allow-Origin"),
+                    "Response should contain Access-Control-Allow-Origin header from backend"
+                );
+                assert!(
+                    headers.contains("Access-Control-Allow-Methods"),
+                    "Response should contain Access-Control-Allow-Methods header from backend"
+                );
+                assert!(
+                    headers.contains("Access-Control-Allow-Headers"),
+                    "Response should contain Access-Control-Allow-Headers header from backend"
+                );
+
+                // Verify status is 204 (from backend OPTIONS handler)
+                assert_eq!(
+                    status, "204",
+                    "OPTIONS request should return 204 from backend, got {status}"
+                );
+
+                println!("✓ OPTIONS request with proxy_pass correctly forwarded to backend and returned CORS headers");
+            }
+            None => {
+                panic!("Failed to make OPTIONS request to /api/protected-proxy");
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_head_request_with_proxy_pass_returns_cors_headers() {
+        // Test Case: HEAD request with proxy_pass should be forwarded to backend
+        // Backend should return CORS headers
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        // Test HEAD request to /api/protected-proxy (has proxy_pass)
+        let result = http_request_with_method_and_headers(
+            "/api/protected-proxy",
+            "HEAD",
+            &[("Origin", "http://127.0.0.1:8080")],
+        );
+
+        match result {
+            Some((status, headers)) => {
+                println!("HEAD request status (with proxy_pass): {status}");
+
+                // HEAD request should skip payment verification and be forwarded to backend
+                assert_ne!(
+                    status, "402",
+                    "HEAD request should not require payment (got 402). \
+                     Payment verification should be skipped for HEAD requests."
+                );
+
+                // Verify CORS headers are present (from backend)
+                assert!(
+                    headers.contains("Access-Control-Allow-Origin"),
+                    "Response should contain Access-Control-Allow-Origin header from backend"
+                );
+
+                // Verify status is 200 (from backend HEAD handler)
+                assert_eq!(
+                    status, "200",
+                    "HEAD request should return 200 from backend, got {status}"
+                );
+
+                println!("✓ HEAD request with proxy_pass correctly forwarded to backend and returned CORS headers");
+            }
+            None => {
+                panic!("Failed to make HEAD request to /api/protected-proxy");
+            }
+        }
     }
 
     #[test]

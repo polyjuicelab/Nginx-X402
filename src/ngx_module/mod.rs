@@ -197,16 +197,60 @@ pub unsafe extern "C" fn x402_phase_handler(
             ),
         );
 
-        // For OPTIONS/HEAD/TRACE requests, send appropriate responses to prevent empty responses
-        // when backend doesn't handle these methods. This ensures these protocol-level requests
-        // work correctly even without proxy_pass or backend handlers.
+        // Check if there's a proxy_pass or other content handler (not x402 handler)
+        // If proxy_pass is configured, we should forward OPTIONS/HEAD/TRACE to backend
+        // so backend can handle CORS headers. Only send response if no proxy_pass.
+        let has_proxy_pass = unsafe {
+            let r_raw = r.cast::<ngx::ffi::ngx_http_request_t>();
+            if r_raw.is_null() {
+                false
+            } else {
+                let current_handler = (*r_raw).content_handler;
+                // If content_handler is set and not x402 handler, it's likely proxy_pass
+                if current_handler.is_some() {
+                    extern "C" {
+                        fn x402_ngx_handler(r: *mut ngx::ffi::ngx_http_request_t) -> ngx::ffi::ngx_int_t;
+                    }
+                    let x402_handler_fn: ngx::ffi::ngx_http_handler_pt = Some(x402_ngx_handler);
+                    if let (Some(current), Some(x402)) = (current_handler, x402_handler_fn) {
+                        !std::ptr::fn_addr_eq(current, x402)
+                    } else {
+                        true // Handler exists but can't compare, assume it's proxy_pass
+                    }
+                } else {
+                    false // No content handler, no proxy_pass
+                }
+            }
+        };
+
+        if has_proxy_pass {
+            // Has proxy_pass - forward request to backend so it can handle CORS headers
+            log_debug(
+                Some(req_mut),
+                &format!(
+                    "[x402] {} request: forwarding to backend (proxy_pass configured, backend should handle CORS)",
+                    method
+                ),
+            );
+            // Clear x402 content handler to prevent duplicate verification
+            unsafe {
+                clear_x402_content_handler(
+                    r,
+                    req_mut,
+                    &format!("for {} request to forward to backend", method),
+                );
+            }
+            return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
+        }
+
+        // No proxy_pass - send response directly to prevent empty responses
         if method == "OPTIONS" {
             use crate::ngx_module::response::send_options_response;
             match send_options_response(req_mut) {
                 Ok(_) => {
                     log_debug(
                         Some(req_mut),
-                        "[x402] OPTIONS request: sent 204 response (CORS headers should be handled by nginx config or backend)",
+                        "[x402] OPTIONS request: sent 204 response (no proxy_pass, CORS headers should be handled by nginx config)",
                     );
                     return ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t;
                 }
@@ -221,7 +265,7 @@ pub unsafe extern "C" fn x402_phase_handler(
         } else if method == "HEAD" || method == "TRACE" {
             // For HEAD and TRACE requests, send a basic response to prevent empty responses
             // HEAD: 200 OK with no body (standard behavior)
-            // TRACE: 200 OK or 405 Method Not Allowed (many servers disable TRACE for security)
+            // TRACE: 405 Method Not Allowed (many servers disable TRACE for security)
             use ngx::http::HTTPStatus;
 
             let status_code = if method == "HEAD" {
@@ -237,7 +281,7 @@ pub unsafe extern "C" fn x402_phase_handler(
                 if send_status == ngx::core::Status::NGX_OK {
                     log_debug(
                         Some(req_mut),
-                        &format!("[x402] {} request: sent {} response", method, status_code),
+                        &format!("[x402] {} request: sent {} response (no proxy_pass)", method, status_code),
                     );
                     return ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t;
                 } else {
