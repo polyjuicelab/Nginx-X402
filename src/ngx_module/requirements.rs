@@ -153,16 +153,9 @@ pub fn create_requirements(
     );
 
     // Set MIME type if provided
-    // Note: This may not be supported by all versions of rust_x402
-    // If set_mime_type doesn't exist, this will fail at compile time
+    // PaymentRequirements has a public mime_type field that can be set directly
     if let Some(mime) = mime_type {
-        // Try to set mimeType using reflection or direct method call
-        // Check if PaymentRequirements has a set_mime_type method
-        // For now, we'll try to use it if available
-        #[allow(unused)]
-        let _ = mime; // Use mime_type parameter
-        // TODO: Add mimeType support when rust_x402 library supports it
-        // This may require updating rust_x402 dependency or using a different approach
+        requirements.mime_type = Some(mime.to_string());
     }
 
     // Set network-specific USDC info only if using default USDC (not custom asset)
