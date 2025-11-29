@@ -9,31 +9,6 @@ use rust_x402::template::generate_paywall_html;
 use rust_x402::types::{PaymentRequirements, PaymentRequirementsResponse};
 use serde_json;
 
-/// Add CORS headers to response if Origin header is present
-///
-/// Adds Access-Control-Allow-Origin and Access-Control-Allow-Credentials headers
-/// to enable cross-origin requests. This should be called for all responses
-/// that may be accessed from browsers in cross-origin scenarios.
-///
-/// # Arguments
-/// - `r`: Nginx request object
-///
-/// # Returns
-/// - `Ok(())` if headers are added successfully
-/// - `Err` if header addition fails
-fn add_cors_headers(r: &mut Request) -> Result<()> {
-    // Only add CORS headers if Origin header is present (cross-origin request)
-    if let Some(origin) = crate::ngx_module::request::get_header_value(r, "Origin") {
-        r.add_header_out("Access-Control-Allow-Origin", &origin)
-            .ok_or_else(|| ConfigError::from("Failed to set Access-Control-Allow-Origin header"))?;
-
-        // Allow credentials for authenticated requests
-        r.add_header_out("Access-Control-Allow-Credentials", "true")
-            .ok_or_else(|| ConfigError::from("Failed to set Access-Control-Allow-Credentials header"))?;
-    }
-    Ok(())
-}
-
 /// Send 402 Payment Required response
 ///
 /// Sends a 402 Payment Required response to the client. The response format
@@ -107,10 +82,11 @@ pub fn send_402_response(
     Ok(())
 }
 
-/// Send OPTIONS response for CORS preflight requests
+/// Send OPTIONS response
 ///
-/// Sends a 204 No Content response with appropriate CORS headers for OPTIONS requests.
+/// Sends a 204 No Content response for OPTIONS requests.
 /// This is used when OPTIONS requests skip payment verification but need a proper response.
+/// Note: CORS headers should be handled by nginx configuration or backend, not by this module.
 ///
 /// # Arguments
 /// - `r`: Nginx request object
@@ -121,42 +97,6 @@ pub fn send_402_response(
 pub fn send_options_response(r: &mut Request) -> Result<()> {
     // Set status code 204 (No Content) - standard for OPTIONS requests
     r.set_status(HTTPStatus::from_u16(204).map_err(|_| ConfigError::from("Invalid status code"))?);
-
-    // Add CORS headers if Origin header is present
-    if let Some(origin) = crate::ngx_module::request::get_header_value(r, "Origin") {
-        // Allow the origin that made the request
-        r.add_header_out("Access-Control-Allow-Origin", &origin)
-            .ok_or_else(|| ConfigError::from("Failed to set Access-Control-Allow-Origin header"))?;
-
-        // Get requested method and headers
-        let requested_method =
-            crate::ngx_module::request::get_header_value(r, "Access-Control-Request-Method")
-                .unwrap_or_else(|| "GET, POST, PUT, DELETE, OPTIONS".to_string());
-        let requested_headers =
-            crate::ngx_module::request::get_header_value(r, "Access-Control-Request-Headers")
-                .unwrap_or_else(|| "content-type, authorization, x-payment".to_string());
-
-        // Set CORS response headers
-        r.add_header_out("Access-Control-Allow-Methods", &requested_method)
-            .ok_or_else(|| {
-                ConfigError::from("Failed to set Access-Control-Allow-Methods header")
-            })?;
-
-        r.add_header_out("Access-Control-Allow-Headers", &requested_headers)
-            .ok_or_else(|| {
-                ConfigError::from("Failed to set Access-Control-Allow-Headers header")
-            })?;
-
-        // Allow credentials if needed
-        r.add_header_out("Access-Control-Allow-Credentials", "true")
-            .ok_or_else(|| {
-                ConfigError::from("Failed to set Access-Control-Allow-Credentials header")
-            })?;
-
-        // Set max age for preflight cache (24 hours)
-        r.add_header_out("Access-Control-Max-Age", "86400")
-            .ok_or_else(|| ConfigError::from("Failed to set Access-Control-Max-Age header"))?;
-    }
 
     // Set content length to 0 for 204 No Content
     r.set_content_length_n(0);
@@ -171,6 +111,7 @@ pub fn send_options_response(r: &mut Request) -> Result<()> {
 
     // For 204 No Content, we don't need to send a body
     // The header is sufficient
+    // Note: CORS headers should be added by nginx config (add_header) or backend
     Ok(())
 }
 

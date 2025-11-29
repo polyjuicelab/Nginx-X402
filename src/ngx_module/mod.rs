@@ -197,15 +197,16 @@ pub unsafe extern "C" fn x402_phase_handler(
             ),
         );
 
-        // For OPTIONS requests, send a proper CORS response instead of declining
-        // This prevents empty responses when backend doesn't handle OPTIONS
+        // For OPTIONS requests, send a basic 204 response to prevent empty responses
+        // when backend doesn't handle OPTIONS. CORS headers should be handled by
+        // nginx configuration or backend, not by this module.
         if method == "OPTIONS" {
             use crate::ngx_module::response::send_options_response;
             match send_options_response(req_mut) {
                 Ok(_) => {
                     log_debug(
                         Some(req_mut),
-                        "[x402] OPTIONS request: sent CORS preflight response",
+                        "[x402] OPTIONS request: sent 204 response (CORS headers should be handled by nginx config or backend)",
                     );
                     return ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t;
                 }
