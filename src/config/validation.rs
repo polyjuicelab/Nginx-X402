@@ -7,6 +7,20 @@ use rust_decimal::Decimal;
 use rust_x402::{Result, X402Error};
 use std::str::FromStr;
 
+/// Check if a string is already a full URL (starts with http:// or https://)
+///
+/// # Arguments
+/// - `s`: String to check
+///
+/// # Returns
+/// - `true` if the string is a full URL
+/// - `false` otherwise
+#[must_use]
+pub fn is_full_url(s: &str) -> bool {
+    let s_lower = s.to_lowercase();
+    s_lower.starts_with("http://") || s_lower.starts_with("https://")
+}
+
 /// Validate Ethereum address format
 ///
 /// # Arguments
@@ -226,8 +240,7 @@ pub fn validate_resource_path(resource: &str) -> Result<String> {
 
     // Check if this is already a full URL (starts with http:// or https://)
     // If so, return it as-is without adding a leading slash
-    let normalized_lower = normalized.to_lowercase();
-    if normalized_lower.starts_with("http://") || normalized_lower.starts_with("https://") {
+    if is_full_url(&normalized) {
         return Ok(normalized);
     }
 

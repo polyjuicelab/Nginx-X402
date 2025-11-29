@@ -265,8 +265,7 @@ pub fn build_full_url(r: &Request) -> Option<String> {
 
     // Check if URI is already a full URL (starts with http:// or https://)
     // If so, return it as-is
-    let uri_lower = uri.to_lowercase();
-    if uri_lower.starts_with("http://") || uri_lower.starts_with("https://") {
+    if crate::config::is_full_url(uri) {
         return Some(uri.to_string());
     }
 
