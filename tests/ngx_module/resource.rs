@@ -32,3 +32,44 @@ fn test_create_requirements_unicode_in_description() {
     let requirements = create_requirements_test(&config, "/test").unwrap();
     assert_eq!(requirements.description, "Payment Test 🚀");
 }
+
+#[test]
+fn test_create_requirements_full_url_resource() {
+    let mut config = TestConfig::new();
+    // Test with full URL as resource
+    config.resource = Some("http://example.com/api/profiles/username/jesse.base.eth".to_string());
+
+    let requirements = create_requirements_test(&config, "/test").unwrap();
+    assert_eq!(
+        requirements.resource,
+        "http://example.com/api/profiles/username/jesse.base.eth"
+    );
+}
+
+#[test]
+fn test_create_requirements_https_url_resource() {
+    let mut config = TestConfig::new();
+    // Test with HTTPS URL as resource
+    config.resource =
+        Some("https://snaprag.rivendell.local/api/profiles/username/jesse.base.eth".to_string());
+
+    let requirements = create_requirements_test(&config, "/test").unwrap();
+    assert_eq!(
+        requirements.resource,
+        "https://snaprag.rivendell.local/api/profiles/username/jesse.base.eth"
+    );
+}
+
+#[test]
+fn test_create_requirements_resource_with_query_params() {
+    let mut config = TestConfig::new();
+    // Test with URL containing query parameters
+    config.resource =
+        Some("http://example.com/api/profiles?username=jesse.base.eth&format=json".to_string());
+
+    let requirements = create_requirements_test(&config, "/test").unwrap();
+    assert_eq!(
+        requirements.resource,
+        "http://example.com/api/profiles?username=jesse.base.eth&format=json"
+    );
+}
