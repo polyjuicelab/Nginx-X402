@@ -692,15 +692,18 @@ mod tests {
 
         // HEAD request should skip payment verification
         // It should NOT return 402, which would indicate payment verification was attempted
+        // Since /api/protected has no proxy_pass, x402 module should send 200 response for HEAD
         // Acceptable status codes:
-        // - 200/204: Request succeeded (if backend supports HEAD)
+        // - 200: x402 module sends 200 OK response (expected for HEAD without proxy_pass)
+        // - 204: Alternative acceptable response
         // - 404: Not Found (if resource doesn't exist, but payment was skipped)
         // - 405: Method Not Allowed (if backend doesn't support HEAD, but payment was skipped)
         // - 501: Not Implemented (if server doesn't support HEAD, but payment was skipped)
         // - 000: Connection error (should not happen if container is running)
         assert!(
-            status == "200" || status == "404" || status == "405" || status == "204" || status == "501",
-            "HEAD request should skip payment verification and return appropriate status (200/204/404/405/501), got {status}"
+            status == "200" || status == "204" || status == "404" || status == "405" || status == "501",
+            "HEAD request should skip payment verification and return appropriate status (200/204/404/405/501), got {status}. \
+             Expected 200 from x402 module for HEAD requests without proxy_pass."
         );
 
         // Verify that HEAD request does not require payment
@@ -738,10 +741,12 @@ mod tests {
 
         // TRACE request should succeed or return appropriate status without payment verification
         // It should NOT return 402, which would indicate payment verification was attempted
-        // Note: Many servers disable TRACE for security, so 405 (Method Not Allowed) is acceptable
+        // Since /api/protected has no proxy_pass, x402 module should send 405 response for TRACE
+        // (TRACE is often disabled for security, so 405 Method Not Allowed is expected)
         assert!(
             status == "200" || status == "404" || status == "405" || status == "204",
-            "TRACE request should skip payment verification and return appropriate status, got {status}"
+            "TRACE request should skip payment verification and return appropriate status, got {status}. \
+             Expected 405 from x402 module for TRACE requests without proxy_pass."
         );
 
         // Verify that TRACE request does not require payment

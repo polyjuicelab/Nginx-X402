@@ -197,9 +197,9 @@ pub unsafe extern "C" fn x402_phase_handler(
             ),
         );
 
-        // For OPTIONS requests, send a basic 204 response to prevent empty responses
-        // when backend doesn't handle OPTIONS. CORS headers should be handled by
-        // nginx configuration or backend, not by this module.
+        // For OPTIONS/HEAD/TRACE requests, send appropriate responses to prevent empty responses
+        // when backend doesn't handle these methods. This ensures these protocol-level requests
+        // work correctly even without proxy_pass or backend handlers.
         if method == "OPTIONS" {
             use crate::ngx_module::response::send_options_response;
             match send_options_response(req_mut) {
@@ -218,6 +218,47 @@ pub unsafe extern "C" fn x402_phase_handler(
                     // Fall through to decline if response sending fails
                 }
             }
+        } else if method == "HEAD" || method == "TRACE" {
+            // For HEAD and TRACE requests, send a basic response to prevent empty responses
+            // HEAD: 200 OK with no body (standard behavior)
+            // TRACE: 200 OK or 405 Method Not Allowed (many servers disable TRACE for security)
+            use ngx::http::HTTPStatus;
+
+            let status_code = if method == "HEAD" {
+                200 // HEAD should return 200 OK with no body
+            } else {
+                405 // TRACE is often disabled, return Method Not Allowed
+            };
+
+            if let Ok(http_status) = HTTPStatus::from_u16(status_code) {
+                req_mut.set_status(http_status);
+                req_mut.set_content_length_n(0);
+                let send_status = req_mut.send_header();
+                if send_status == ngx::core::Status::NGX_OK {
+                    log_debug(
+                        Some(req_mut),
+                        &format!("[x402] {} request: sent {} response", method, status_code),
+                    );
+                    return ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t;
+                } else {
+                    log_error(
+                        Some(req_mut),
+                        &format!(
+                            "[x402] Failed to send {} response header: {:?}",
+                            method, send_status
+                        ),
+                    );
+                }
+            } else {
+                log_error(
+                    Some(req_mut),
+                    &format!(
+                        "[x402] Failed to create HTTP status {} for {} request",
+                        status_code, method
+                    ),
+                );
+            }
+            // Fall through to decline if response sending fails
         }
 
         // Clear content handler if it's x402_ngx_handler to prevent payment verification in CONTENT_PHASE
