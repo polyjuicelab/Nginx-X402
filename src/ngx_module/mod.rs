@@ -31,6 +31,7 @@ pub mod handler;
 pub mod logging;
 pub mod metrics;
 pub mod module;
+pub mod phase_handler;
 pub mod request;
 pub mod requirements;
 pub mod response;
@@ -197,139 +198,14 @@ pub unsafe extern "C" fn x402_phase_handler(
             ),
         );
 
-        // Check if there's a proxy_pass configured in this location
-        // In ACCESS_PHASE, proxy_pass's content_handler may not be set yet,
-        // so we check the upstream field instead (proxy_pass sets this)
-        let has_proxy_pass = unsafe {
-            let r_raw = r.cast::<ngx::ffi::ngx_http_request_t>();
-            if r_raw.is_null() {
-                false
-            } else {
-                let request_struct = &*r_raw;
-                // Check if upstream is set (proxy_pass sets this)
-                // upstream is a raw pointer field in ngx_http_request_t
-                // If it's not null, proxy_pass is likely configured
-                let upstream = request_struct.upstream;
-                if !upstream.is_null() {
-                    true
-                } else {
-                    // Also check content_handler as fallback
-                    // In some cases, proxy_pass may have already set its handler
-                    let current_handler = request_struct.content_handler;
-                    if current_handler.is_some() {
-                        extern "C" {
-                            fn x402_ngx_handler(
-                                r: *mut ngx::ffi::ngx_http_request_t,
-                            ) -> ngx::ffi::ngx_int_t;
-                        }
-                        let x402_handler_fn: ngx::ffi::ngx_http_handler_pt = Some(x402_ngx_handler);
-                        if let (Some(current), Some(x402)) = (current_handler, x402_handler_fn) {
-                            !std::ptr::fn_addr_eq(current, x402)
-                        } else {
-                            false // Can't determine, assume no proxy_pass
-                        }
-                    } else {
-                        false // No upstream and no handler, no proxy_pass
-                    }
-                }
-            }
-        };
-
-        if has_proxy_pass {
-            // Has proxy_pass - forward request to backend so it can handle CORS headers
-            log_debug(
-                Some(req_mut),
-                &format!(
-                    "[x402] {} request: forwarding to backend (proxy_pass configured, backend should handle CORS)",
-                    method
-                ),
-            );
-            // Clear x402 content handler to prevent duplicate verification
-            unsafe {
-                clear_x402_content_handler(
-                    r,
-                    req_mut,
-                    &format!("for {} request to forward to backend", method),
-                );
-            }
-            return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
+        // Handle special HTTP methods that should skip payment verification
+        use crate::ngx_module::phase_handler::handle_skip_payment_method;
+        if let Some(result_code) =
+            unsafe { handle_skip_payment_method(r, req_mut, method, clear_x402_content_handler) }
+        {
+            return result_code;
         }
-
-        // No proxy_pass - send response directly to prevent empty responses
-        if method == "OPTIONS" {
-            use crate::ngx_module::response::send_options_response;
-            match send_options_response(req_mut) {
-                Ok(_) => {
-                    log_debug(
-                        Some(req_mut),
-                        "[x402] OPTIONS request: sent 204 response (no proxy_pass, CORS headers should be handled by nginx config)",
-                    );
-                    return ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t;
-                }
-                Err(e) => {
-                    log_error(
-                        Some(req_mut),
-                        &format!("[x402] Failed to send OPTIONS response: {e}"),
-                    );
-                    // Fall through to decline if response sending fails
-                }
-            }
-        } else if method == "HEAD" || method == "TRACE" {
-            // For HEAD and TRACE requests, send a basic response to prevent empty responses
-            // HEAD: 200 OK with no body (standard behavior)
-            // TRACE: 405 Method Not Allowed (many servers disable TRACE for security)
-            use ngx::http::HTTPStatus;
-
-            let status_code = if method == "HEAD" {
-                200 // HEAD should return 200 OK with no body
-            } else {
-                405 // TRACE is often disabled, return Method Not Allowed
-            };
-
-            if let Ok(http_status) = HTTPStatus::from_u16(status_code) {
-                req_mut.set_status(http_status);
-                req_mut.set_content_length_n(0);
-                let send_status = req_mut.send_header();
-                if send_status == ngx::core::Status::NGX_OK {
-                    log_debug(
-                        Some(req_mut),
-                        &format!(
-                            "[x402] {} request: sent {} response (no proxy_pass)",
-                            method, status_code
-                        ),
-                    );
-                    return ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t;
-                } else {
-                    log_error(
-                        Some(req_mut),
-                        &format!(
-                            "[x402] Failed to send {} response header: {:?}",
-                            method, send_status
-                        ),
-                    );
-                }
-            } else {
-                log_error(
-                    Some(req_mut),
-                    &format!(
-                        "[x402] Failed to create HTTP status {} for {} request",
-                        status_code, method
-                    ),
-                );
-            }
-            // Fall through to decline if response sending fails
-        }
-
-        // Clear content handler if it's x402_ngx_handler to prevent payment verification in CONTENT_PHASE
-        // When returning NGX_DECLINED, nginx will still proceed to CONTENT_PHASE, so we need to clear
-        // the content handler to prevent duplicate payment verification
-        unsafe {
-            clear_x402_content_handler(
-                r,
-                req_mut,
-                &format!("for {} request to prevent payment verification", method),
-            );
-        }
+        // If handle_skip_payment_method returned None, fall through to decline
         return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
     }
 
