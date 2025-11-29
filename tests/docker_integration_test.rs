@@ -578,6 +578,37 @@ mod tests {
             .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
 
+    /// Make HTTP request with custom method and headers, return status code and headers
+    fn http_request_with_method_and_headers(
+        path: &str,
+        method: &str,
+        headers: &[(&str, &str)],
+    ) -> Option<(String, String)> {
+        let url = format!("http://localhost:{NGINX_PORT}{path}");
+        let header_strings: Vec<String> = headers
+            .iter()
+            .map(|(name, value)| format!("{}: {}", name, value))
+            .collect();
+
+        let mut args = vec!["-s", "-i", "-X", method, &url];
+
+        for header in &header_strings {
+            args.push("-H");
+            args.push(header);
+        }
+
+        Command::new("curl").args(args).output().ok().map(|output| {
+            let response = String::from_utf8_lossy(&output.stdout).to_string();
+            // Extract status code from response headers
+            let status = response
+                .lines()
+                .next()
+                .and_then(|line| line.split_whitespace().nth(1).map(|s| s.to_string()))
+                .unwrap_or_else(|| "000".to_string());
+            (status, response)
+        })
+    }
+
     #[test]
     #[ignore = "requires Docker"]
     fn test_options_request_skips_payment() {
@@ -692,15 +723,18 @@ mod tests {
 
         // HEAD request should skip payment verification
         // It should NOT return 402, which would indicate payment verification was attempted
+        // Since /api/protected has no proxy_pass, x402 module should send 200 response for HEAD
         // Acceptable status codes:
-        // - 200/204: Request succeeded (if backend supports HEAD)
+        // - 200: x402 module sends 200 OK response (expected for HEAD without proxy_pass)
+        // - 204: Alternative acceptable response
         // - 404: Not Found (if resource doesn't exist, but payment was skipped)
         // - 405: Method Not Allowed (if backend doesn't support HEAD, but payment was skipped)
         // - 501: Not Implemented (if server doesn't support HEAD, but payment was skipped)
         // - 000: Connection error (should not happen if container is running)
         assert!(
-            status == "200" || status == "404" || status == "405" || status == "204" || status == "501",
-            "HEAD request should skip payment verification and return appropriate status (200/204/404/405/501), got {status}"
+            status == "200" || status == "204" || status == "404" || status == "405" || status == "501",
+            "HEAD request should skip payment verification and return appropriate status (200/204/404/405/501), got {status}. \
+             Expected 200 from x402 module for HEAD requests without proxy_pass."
         );
 
         // Verify that HEAD request does not require payment
@@ -738,10 +772,12 @@ mod tests {
 
         // TRACE request should succeed or return appropriate status without payment verification
         // It should NOT return 402, which would indicate payment verification was attempted
-        // Note: Many servers disable TRACE for security, so 405 (Method Not Allowed) is acceptable
+        // Since /api/protected has no proxy_pass, x402 module should send 405 response for TRACE
+        // (TRACE is often disabled for security, so 405 Method Not Allowed is expected)
         assert!(
             status == "200" || status == "404" || status == "405" || status == "204",
-            "TRACE request should skip payment verification and return appropriate status, got {status}"
+            "TRACE request should skip payment verification and return appropriate status, got {status}. \
+             Expected 405 from x402 module for TRACE requests without proxy_pass."
         );
 
         // Verify that TRACE request does not require payment
@@ -752,6 +788,115 @@ mod tests {
         );
 
         println!("✓ TRACE request correctly skipped payment verification");
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_options_request_with_proxy_pass_returns_cors_headers() {
+        // Test Case: OPTIONS request with proxy_pass should be forwarded to backend
+        // Backend should return CORS headers, and we should verify they are present
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        // Test OPTIONS request to /api/protected-proxy (has proxy_pass)
+        let result = http_request_with_method_and_headers(
+            "/api/protected-proxy",
+            "OPTIONS",
+            &[
+                ("Origin", "http://127.0.0.1:8080"),
+                ("Access-Control-Request-Method", "GET"),
+                ("Access-Control-Request-Headers", "content-type,x-payment"),
+            ],
+        );
+
+        match result {
+            Some((status, headers)) => {
+                println!("OPTIONS request status (with proxy_pass): {status}");
+                println!("Response headers:\n{}", headers);
+
+                // OPTIONS request should skip payment verification and be forwarded to backend
+                assert_ne!(
+                    status, "402",
+                    "OPTIONS request should not require payment (got 402). \
+                     Payment verification should be skipped for OPTIONS requests."
+                );
+
+                // Verify CORS headers are present (from backend)
+                assert!(
+                    headers.contains("Access-Control-Allow-Origin"),
+                    "Response should contain Access-Control-Allow-Origin header from backend"
+                );
+                assert!(
+                    headers.contains("Access-Control-Allow-Methods"),
+                    "Response should contain Access-Control-Allow-Methods header from backend"
+                );
+                assert!(
+                    headers.contains("Access-Control-Allow-Headers"),
+                    "Response should contain Access-Control-Allow-Headers header from backend"
+                );
+
+                // Verify status is 204 (from backend OPTIONS handler)
+                assert_eq!(
+                    status, "204",
+                    "OPTIONS request should return 204 from backend, got {status}"
+                );
+
+                println!("✓ OPTIONS request with proxy_pass correctly forwarded to backend and returned CORS headers");
+            }
+            None => {
+                panic!("Failed to make OPTIONS request to /api/protected-proxy");
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_head_request_with_proxy_pass_returns_cors_headers() {
+        // Test Case: HEAD request with proxy_pass should be forwarded to backend
+        // Backend should return CORS headers
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        // Test HEAD request to /api/protected-proxy (has proxy_pass)
+        let result = http_request_with_method_and_headers(
+            "/api/protected-proxy",
+            "HEAD",
+            &[("Origin", "http://127.0.0.1:8080")],
+        );
+
+        match result {
+            Some((status, headers)) => {
+                println!("HEAD request status (with proxy_pass): {status}");
+
+                // HEAD request should skip payment verification and be forwarded to backend
+                assert_ne!(
+                    status, "402",
+                    "HEAD request should not require payment (got 402). \
+                     Payment verification should be skipped for HEAD requests."
+                );
+
+                // Verify CORS headers are present (from backend)
+                assert!(
+                    headers.contains("Access-Control-Allow-Origin"),
+                    "Response should contain Access-Control-Allow-Origin header from backend"
+                );
+
+                // Verify status is 200 (from backend HEAD handler)
+                assert_eq!(
+                    status, "200",
+                    "HEAD request should return 200 from backend, got {status}"
+                );
+
+                println!("✓ HEAD request with proxy_pass correctly forwarded to backend and returned CORS headers");
+            }
+            None => {
+                panic!("Failed to make HEAD request to /api/protected-proxy");
+            }
+        }
     }
 
     #[test]
@@ -1139,5 +1284,669 @@ mod tests {
         );
 
         println!("✓ Network ID correctly takes precedence over network name");
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_resource_url_is_valid_full_url() {
+        // Test Case: Verify that resource field in payment requirements is a valid full URL
+        // The resource field should be a complete URL (http:// or https://) not a relative path
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        // Make API request to get JSON response with payment requirements
+        let response_body = http_request_with_headers(
+            "/api/protected",
+            &[
+                ("Content-Type", "application/json"),
+                ("Accept", "application/json"),
+            ],
+        )
+        .expect("Failed to make HTTP request");
+
+        // Parse JSON response to check resource field
+        // Response should be JSON with payment requirements
+        assert!(
+            response_body.trim_start().starts_with('{'),
+            "Response should be JSON, but got: {}",
+            response_body.chars().take(200).collect::<String>()
+        );
+
+        // Check if response contains "accepts" array (payment requirements)
+        if response_body.contains("\"accepts\"") {
+            // Extract resource field value from JSON response
+            // Look for "resource":"..." pattern using simple string matching
+            let mut resource_value: Option<String> = None;
+
+            // Look for resource field with various patterns
+            let patterns = vec!["\"resource\":\"", "\"resource\" : \"", "\"resource\": \""];
+            for pattern in patterns {
+                if let Some(idx) = response_body.find(pattern) {
+                    let start = idx + pattern.len();
+                    if let Some(end) = response_body[start..].find('"') {
+                        let value = &response_body[start..start + end];
+                        resource_value = Some(value.to_string());
+                        break;
+                    }
+                }
+            }
+
+            // Validate resource URL
+            if let Some(resource) = resource_value {
+                // Check if resource is a valid full URL (starts with http:// or https://)
+                let is_valid_url =
+                    resource.starts_with("http://") || resource.starts_with("https://");
+
+                // Check for double prefix bug (/http:// or /https://)
+                let has_double_prefix =
+                    resource.starts_with("/http://") || resource.starts_with("/https://");
+
+                assert!(
+                    is_valid_url && !has_double_prefix,
+                    "Resource field should be a valid full URL (http:// or https://) without double prefix. \
+                     Got: '{}'. \
+                     Response: {}",
+                    resource,
+                    response_body.chars().take(500).collect::<String>()
+                );
+
+                // Additional validation: ensure URL format is correct
+                assert!(
+                    resource.len() > 7, // Minimum: "http://a"
+                    "Resource URL is too short: '{}'",
+                    resource
+                );
+
+                println!("✓ Resource field is a valid full URL: {}", resource);
+            } else {
+                panic!(
+                    "Could not extract resource field from response. \
+                     Response: {}",
+                    response_body.chars().take(500).collect::<String>()
+                );
+            }
+        } else if response_body.contains("\"error\"") {
+            // If there's an error, we can't verify resource URL
+            // But we should still check that error doesn't mention invalid URL
+            assert!(
+                !response_body.contains("Invalid url")
+                    && !response_body.contains("invalid_string")
+                    && !response_body.contains("\"path\":[\"resource\"]"),
+                "Response contains URL validation error for resource field. \
+                 This suggests resource URL is not valid. Response: {}",
+                response_body.chars().take(500).collect::<String>()
+            );
+            println!("✓ No URL validation errors in error response");
+        } else {
+            // Unexpected response format
+            panic!(
+                "Unexpected response format. Expected JSON with 'accepts' or 'error' field. \
+                 Got: {}",
+                response_body.chars().take(500).collect::<String>()
+            );
+        }
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_options_request_without_proxy_pass_returns_204() {
+        // Test Case: OPTIONS request without proxy_pass should return 204 No Content
+        // This verifies that x402 module handles OPTIONS requests correctly when no backend is configured
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        let result = http_request_with_method_and_headers(
+            "/api/protected",
+            "OPTIONS",
+            &[
+                ("Origin", "http://127.0.0.1:8080"),
+                ("Access-Control-Request-Method", "GET"),
+                ("Access-Control-Request-Headers", "content-type,x-payment"),
+            ],
+        );
+
+        match result {
+            Some((status, headers)) => {
+                println!("OPTIONS request status (no proxy_pass): {status}");
+                println!("Response headers:\n{}", headers);
+
+                // OPTIONS request should skip payment verification
+                assert_ne!(
+                    status, "402",
+                    "OPTIONS request should not require payment (got 402). \
+                     Payment verification should be skipped for OPTIONS requests."
+                );
+
+                // Without proxy_pass, x402 module should return 204 No Content
+                assert_eq!(
+                    status, "204",
+                    "OPTIONS request without proxy_pass should return 204 No Content, got {status}"
+                );
+
+                // Verify response has no body (HEAD request should have no body)
+                // This is verified by checking Content-Length header
+                assert!(
+                    headers.contains("Content-Length: 0") || headers.contains("content-length: 0"),
+                    "OPTIONS response should have Content-Length: 0 header"
+                );
+
+                println!("✓ OPTIONS request without proxy_pass correctly returns 204");
+            }
+            None => {
+                panic!("Failed to make OPTIONS request to /api/protected");
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_options_request_cors_headers_strict_validation() {
+        // Test Case: Strict validation of CORS headers in OPTIONS response
+        // Verify all required CORS headers are present with correct values
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        let result = http_request_with_method_and_headers(
+            "/api/protected-proxy",
+            "OPTIONS",
+            &[
+                ("Origin", "http://127.0.0.1:8080"),
+                ("Access-Control-Request-Method", "GET"),
+                ("Access-Control-Request-Headers", "content-type,x-payment"),
+            ],
+        );
+
+        match result {
+            Some((status, headers)) => {
+                println!("OPTIONS request status: {status}");
+                println!("Response headers:\n{}", headers);
+
+                // Must not require payment
+                assert_ne!(
+                    status, "402",
+                    "OPTIONS request must not require payment (got 402)"
+                );
+
+                // Must return 204 for OPTIONS preflight
+                assert_eq!(
+                    status, "204",
+                    "OPTIONS preflight request must return 204, got {status}"
+                );
+
+                // Strict validation: Check exact header names (case-insensitive)
+                let headers_lower = headers.to_lowercase();
+
+                // Access-Control-Allow-Origin must be present
+                assert!(
+                    headers_lower.contains("access-control-allow-origin"),
+                    "Response MUST contain Access-Control-Allow-Origin header. Headers: {}",
+                    headers.chars().take(500).collect::<String>()
+                );
+
+                // Access-Control-Allow-Methods must be present
+                assert!(
+                    headers_lower.contains("access-control-allow-methods"),
+                    "Response MUST contain Access-Control-Allow-Methods header. Headers: {}",
+                    headers.chars().take(500).collect::<String>()
+                );
+
+                // Access-Control-Allow-Headers must be present
+                assert!(
+                    headers_lower.contains("access-control-allow-headers"),
+                    "Response MUST contain Access-Control-Allow-Headers header. Headers: {}",
+                    headers.chars().take(500).collect::<String>()
+                );
+
+                // Access-Control-Allow-Methods should include GET (requested method)
+                assert!(
+                    headers_lower.contains("get"),
+                    "Access-Control-Allow-Methods should include GET. Headers: {}",
+                    headers.chars().take(500).collect::<String>()
+                );
+
+                // Access-Control-Allow-Headers should include requested headers
+                assert!(
+                    headers_lower.contains("content-type") || headers_lower.contains("x-payment"),
+                    "Access-Control-Allow-Headers should include requested headers (content-type or x-payment). Headers: {}",
+                    headers.chars().take(500).collect::<String>()
+                );
+
+                // Access-Control-Max-Age should be present (optional but recommended)
+                // This is a soft check - we warn but don't fail
+                if !headers_lower.contains("access-control-max-age") {
+                    println!("⚠ Warning: Access-Control-Max-Age header not present (optional but recommended)");
+                }
+
+                println!("✓ OPTIONS request CORS headers validation passed");
+            }
+            None => {
+                panic!("Failed to make OPTIONS request to /api/protected-proxy");
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_head_request_without_proxy_pass_returns_200() {
+        // Test Case: HEAD request without proxy_pass should return 200 OK
+        // Verify that HEAD request has no body and correct headers
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        let result = http_request_with_method_and_headers("/api/protected", "HEAD", &[]);
+
+        match result {
+            Some((status, headers)) => {
+                println!("HEAD request status (no proxy_pass): {status}");
+                println!("Response headers:\n{}", headers);
+
+                // HEAD request should skip payment verification
+                assert_ne!(
+                    status, "402",
+                    "HEAD request should not require payment (got 402). \
+                     Payment verification should be skipped for HEAD requests."
+                );
+
+                // Without proxy_pass, x402 module should return 200 OK for HEAD
+                assert_eq!(
+                    status, "200",
+                    "HEAD request without proxy_pass should return 200 OK, got {status}"
+                );
+
+                // HEAD request must have no body (verified by checking response)
+                // Content-Length should be present
+                let headers_lower = headers.to_lowercase();
+                assert!(
+                    headers_lower.contains("content-length"),
+                    "HEAD response should have Content-Length header"
+                );
+
+                println!("✓ HEAD request without proxy_pass correctly returns 200");
+            }
+            None => {
+                panic!("Failed to make HEAD request to /api/protected");
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_head_request_cors_headers_strict_validation() {
+        // Test Case: Strict validation of CORS headers in HEAD response
+        // Verify CORS headers are present and correct
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        let result = http_request_with_method_and_headers(
+            "/api/protected-proxy",
+            "HEAD",
+            &[("Origin", "http://127.0.0.1:8080")],
+        );
+
+        match result {
+            Some((status, headers)) => {
+                println!("HEAD request status: {status}");
+                println!("Response headers:\n{}", headers);
+
+                // Must not require payment
+                assert_ne!(
+                    status, "402",
+                    "HEAD request must not require payment (got 402)"
+                );
+
+                // Must return 200 for HEAD
+                assert_eq!(status, "200", "HEAD request must return 200, got {status}");
+
+                // Strict validation: Check exact header names (case-insensitive)
+                let headers_lower = headers.to_lowercase();
+
+                // Access-Control-Allow-Origin must be present
+                assert!(
+                    headers_lower.contains("access-control-allow-origin"),
+                    "Response MUST contain Access-Control-Allow-Origin header. Headers: {}",
+                    headers.chars().take(500).collect::<String>()
+                );
+
+                // Content-Type should be present (from backend)
+                assert!(
+                    headers_lower.contains("content-type"),
+                    "HEAD response should have Content-Type header. Headers: {}",
+                    headers.chars().take(500).collect::<String>()
+                );
+
+                // Content-Length should be present (HEAD requests should have this)
+                assert!(
+                    headers_lower.contains("content-length"),
+                    "HEAD response should have Content-Length header. Headers: {}",
+                    headers.chars().take(500).collect::<String>()
+                );
+
+                println!("✓ HEAD request CORS headers validation passed");
+            }
+            None => {
+                panic!("Failed to make HEAD request to /api/protected-proxy");
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_options_request_with_different_origins() {
+        // Test Case: OPTIONS request with different Origin headers
+        // Verify CORS headers are returned correctly for different origins
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        let origins = vec![
+            "http://127.0.0.1:8080",
+            "http://localhost:3000",
+            "https://example.com",
+            "http://example.com:8080",
+        ];
+
+        for origin in origins {
+            let result = http_request_with_method_and_headers(
+                "/api/protected-proxy",
+                "OPTIONS",
+                &[
+                    ("Origin", origin),
+                    ("Access-Control-Request-Method", "GET"),
+                    ("Access-Control-Request-Headers", "content-type"),
+                ],
+            );
+
+            match result {
+                Some((status, headers)) => {
+                    println!(
+                        "OPTIONS request with Origin: {} - Status: {}",
+                        origin, status
+                    );
+
+                    // Must not require payment
+                    assert_ne!(
+                        status, "402",
+                        "OPTIONS request with Origin {} must not require payment (got 402)",
+                        origin
+                    );
+
+                    // Must return 204
+                    assert_eq!(
+                        status, "204",
+                        "OPTIONS request with Origin {} must return 204, got {}",
+                        origin, status
+                    );
+
+                    // Must have CORS headers
+                    let headers_lower = headers.to_lowercase();
+                    assert!(
+                        headers_lower.contains("access-control-allow-origin"),
+                        "OPTIONS response with Origin {} must have Access-Control-Allow-Origin header",
+                        origin
+                    );
+                }
+                None => {
+                    panic!("Failed to make OPTIONS request with Origin: {}", origin);
+                }
+            }
+        }
+
+        println!("✓ OPTIONS request with different origins validation passed");
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_head_request_response_body_must_be_empty() {
+        // Test Case: HEAD request must have empty response body
+        // Verify that HEAD request returns no body content
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        // Use curl to get full response (including body)
+        let url = format!("http://localhost:{NGINX_PORT}/api/protected-proxy");
+        let output = Command::new("curl")
+            .args([
+                "-s",
+                "-i",
+                "-X",
+                "HEAD",
+                "-H",
+                "Origin: http://127.0.0.1:8080",
+                &url,
+            ])
+            .output();
+
+        match output {
+            Ok(output) => {
+                let response = String::from_utf8_lossy(&output.stdout).to_string();
+                println!("HEAD request full response:\n{}", response);
+
+                // Split headers and body
+                let parts: Vec<&str> = response.split("\r\n\r\n").collect();
+                let headers = parts.get(0).unwrap_or(&"");
+                let body = parts.get(1).unwrap_or(&"");
+
+                // Verify status is 200
+                assert!(
+                    headers.contains("200"),
+                    "HEAD request must return 200 status"
+                );
+
+                // Verify body is empty or only contains whitespace
+                let body_trimmed = body.trim();
+                assert!(
+                    body_trimmed.is_empty(),
+                    "HEAD request body must be empty, but got: '{}'",
+                    body_trimmed.chars().take(100).collect::<String>()
+                );
+
+                println!("✓ HEAD request response body validation passed");
+            }
+            Err(e) => {
+                panic!("Failed to make HEAD request: {}", e);
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_options_request_response_body_must_be_empty() {
+        // Test Case: OPTIONS request must have empty response body
+        // Verify that OPTIONS preflight request returns no body content
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        // Use curl to get full response (including body)
+        let url = format!("http://localhost:{NGINX_PORT}/api/protected-proxy");
+        let output = Command::new("curl")
+            .args([
+                "-s",
+                "-i",
+                "-X",
+                "OPTIONS",
+                "-H",
+                "Origin: http://127.0.0.1:8080",
+                "-H",
+                "Access-Control-Request-Method: GET",
+                "-H",
+                "Access-Control-Request-Headers: content-type",
+                &url,
+            ])
+            .output();
+
+        match output {
+            Ok(output) => {
+                let response = String::from_utf8_lossy(&output.stdout).to_string();
+                println!("OPTIONS request full response:\n{}", response);
+
+                // Split headers and body
+                let parts: Vec<&str> = response.split("\r\n\r\n").collect();
+                let headers = parts.get(0).unwrap_or(&"");
+                let body = parts.get(1).unwrap_or(&"");
+
+                // Verify status is 204
+                assert!(
+                    headers.contains("204"),
+                    "OPTIONS request must return 204 status"
+                );
+
+                // Verify body is empty or only contains whitespace
+                let body_trimmed = body.trim();
+                assert!(
+                    body_trimmed.is_empty(),
+                    "OPTIONS request body must be empty, but got: '{}'",
+                    body_trimmed.chars().take(100).collect::<String>()
+                );
+
+                println!("✓ OPTIONS request response body validation passed");
+            }
+            Err(e) => {
+                panic!("Failed to make OPTIONS request: {}", e);
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_options_request_missing_cors_headers_fails() {
+        // Test Case: OPTIONS request without Origin header should still work
+        // But CORS headers may not be present (this is acceptable)
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        let result = http_request_with_method_and_headers(
+            "/api/protected-proxy",
+            "OPTIONS",
+            &[
+                // No Origin header
+                ("Access-Control-Request-Method", "GET"),
+            ],
+        );
+
+        match result {
+            Some((status, headers)) => {
+                println!("OPTIONS request status (no Origin): {status}");
+                println!("Response headers:\n{}", headers);
+
+                // Must not require payment
+                assert_ne!(
+                    status, "402",
+                    "OPTIONS request must not require payment even without Origin header (got 402)"
+                );
+
+                // Should still return 204
+                assert_eq!(
+                    status, "204",
+                    "OPTIONS request should return 204 even without Origin header, got {status}"
+                );
+
+                // CORS headers may or may not be present without Origin
+                // This is acceptable behavior
+                println!("✓ OPTIONS request without Origin header handled correctly");
+            }
+            None => {
+                panic!("Failed to make OPTIONS request without Origin header");
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_head_request_with_payment_header_still_skips_payment() {
+        // Test Case: HEAD request with payment header should still skip payment verification
+        // HEAD requests should never require payment, even if X-PAYMENT header is present
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        let result = http_request_with_method_and_headers(
+            "/api/protected",
+            "HEAD",
+            &[("X-PAYMENT", "dummy-payment-header")],
+        );
+
+        match result {
+            Some((status, headers)) => {
+                println!("HEAD request status (with payment header): {status}");
+
+                // HEAD request must skip payment verification even with X-PAYMENT header
+                assert_ne!(
+                    status, "402",
+                    "HEAD request must skip payment verification even with X-PAYMENT header (got 402)"
+                );
+
+                // Should return 200 (not 402)
+                assert_eq!(
+                    status, "200",
+                    "HEAD request with payment header should return 200 (payment skipped), got {status}"
+                );
+
+                println!("✓ HEAD request correctly skips payment even with X-PAYMENT header");
+            }
+            None => {
+                panic!("Failed to make HEAD request with payment header");
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_options_request_with_payment_header_still_skips_payment() {
+        // Test Case: OPTIONS request with payment header should still skip payment verification
+        // OPTIONS requests should never require payment, even if X-PAYMENT header is present
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        let result = http_request_with_method_and_headers(
+            "/api/protected",
+            "OPTIONS",
+            &[
+                ("Origin", "http://127.0.0.1:8080"),
+                ("X-PAYMENT", "dummy-payment-header"),
+            ],
+        );
+
+        match result {
+            Some((status, headers)) => {
+                println!("OPTIONS request status (with payment header): {status}");
+
+                // OPTIONS request must skip payment verification even with X-PAYMENT header
+                assert_ne!(
+                    status, "402",
+                    "OPTIONS request must skip payment verification even with X-PAYMENT header (got 402)"
+                );
+
+                // Should return 204 (not 402)
+                assert_eq!(
+                    status, "204",
+                    "OPTIONS request with payment header should return 204 (payment skipped), got {status}"
+                );
+
+                println!("✓ OPTIONS request correctly skips payment even with X-PAYMENT header");
+            }
+            None => {
+                panic!("Failed to make OPTIONS request with payment header");
+            }
+        }
     }
 }
