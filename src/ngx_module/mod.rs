@@ -49,7 +49,7 @@ pub use request::{
     get_header_value, get_http_method, is_browser_request, should_skip_payment_for_method,
 };
 pub use requirements::create_requirements;
-pub use response::{send_402_response, send_response_body};
+pub use response::{send_402_response, send_options_response, send_response_body};
 pub use runtime::{
     get_facilitator_client, get_runtime, verify_payment, DEFAULT_FACILITATOR_TIMEOUT,
     FACILITATOR_CLIENTS, MAX_PAYMENT_HEADER_SIZE, RUNTIME,
@@ -197,8 +197,29 @@ pub unsafe extern "C" fn x402_phase_handler(
             ),
         );
 
+        // For OPTIONS requests, send a proper CORS response instead of declining
+        // This prevents empty responses when backend doesn't handle OPTIONS
+        if method == "OPTIONS" {
+            use crate::ngx_module::response::send_options_response;
+            match send_options_response(req_mut) {
+                Ok(_) => {
+                    log_debug(
+                        Some(req_mut),
+                        "[x402] OPTIONS request: sent CORS preflight response",
+                    );
+                    return ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t;
+                }
+                Err(e) => {
+                    log_error(
+                        Some(req_mut),
+                        &format!("[x402] Failed to send OPTIONS response: {e}"),
+                    );
+                    // Fall through to decline if response sending fails
+                }
+            }
+        }
+
         // Clear content handler if it's x402_ngx_handler to prevent payment verification in CONTENT_PHASE
-        // Note: OPTIONS requests should be handled by nginx configuration or backend, not by x402 module
         // When returning NGX_DECLINED, nginx will still proceed to CONTENT_PHASE, so we need to clear
         // the content handler to prevent duplicate payment verification
         unsafe {

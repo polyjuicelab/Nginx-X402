@@ -9,6 +9,31 @@ use rust_x402::template::generate_paywall_html;
 use rust_x402::types::{PaymentRequirements, PaymentRequirementsResponse};
 use serde_json;
 
+/// Add CORS headers to response if Origin header is present
+///
+/// Adds Access-Control-Allow-Origin and Access-Control-Allow-Credentials headers
+/// to enable cross-origin requests. This should be called for all responses
+/// that may be accessed from browsers in cross-origin scenarios.
+///
+/// # Arguments
+/// - `r`: Nginx request object
+///
+/// # Returns
+/// - `Ok(())` if headers are added successfully
+/// - `Err` if header addition fails
+fn add_cors_headers(r: &mut Request) -> Result<()> {
+    // Only add CORS headers if Origin header is present (cross-origin request)
+    if let Some(origin) = crate::ngx_module::request::get_header_value(r, "Origin") {
+        r.add_header_out("Access-Control-Allow-Origin", &origin)
+            .ok_or_else(|| ConfigError::from("Failed to set Access-Control-Allow-Origin header"))?;
+
+        // Allow credentials for authenticated requests
+        r.add_header_out("Access-Control-Allow-Credentials", "true")
+            .ok_or_else(|| ConfigError::from("Failed to set Access-Control-Allow-Credentials header"))?;
+    }
+    Ok(())
+}
+
 /// Send 402 Payment Required response
 ///
 /// Sends a 402 Payment Required response to the client. The response format
