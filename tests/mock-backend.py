@@ -31,7 +31,9 @@ class MockBackendHandler(http.server.BaseHTTPRequestHandler):
     
     def do_HEAD(self):
         # Handle HEAD requests
+        # HEAD should return the same headers as GET (except body)
         self.send_response(200)
+        self.send_header("Content-Type", "application/json")
         self._add_cors_headers()
         self.end_headers()
     
