@@ -590,35 +590,23 @@ mod tests {
             .map(|(name, value)| format!("{}: {}", name, value))
             .collect();
 
-        let mut args = vec![
-            "-s",
-            "-i",
-            "-X",
-            method,
-            &url,
-        ];
+        let mut args = vec!["-s", "-i", "-X", method, &url];
 
         for header in &header_strings {
             args.push("-H");
             args.push(header);
         }
 
-        Command::new("curl")
-            .args(args)
-            .output()
-            .ok()
-            .map(|output| {
-                let response = String::from_utf8_lossy(&output.stdout).to_string();
-                // Extract status code from response headers
-                let status = response
-                    .lines()
-                    .next()
-                    .and_then(|line| {
-                        line.split_whitespace().nth(1).map(|s| s.to_string())
-                    })
-                    .unwrap_or_else(|| "000".to_string());
-                (status, response)
-            })
+        Command::new("curl").args(args).output().ok().map(|output| {
+            let response = String::from_utf8_lossy(&output.stdout).to_string();
+            // Extract status code from response headers
+            let status = response
+                .lines()
+                .next()
+                .and_then(|line| line.split_whitespace().nth(1).map(|s| s.to_string()))
+                .unwrap_or_else(|| "000".to_string());
+            (status, response)
+        })
     }
 
     #[test]
@@ -1296,5 +1284,92 @@ mod tests {
         );
 
         println!("✓ Network ID correctly takes precedence over network name");
+    }
+
+    #[test]
+    #[ignore = "requires Docker"]
+    fn test_resource_url_is_valid_full_url() {
+        // Test Case: Verify that resource field in payment requirements is a valid full URL
+        // The resource field should be a complete URL (http:// or https://) not a relative path
+        if !ensure_container_running() {
+            eprintln!("Failed to start container. Skipping test.");
+            return;
+        }
+
+        // Make API request to get JSON response with payment requirements
+        let response_body = http_request_with_headers(
+            "/api/protected",
+            &[
+                ("Content-Type", "application/json"),
+                ("Accept", "application/json"),
+            ],
+        )
+        .expect("Failed to make HTTP request");
+
+        // Parse JSON response to check resource field
+        // Response should be JSON with payment requirements
+        assert!(
+            response_body.trim_start().starts_with('{'),
+            "Response should be JSON, but got: {}",
+            response_body.chars().take(200).collect::<String>()
+        );
+
+        // Check if response contains "accepts" array (payment requirements)
+        if response_body.contains("\"accepts\"") {
+            // Try to parse JSON and extract resource field from accepts array
+            // Since we don't have serde_json in dependencies, we'll use string matching
+            // Look for "resource" field in the JSON
+            let resource_patterns = vec![
+                "\"resource\":\"http://",
+                "\"resource\":\"https://",
+                "\"resource\" : \"http://",
+                "\"resource\" : \"https://",
+            ];
+
+            let mut found_valid_resource = false;
+            for pattern in resource_patterns {
+                if response_body.contains(pattern) {
+                    found_valid_resource = true;
+                    break;
+                }
+            }
+
+            assert!(
+                found_valid_resource,
+                "Resource field should be a valid full URL (http:// or https://). \
+                 Response: {}",
+                response_body.chars().take(500).collect::<String>()
+            );
+
+            // Additional check: ensure resource doesn't start with "/http://" (double prefix bug)
+            assert!(
+                !response_body.contains("\"resource\":\"/http://")
+                    && !response_body.contains("\"resource\":\"/https://"),
+                "Resource URL should not have double prefix (/http:// or /https://). \
+                 This indicates a bug in URL building. Response: {}",
+                response_body.chars().take(500).collect::<String>()
+            );
+
+            println!("✓ Resource field is a valid full URL");
+        } else if response_body.contains("\"error\"") {
+            // If there's an error, we can't verify resource URL
+            // But we should still check that error doesn't mention invalid URL
+            assert!(
+                !response_body.contains("Invalid url")
+                    && !response_body.contains("invalid_string")
+                    && !response_body.contains("\"path\":[\"resource\"]"),
+                "Response contains URL validation error for resource field. \
+                 This suggests resource URL is not valid. Response: {}",
+                response_body.chars().take(500).collect::<String>()
+            );
+            println!("✓ No URL validation errors in error response");
+        } else {
+            // Unexpected response format
+            panic!(
+                "Unexpected response format. Expected JSON with 'accepts' or 'error' field. \
+                 Got: {}",
+                response_body.chars().take(500).collect::<String>()
+            );
+        }
     }
 }
