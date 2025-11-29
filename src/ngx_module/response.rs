@@ -101,6 +101,11 @@ pub fn send_options_response(r: &mut Request) -> Result<()> {
     // Set content length to 0 for 204 No Content
     r.set_content_length_n(0);
 
+    // Explicitly add Content-Length header for 204 responses
+    // Some clients and tests expect this header to be present
+    r.add_header_out("Content-Length", "0")
+        .ok_or_else(|| ConfigError::from("Failed to set Content-Length header"))?;
+
     // Send header (204 has no body, so we only send header)
     let status = r.send_header();
     if status != Status::NGX_OK {
