@@ -34,6 +34,10 @@ class MockBackendHandler(http.server.BaseHTTPRequestHandler):
         # HEAD should return the same headers as GET (except body)
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
+        # Calculate Content-Length based on what GET would return
+        response = {"status": "ok", "message": "Backend response", "path": self.path}
+        content_length = len(json.dumps(response).encode())
+        self.send_header("Content-Length", str(content_length))
         self._add_cors_headers()
         self.end_headers()
     
