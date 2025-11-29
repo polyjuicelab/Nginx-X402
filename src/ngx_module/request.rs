@@ -261,11 +261,7 @@ pub unsafe fn get_http_method(r: *const ngx::ffi::ngx_http_request_t) -> Option<
 #[must_use]
 pub fn build_full_url(r: &Request) -> Option<String> {
     // Get scheme (http or https)
-    let scheme = if r.is_ssl() {
-        "https"
-    } else {
-        "http"
-    };
+    let scheme = if r.is_ssl() { "https" } else { "http" };
 
     // Get host from Host header
     let host = get_header_value(r, "Host")?;
@@ -320,7 +316,7 @@ pub fn infer_mime_type(r: &Request) -> String {
         // Parse Accept header to find highest priority media type
         // Look for common MIME types in order of preference
         let accept_lower = accept.to_lowercase();
-        
+
         // Check for specific types first
         if accept_lower.contains("application/json") {
             return "application/json".to_string();
@@ -334,7 +330,7 @@ pub fn infer_mime_type(r: &Request) -> String {
         if accept_lower.contains("text/plain") {
             return "text/plain".to_string();
         }
-        
+
         // Try to extract first media type from Accept header
         // Format: "type/subtype;q=value, type/subtype"
         if let Some(first_type) = accept.split(',').next() {
