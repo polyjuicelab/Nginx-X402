@@ -1316,41 +1316,57 @@ mod tests {
 
         // Check if response contains "accepts" array (payment requirements)
         if response_body.contains("\"accepts\"") {
-            // Try to parse JSON and extract resource field from accepts array
-            // Since we don't have serde_json in dependencies, we'll use string matching
-            // Look for "resource" field in the JSON
-            let resource_patterns = vec![
-                "\"resource\":\"http://",
-                "\"resource\":\"https://",
-                "\"resource\" : \"http://",
-                "\"resource\" : \"https://",
-            ];
+            // Extract resource field value from JSON response
+            // Look for "resource":"..." pattern using simple string matching
+            let mut resource_value: Option<String> = None;
 
-            let mut found_valid_resource = false;
-            for pattern in resource_patterns {
-                if response_body.contains(pattern) {
-                    found_valid_resource = true;
-                    break;
+            // Look for resource field with various patterns
+            let patterns = vec!["\"resource\":\"", "\"resource\" : \"", "\"resource\": \""];
+            for pattern in patterns {
+                if let Some(idx) = response_body.find(pattern) {
+                    let start = idx + pattern.len();
+                    if let Some(end) = response_body[start..].find('"') {
+                        let value = &response_body[start..start + end];
+                        resource_value = Some(value.to_string());
+                        break;
+                    }
                 }
             }
 
-            assert!(
-                found_valid_resource,
-                "Resource field should be a valid full URL (http:// or https://). \
-                 Response: {}",
-                response_body.chars().take(500).collect::<String>()
-            );
+            // Validate resource URL
+            if let Some(resource) = resource_value {
+                // Check if resource is a valid full URL (starts with http:// or https://)
+                let is_valid_url =
+                    resource.starts_with("http://") || resource.starts_with("https://");
 
-            // Additional check: ensure resource doesn't start with "/http://" (double prefix bug)
-            assert!(
-                !response_body.contains("\"resource\":\"/http://")
-                    && !response_body.contains("\"resource\":\"/https://"),
-                "Resource URL should not have double prefix (/http:// or /https://). \
-                 This indicates a bug in URL building. Response: {}",
-                response_body.chars().take(500).collect::<String>()
-            );
+                // Check for double prefix bug (/http:// or /https://)
+                let has_double_prefix =
+                    resource.starts_with("/http://") || resource.starts_with("/https://");
 
-            println!("✓ Resource field is a valid full URL");
+                assert!(
+                    is_valid_url && !has_double_prefix,
+                    "Resource field should be a valid full URL (http:// or https://) without double prefix. \
+                     Got: '{}'. \
+                     Response: {}",
+                    resource,
+                    response_body.chars().take(500).collect::<String>()
+                );
+
+                // Additional validation: ensure URL format is correct
+                assert!(
+                    resource.len() > 7, // Minimum: "http://a"
+                    "Resource URL is too short: '{}'",
+                    resource
+                );
+
+                println!("✓ Resource field is a valid full URL: {}", resource);
+            } else {
+                panic!(
+                    "Could not extract resource field from response. \
+                     Response: {}",
+                    response_body.chars().take(500).collect::<String>()
+                );
+            }
         } else if response_body.contains("\"error\"") {
             // If there's an error, we can't verify resource URL
             // But we should still check that error doesn't mention invalid URL
