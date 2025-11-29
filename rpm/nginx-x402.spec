@@ -2,7 +2,7 @@
 %define moduledir %{_libdir}/nginx/modules
 
 Name:           nginx-x402
-Version:        1.2.0
+Version:        1.3.0
 Release:        1%{?dist}
 Summary:        Pure Rust Nginx module for x402 HTTP micropayment protocol
 License:        AGPL-3.0
@@ -673,6 +673,14 @@ fi
 %{_datadir}/%{name}/
 
 %changelog
+* Thu Dec 26 2025 Ryan Kung <ryan@polyjuice.io> - 1.3.0-1
+- Version bump to 1.3.0
+- Add automatic full URL building for x402_resource
+- Automatically construct full URL (scheme://host/path) when x402_resource is not configured
+- Add automatic MIME type inference from request headers
+- Set mimeType field in PaymentRequirements automatically
+- Improves compatibility with facilitator APIs requiring full URLs and mimeType
+
 * Thu Nov 28 2025 Ryan Kung <ryan@polyjuice.io> - 1.2.0-1
 - Version bump to 1.2.0
 - Add x402_asset directive to support custom token/contract addresses
