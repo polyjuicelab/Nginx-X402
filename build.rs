@@ -164,7 +164,9 @@ int main() {{
     fs::write(&extractor_c, c_program)?;
 
     // Compile and run the C program to extract phase values
-    let compile_status = Command::new("cc")
+    // Use CC environment variable if set, otherwise fallback to "cc"
+    let cc = env::var("CC").unwrap_or_else(|_| "cc".to_string());
+    let compile_status = Command::new(&cc)
         .arg("-o")
         .arg(&extractor_output)
         .arg(&extractor_c)
