@@ -22,7 +22,7 @@
 
 #[cfg(feature = "integration-test")]
 mod tests {
-    use super::common::*;
+    use crate::docker_integration::common::*;
     use std::process::Command;
     use std::thread;
     use std::time::Duration;
@@ -248,4 +248,3 @@ mod tests {
         );
     }
 }
-

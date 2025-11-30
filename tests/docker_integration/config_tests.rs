@@ -27,7 +27,7 @@
 
 #[cfg(feature = "integration-test")]
 mod tests {
-    use super::common::*;
+    use crate::docker_integration::common::*;
 
     #[test]
     #[ignore = "requires Docker"]
@@ -235,4 +235,3 @@ mod tests {
         println!("✓ Network ID correctly takes precedence over network name");
     }
 }
-
