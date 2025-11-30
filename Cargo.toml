@@ -37,5 +37,5 @@ rust-x402 = "0.2.2"
 
 [lints.rust]
 # Treat all warnings as errors in CI/build
-# warnings = "deny"
+warnings = "deny"
 
