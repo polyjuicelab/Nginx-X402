@@ -339,4 +339,3 @@ pub fn ensure_container_running() -> bool {
     cleanup_container();
     build_docker_image() && start_container() && wait_for_nginx(Duration::from_secs(10))
 }
-

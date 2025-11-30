@@ -21,7 +21,7 @@
 
 #[cfg(feature = "integration-test")]
 mod tests {
-    use super::common::*;
+    use crate::docker_integration::common::*;
     use std::thread;
     use std::time::Duration;
 
@@ -255,4 +255,3 @@ mod tests {
         println!("✓ GET request correctly requires payment verification");
     }
 }
-
