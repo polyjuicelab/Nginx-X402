@@ -133,4 +133,68 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_validate_resource_path_full_urls() {
+        // Test that full URLs (http:// or https://) are preserved as-is without adding leading /
+        let full_urls = vec![
+            (
+                "http://example.com/api/resource",
+                "http://example.com/api/resource",
+            ),
+            (
+                "https://example.com/api/resource",
+                "https://example.com/api/resource",
+            ),
+            (
+                "http://test.example.com/api/profiles/username/test.user",
+                "http://test.example.com/api/profiles/username/test.user",
+            ),
+            (
+                "https://api.example.com/v1/users?page=1",
+                "https://api.example.com/v1/users?page=1",
+            ),
+            (" http://example.com/api ", "http://example.com/api"), // Should trim whitespace
+            ("https://example.com/api ", "https://example.com/api"), // Should trim whitespace
+        ];
+
+        for (input, expected) in full_urls {
+            let result = validate_resource_path(input);
+            assert!(result.is_ok(), "Full URL '{input}' should be valid");
+            let sanitized = result.unwrap();
+            assert_eq!(
+                sanitized, expected,
+                "Full URL '{input}' should be preserved as '{expected}', got '{sanitized}'"
+            );
+            // Ensure no leading / was added before http:// or https://
+            assert!(
+                !sanitized.starts_with("/http"),
+                "Full URL should not have leading / before http://, got '{sanitized}'"
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_resource_path_relative_paths_still_get_slash() {
+        // Test that relative paths (not full URLs) still get leading / added
+        let relative_paths = vec![
+            ("api", "/api"),
+            ("api/resource", "/api/resource"),
+            ("api/resource?query=value", "/api/resource?query=value"),
+        ];
+
+        for (input, expected) in relative_paths {
+            let result = validate_resource_path(input);
+            assert!(result.is_ok(), "Relative path '{input}' should be valid");
+            let sanitized = result.unwrap();
+            assert_eq!(
+                sanitized, expected,
+                "Relative path '{input}' should be normalized to '{expected}', got '{sanitized}'"
+            );
+            assert!(
+                sanitized.starts_with('/'),
+                "Relative path should start with /, got '{sanitized}'"
+            );
+        }
+    }
 }

@@ -111,10 +111,17 @@ pub fn create_requirements_test_with_mime(
         config.description.as_deref().unwrap_or("Payment required"),
     );
 
-    // Set MIME type if provided
-    if let Some(mime) = mime_type {
-        requirements.mime_type = Some(mime.to_string());
-    }
+    // Set MIME type - always set a value (use provided or default to application/json)
+    let final_mime_type = if let Some(mime) = mime_type {
+        if mime.trim().is_empty() {
+            "application/json"
+        } else {
+            mime
+        }
+    } else {
+        "application/json"
+    };
+    requirements.mime_type = Some(final_mime_type.to_string());
 
     let network_enum = if config.testnet {
         rust_x402::types::Network::Testnet

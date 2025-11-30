@@ -224,11 +224,16 @@ pub fn validate_resource_path(resource: &str) -> Result<String> {
     // Normalize path: remove leading/trailing whitespace
     let normalized = resource.trim().to_string();
 
-    // Ensure path starts with / (for absolute paths)
-    // This prevents relative path issues
-    let sanitized = if normalized.starts_with('/') {
+    // Check if this is already a full URL (starts with http:// or https://)
+    // If it's a full URL, don't add a leading slash
+    let sanitized = if normalized.starts_with("http://") || normalized.starts_with("https://") {
+        // Full URL - return as-is
+        normalized
+    } else if normalized.starts_with('/') {
+        // Already starts with / - return as-is
         normalized
     } else {
+        // Relative path - add leading / to make it absolute
         format!("/{normalized}")
     };
 
