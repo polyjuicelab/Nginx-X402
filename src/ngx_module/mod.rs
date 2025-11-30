@@ -24,9 +24,7 @@
 //! - `metrics`: Prometheus metrics collection
 //! - `module`: Module registration and nginx integration
 
-pub mod commands {
-    pub mod commands;
-}
+pub mod commands;
 pub mod config;
 pub mod error;
 pub mod handler;

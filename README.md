@@ -42,18 +42,13 @@ cargo build --release
 **macOS:**
 ```bash
 xcode-select --install
-eval $(./setup-build-env.sh)
-cargo build --release
-```
-
-The build script automatically detects your system nginx version and downloads matching source. Optionally set `NGINX_SOURCE_DIR` to use a specific nginx source.
-
-**macOS (Manual):**
-```bash
+# Set libclang path for bindgen (optional, usually auto-detected)
 export LIBCLANG_PATH="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib"
 export SDKROOT=$(xcrun --show-sdk-path)
 cargo build --release
 ```
+
+The build script automatically detects your system nginx version and downloads matching source. Optionally set `NGINX_SOURCE_DIR` to use a specific nginx source.
 
 ### Install from Package (Debian/Ubuntu)
 
