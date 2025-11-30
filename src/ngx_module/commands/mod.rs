@@ -33,17 +33,13 @@ use ngx::ngx_string;
 use std::ptr;
 
 // Re-export command handlers
-use asset::{
-    ngx_http_x402_asset, ngx_http_x402_asset_decimals, ngx_http_x402_resource,
-};
+use asset::{ngx_http_x402_asset, ngx_http_x402_asset_decimals, ngx_http_x402_resource};
 use basic::{
-    ngx_http_x402, ngx_http_x402_amount, ngx_http_x402_description,
-    ngx_http_x402_facilitator_url, ngx_http_x402_pay_to,
+    ngx_http_x402, ngx_http_x402_amount, ngx_http_x402_description, ngx_http_x402_facilitator_url,
+    ngx_http_x402_pay_to,
 };
 use network::{ngx_http_x402_network, ngx_http_x402_network_id};
-use other::{
-    ngx_http_x402_facilitator_fallback, ngx_http_x402_metrics, ngx_http_x402_timeout,
-};
+use other::{ngx_http_x402_facilitator_fallback, ngx_http_x402_metrics, ngx_http_x402_timeout};
 
 /// Configuration commands array
 ///
@@ -176,4 +172,3 @@ pub static mut ngx_http_x402_commands: [ngx_command_t; 14] = [
         post: ptr::null_mut(),
     },
 ];
-

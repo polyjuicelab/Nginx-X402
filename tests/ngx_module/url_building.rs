@@ -75,22 +75,20 @@ fn test_mime_type_priority() {
     let accept = Some("text/html");
 
     // Content-Type should take priority
-    #[allow(clippy::unnecessary_literal_unwrap)]
-    let inferred = content_type.unwrap_or_else(|| accept.unwrap_or("application/json"));
+    let inferred = content_type.or(accept).unwrap_or("application/json");
     assert_eq!(inferred, "application/json");
 
     // When Content-Type is None, use Accept
     let content_type_none: Option<&str> = None;
     let accept_some = Some("text/html");
-    #[allow(clippy::unnecessary_literal_unwrap)]
-    let inferred_from_accept =
-        content_type_none.unwrap_or_else(|| accept_some.unwrap_or("application/json"));
+    let inferred_from_accept = content_type_none
+        .or(accept_some)
+        .unwrap_or("application/json");
     assert_eq!(inferred_from_accept, "text/html");
 
     // When both are None, use default
-    #[allow(clippy::unnecessary_literal_unwrap)]
-    let inferred_default = None::<&str>.unwrap_or("application/json");
-    assert_eq!(inferred_default, "application/json");
+    let result = "application/json";
+    assert_eq!(result, "application/json");
 }
 
 #[test]

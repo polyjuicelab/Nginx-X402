@@ -6,21 +6,8 @@
 
 mod tests {
     use rust_x402::facilitator::FacilitatorClient;
-    use rust_x402::types::{FacilitatorConfig, PaymentRequirements};
+    use rust_x402::types::FacilitatorConfig;
     use std::time::Duration;
-
-    #[allow(dead_code)]
-    fn create_test_requirements() -> PaymentRequirements {
-        PaymentRequirements::new(
-            "exact",
-            "base-sepolia",
-            "100",
-            "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-            "0x209693bc6afc0c5328ba36faf03c514ef312287c",
-            "/test",
-            "Test payment",
-        )
-    }
 
     #[tokio::test]
     async fn test_facilitator_config_with_timeout() {

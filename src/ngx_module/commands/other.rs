@@ -130,4 +130,3 @@ pub(crate) unsafe extern "C" fn ngx_http_x402_metrics(
 
     ptr::null_mut()
 }
-

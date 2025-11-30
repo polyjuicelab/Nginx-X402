@@ -6,12 +6,9 @@ use std::str::FromStr;
 
 /// Test configuration structure that mirrors `ParsedX402Config`
 /// but doesn't depend on ngx-rust types
-#[allow(dead_code)]
 pub struct TestConfig {
-    pub enabled: bool,
     pub amount: Option<Decimal>,
     pub pay_to: Option<String>,
-    pub facilitator_url: Option<String>,
     pub testnet: bool,
     pub description: Option<String>,
     pub network: Option<String>,
@@ -21,10 +18,8 @@ pub struct TestConfig {
 impl TestConfig {
     pub fn new() -> Self {
         Self {
-            enabled: true,
             amount: Some(Decimal::from_str("0.0001").unwrap()),
             pay_to: Some("0x209693Bc6afc0C5328bA36FaF03C514EF312287C".to_string()),
-            facilitator_url: Some("https://x402.org/facilitator".to_string()),
             testnet: true,
             description: Some("Test payment".to_string()),
             network: None,
