@@ -39,9 +39,3 @@ rust-x402 = "0.2.2"
 # Treat all warnings as errors in CI/build
 # warnings = "deny"
 
-[lints.clippy]
-# Clippy lint configuration
-# Note: File size checking (max 500 lines) is handled by scripts/check-file-size.sh
-# Clippy doesn't support file line count limits, so we use a custom script
-# Run: ./scripts/check-file-size.sh 500 src tests
-

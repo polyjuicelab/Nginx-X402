@@ -1,6 +1,6 @@
 //! Module registration and configuration access
 
-use crate::ngx_module::commands::ngx_http_x402_commands;
+use crate::ngx_module::commands::commands::ngx_http_x402_commands;
 use crate::ngx_module::config::X402Config;
 use crate::ngx_module::error::{ConfigError, Result};
 use ngx::ffi::ngx_http_core_main_conf_t;
