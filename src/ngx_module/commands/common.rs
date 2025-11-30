@@ -48,4 +48,3 @@ pub(crate) unsafe fn copy_string_to_pool(cf: *mut ngx_conf_t, src: ngx_str_t) ->
         Err(_) => None,
     }
 }
-

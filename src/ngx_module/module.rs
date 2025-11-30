@@ -8,45 +8,6 @@ use ngx::http::Request;
 use std::ffi::c_char;
 use std::ptr;
 
-/// Helper function to get `ngx_http_core_loc_conf_t` from `ngx_conf_t`
-///
-/// This is equivalent to `ngx_http_conf_get_module_loc_conf(cf`, `ngx_http_core_module`)
-/// Returns None if not in location context or if clcf is null
-#[allow(dead_code)]
-unsafe fn get_core_loc_conf(
-    cf: *mut ngx::ffi::ngx_conf_t,
-) -> Option<*mut ngx::ffi::ngx_http_core_loc_conf_t> {
-    let ctx = (*cf).ctx.cast::<ngx::ffi::ngx_http_conf_ctx_t>();
-    if ctx.is_null() {
-        return None;
-    }
-
-    let loc_conf = (*ctx).loc_conf;
-    if loc_conf.is_null() {
-        return None;
-    }
-
-    // Get core module's location config using ctx_index
-    // loc_conf is *mut *mut c_void (array of pointers)
-    // Use loc_conf.add() directly, not (*loc_conf).add()
-    let core_ctx_index = ngx::ffi::ngx_http_core_module.ctx_index;
-    let ptr_to_ptr = loc_conf.add(core_ctx_index);
-    if ptr_to_ptr.is_null() {
-        return None;
-    }
-
-    // Read the pointer value
-    let clcf_void: *mut core::ffi::c_void = ptr::read(ptr_to_ptr.cast_const());
-    if clcf_void.is_null() {
-        return None;
-    }
-
-    Some(core::mem::transmute::<
-        *mut core::ffi::c_void,
-        *mut ngx::ffi::ngx_http_core_loc_conf_t,
-    >(clcf_void))
-}
-
 /// Helper function to get `ngx_http_core_main_conf_t` from `ngx_conf_t`
 ///
 /// This is equivalent to `ngx_http_conf_get_module_main_conf(cf`, `ngx_http_core_module`)
@@ -138,7 +99,11 @@ unsafe extern "C" fn postconfiguration(cf: *mut ngx::ffi::ngx_conf_t) -> ngx::ff
 ///
 /// This structure defines the callbacks for creating and merging configuration
 /// at different levels (main, server, location).
-#[allow(non_upper_case_globals)]
+///
+/// Note: The naming convention `ngx_http_x402_module_ctx` follows nginx's C API conventions
+/// where module context variables use lowercase with underscores. This is required for
+/// compatibility with nginx's module system.
+#[allow(non_upper_case_globals)] // Required by nginx C API naming conventions
 static mut ngx_http_x402_module_ctx: ngx::ffi::ngx_http_module_t = ngx::ffi::ngx_http_module_t {
     preconfiguration: None,
     postconfiguration: Some(postconfiguration),
