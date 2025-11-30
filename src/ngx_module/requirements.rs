@@ -152,11 +152,18 @@ pub fn create_requirements(
         config.description.as_deref().unwrap_or(""),
     );
 
-    // Set MIME type if provided
+    // Set MIME type - always set a value (use provided or default to application/json)
     // PaymentRequirements has a public mime_type field that can be set directly
-    if let Some(mime) = mime_type {
-        requirements.mime_type = Some(mime.to_string());
-    }
+    let final_mime_type = if let Some(mime) = mime_type {
+        if mime.trim().is_empty() {
+            "application/json"
+        } else {
+            mime
+        }
+    } else {
+        "application/json"
+    };
+    requirements.mime_type = Some(final_mime_type.to_string());
 
     // Set network-specific USDC info only if using default USDC (not custom asset)
     // This ensures compatibility with USDC-specific metadata while allowing custom tokens

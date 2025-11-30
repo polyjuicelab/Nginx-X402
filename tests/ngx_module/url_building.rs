@@ -18,17 +18,17 @@ fn test_url_building_logic() {
 
     // Test URL construction format
     let host = "example.com";
-    let path = "/api/profiles/username/jesse.base.eth";
+    let path = "/api/profiles/username/test.user";
     let url_http = format!("{}://{}{}", scheme_http, host, path);
     let url_https = format!("{}://{}{}", scheme_https, host, path);
 
     assert_eq!(
         url_http,
-        "http://example.com/api/profiles/username/jesse.base.eth"
+        "http://example.com/api/profiles/username/test.user"
     );
     assert_eq!(
         url_https,
-        "https://example.com/api/profiles/username/jesse.base.eth"
+        "https://example.com/api/profiles/username/test.user"
     );
 }
 
