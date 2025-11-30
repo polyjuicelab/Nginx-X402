@@ -9,7 +9,6 @@ use crate::ngx_module::commands::common::copy_string_to_pool;
 use crate::ngx_module::config::X402Config;
 use ngx::ffi::{ngx_command_t, ngx_conf_t, ngx_str_t};
 use std::ffi::c_char;
-use std::ptr;
 
 /// Parse `x402_resource` directive
 pub(crate) unsafe extern "C" fn ngx_http_x402_resource(

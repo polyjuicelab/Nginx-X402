@@ -16,8 +16,6 @@ use ngx::ffi::{
 use std::ffi::c_char;
 use std::ptr;
 
-use ngx::ngx_string;
-
 // Import handler functions for setting in location configuration
 extern "C" {
     pub fn x402_ngx_handler(r: *mut ngx::ffi::ngx_http_request_t) -> ngx::ffi::ngx_int_t;

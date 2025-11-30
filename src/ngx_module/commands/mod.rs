@@ -28,7 +28,7 @@ mod common;
 mod network;
 mod other;
 
-use ngx::ffi::ngx_command_t;
+use ngx::ffi::{ngx_command_t, ngx_str_t};
 use ngx::ngx_string;
 use std::ptr;
 
