@@ -1,251 +1,250 @@
 # Docker Integration Tests
 
-本目录包含 nginx-x402 模块的 Docker 集成测试，已按功能拆分为多个模块文件，每个文件不超过 500 行，便于维护和导航。
+This directory contains Docker-based integration tests for the nginx-x402 module, organized into multiple module files with each file not exceeding 500 lines for better maintainability and navigation.
 
-## 📁 文件结构
+## 📁 File Structure
 
 ```
 docker_integration/
-├── README.md                    # 本文档
-├── mod.rs                       # 模块组织文件
-├── common.rs                    # 共享工具函数 (342行)
-├── basic_tests.rs               # 基础测试 (147行)
-├── http_method_tests.rs         # HTTP方法测试 (258行)
-├── proxy_payment_tests.rs       # 代理和支付验证测试 (188行)
-├── websocket_subrequest_tests.rs # WebSocket和子请求测试 (251行)
-├── content_type_tests.rs        # 内容类型测试 (155行)
-└── config_tests.rs              # 配置测试 (238行)
+├── README.md                    # This document
+├── mod.rs                       # Module organization file
+├── common.rs                    # Shared utility functions (342 lines)
+├── basic_tests.rs               # Basic tests (147 lines)
+├── http_method_tests.rs         # HTTP method tests (258 lines)
+├── proxy_payment_tests.rs       # Proxy and payment verification tests (188 lines)
+├── websocket_subrequest_tests.rs # WebSocket and subrequest tests (251 lines)
+├── content_type_tests.rs        # Content type tests (155 lines)
+└── config_tests.rs              # Configuration tests (238 lines)
 ```
 
-## 🎯 模块说明
+## 🎯 Module Descriptions
 
-### `common.rs` - 共享工具函数
+### `common.rs` - Shared Utility Functions
 
-提供所有测试模块共享的工具函数：
+Provides shared utility functions used by all test modules:
 
-- **Docker 管理**：
-  - `build_docker_image()` - 构建 Docker 测试镜像
-  - `start_container()` - 启动 Docker 容器
-  - `cleanup_container()` - 清理 Docker 容器
-  - `ensure_container_running()` - 确保容器运行（自动启动）
+- **Docker Management**:
+  - `build_docker_image()` - Build Docker test image
+  - `start_container()` - Start Docker container
+  - `cleanup_container()` - Clean up Docker container
+  - `ensure_container_running()` - Ensure container is running (auto-start)
 
-- **Nginx 状态检查**：
-  - `nginx_is_ready()` - 检查 nginx 是否就绪
-  - `wait_for_nginx()` - 等待 nginx 就绪（带重试逻辑）
+- **Nginx Status Checks**:
+  - `nginx_is_ready()` - Check if nginx is ready
+  - `wait_for_nginx()` - Wait for nginx to be ready (with retry logic)
 
-- **HTTP 请求工具**：
-  - `http_request()` - 发送 HTTP 请求并返回状态码
-  - `http_get()` - 发送 HTTP 请求并返回响应体
-  - `http_request_with_headers()` - 带自定义请求头的 HTTP 请求
-  - `http_request_with_method()` - 指定 HTTP 方法的请求
+- **HTTP Request Utilities**:
+  - `http_request()` - Send HTTP request and return status code
+  - `http_get()` - Send HTTP request and return response body
+  - `http_request_with_headers()` - HTTP request with custom headers
+  - `http_request_with_method()` - Request with specified HTTP method
 
-**使用原则**：所有测试模块应使用这些共享函数，避免代码重复。
+**Usage Principle**: All test modules should use these shared functions to avoid code duplication.
 
-### `basic_tests.rs` - 基础测试
+### `basic_tests.rs` - Basic Tests
 
-测试 Docker 设置和基本功能：
+Tests Docker setup and basic functionality:
 
-- ✅ `test_docker_setup()` - Docker 容器设置和初始化
-- ✅ `test_402_response()` - 基本 402 支付要求响应
-- ✅ `test_health_endpoint()` - 健康检查端点可访问性
-- ✅ `test_metrics_endpoint()` - Prometheus 指标端点
+- ✅ `test_docker_setup()` - Docker container setup and initialization
+- ✅ `test_402_response()` - Basic 402 payment required response
+- ✅ `test_health_endpoint()` - Health check endpoint accessibility
+- ✅ `test_metrics_endpoint()` - Prometheus metrics endpoint
 
-**测试重点**：验证基础设施是否正常工作，模块是否正确加载。
+**Test Focus**: Verifies that infrastructure is working correctly and the module is properly loaded.
 
-### `http_method_tests.rs` - HTTP 方法测试
+### `http_method_tests.rs` - HTTP Method Tests
 
-测试不同 HTTP 方法如何处理支付验证：
+Tests how different HTTP methods handle payment verification:
 
-- ✅ `test_options_request_skips_payment()` - OPTIONS 请求（CORS 预检）应跳过支付
-- ✅ `test_head_request_skips_payment()` - HEAD 请求应跳过支付
-- ✅ `test_trace_request_skips_payment()` - TRACE 请求应跳过支付
-- ✅ `test_get_request_still_requires_payment()` - GET 请求仍需要支付
+- ✅ `test_options_request_skips_payment()` - OPTIONS request (CORS preflight) should skip payment
+- ✅ `test_head_request_skips_payment()` - HEAD request should skip payment
+- ✅ `test_trace_request_skips_payment()` - TRACE request should skip payment
+- ✅ `test_get_request_still_requires_payment()` - GET request still requires payment
 
-**测试重点**：验证某些 HTTP 方法（OPTIONS、HEAD、TRACE）应绕过支付验证，而 GET 等正常请求仍需要支付。
+**Test Focus**: Verifies that certain HTTP methods (OPTIONS, HEAD, TRACE) should bypass payment verification, while normal requests like GET still require payment.
 
-### `proxy_payment_tests.rs` - 代理和支付验证测试
+### `proxy_payment_tests.rs` - Proxy and Payment Verification Tests
 
-测试 x402 支付验证与 nginx proxy_pass 的交互：
+Tests the interaction between x402 payment verification and nginx proxy_pass:
 
-- ✅ `test_proxy_pass_without_payment()` - 无支付头时 proxy_pass 应返回 402
-- ✅ `test_proxy_pass_with_invalid_payment()` - 无效支付头时不应代理到后端
-- ✅ `test_proxy_pass_verification_order()` - 支付验证应在 proxy_pass 之前执行
+- ✅ `test_proxy_pass_without_payment()` - proxy_pass without payment header should return 402
+- ✅ `test_proxy_pass_with_invalid_payment()` - Invalid payment header should not proxy to backend
+- ✅ `test_proxy_pass_verification_order()` - Payment verification should happen before proxy_pass
 
-**测试重点**：验证支付验证在 ACCESS_PHASE 执行，早于 proxy_pass 的 CONTENT_PHASE，确保未支付请求不会到达后端。
+**Test Focus**: Verifies that payment verification executes in ACCESS_PHASE, before proxy_pass's CONTENT_PHASE, ensuring unpaid requests don't reach the backend.
 
-### `websocket_subrequest_tests.rs` - WebSocket 和子请求测试
+### `websocket_subrequest_tests.rs` - WebSocket and Subrequest Tests
 
-测试特殊请求类型：
+Tests special request types:
 
-- ✅ `test_websocket_upgrade()` - WebSocket 升级请求处理
-- ✅ `test_subrequest_detection()` - 子请求检测（应跳过支付）
-- ✅ `test_internal_redirect_error_page()` - 内部重定向（error_page）处理
+- ✅ `test_websocket_upgrade()` - WebSocket upgrade request handling
+- ✅ `test_subrequest_detection()` - Subrequest detection (should skip payment)
+- ✅ `test_internal_redirect_error_page()` - Internal redirect (error_page) handling
 
-**测试重点**：验证 WebSocket 和子请求等特殊场景的支付验证行为。
+**Test Focus**: Verifies payment verification behavior for WebSocket and subrequest scenarios.
 
-### `content_type_tests.rs` - 内容类型测试
+### `content_type_tests.rs` - Content Type Tests
 
-测试响应格式检测（JSON vs HTML）：
+Tests response format detection (JSON vs HTML):
 
-- ✅ `test_content_type_json_returns_json_response()` - Content-Type: application/json 应返回 JSON
-- ✅ `test_content_type_json_without_user_agent()` - 仅 Content-Type 也应返回 JSON
-- ✅ `test_browser_request_without_content_type_returns_html()` - 浏览器请求应返回 HTML
+- ✅ `test_content_type_json_returns_json_response()` - Content-Type: application/json should return JSON
+- ✅ `test_content_type_json_without_user_agent()` - Content-Type alone should return JSON
+- ✅ `test_browser_request_without_content_type_returns_html()` - Browser request should return HTML
 
-**测试重点**：验证模块能根据请求头正确返回 JSON（API 客户端）或 HTML（浏览器）格式。
+**Test Focus**: Verifies that the module correctly returns JSON (API clients) or HTML (browsers) based on request headers.
 
-### `config_tests.rs` - 配置测试
+### `config_tests.rs` - Configuration Tests
 
-测试各种 x402 配置选项：
+Tests various x402 configuration options:
 
-- ✅ `test_asset_fallback_uses_default_usdc()` - 未指定资产时使用默认 USDC
-- ✅ `test_network_id_configuration()` - network_id 配置（chainId）
-- ✅ `test_network_id_mainnet()` - 主网 network_id
-- ✅ `test_custom_asset_address()` - 自定义资产地址
-- ✅ `test_network_id_takes_precedence()` - network_id 优先于 network
+- ✅ `test_asset_fallback_uses_default_usdc()` - Default USDC when asset not specified
+- ✅ `test_network_id_configuration()` - network_id configuration (chainId)
+- ✅ `test_network_id_mainnet()` - Mainnet network_id
+- ✅ `test_custom_asset_address()` - Custom asset address
+- ✅ `test_network_id_takes_precedence()` - network_id takes precedence over network
 
-**测试重点**：验证各种配置选项的正确行为，包括默认值、优先级等。
+**Test Focus**: Verifies correct behavior of various configuration options, including defaults and precedence.
 
-## 🚀 运行测试
+## 🚀 Running Tests
 
-### 运行所有测试
+### Run All Tests
 
 ```bash
 cargo test --test docker_integration_test --features integration-test
 ```
 
-### 运行特定模块
+### Run Specific Module
 
 ```bash
-# 基础测试
+# Basic tests
 cargo test --test docker_integration_test basic_tests --features integration-test
 
-# HTTP 方法测试
+# HTTP method tests
 cargo test --test docker_integration_test http_method_tests --features integration-test
 
-# 代理和支付验证测试
+# Proxy and payment verification tests
 cargo test --test docker_integration_test proxy_payment_tests --features integration-test
 
-# WebSocket 和子请求测试
+# WebSocket and subrequest tests
 cargo test --test docker_integration_test websocket_subrequest_tests --features integration-test
 
-# 内容类型测试
+# Content type tests
 cargo test --test docker_integration_test content_type_tests --features integration-test
 
-# 配置测试
+# Configuration tests
 cargo test --test docker_integration_test config_tests --features integration-test
 ```
 
-### 运行单个测试
+### Run Single Test
 
 ```bash
 cargo test --test docker_integration_test test_402_response --features integration-test
 ```
 
-### 运行并显示输出
+### Run with Output
 
 ```bash
 cargo test --test docker_integration_test --features integration-test -- --nocapture
 ```
 
-## 📝 开发指南
+## 📝 Development Guidelines
 
-### 添加新测试
+### Adding New Tests
 
-1. **选择正确的模块**：根据测试内容选择最合适的模块文件
-2. **使用共享工具**：使用 `common` 模块中的函数，避免重复代码
-3. **详细注释**：为每个测试添加注释，说明测试目的和预期行为
-4. **命名规范**：使用描述性的测试名称，清楚说明测试内容
-5. **保持专注**：每个测试应验证一个特定的行为
+1. **Choose the Right Module**: Place tests in the most appropriate module file based on functionality
+2. **Use Shared Utilities**: Use functions from the `common` module to avoid code duplication
+3. **Detailed Comments**: Add comments explaining test purpose and expected behavior
+4. **Naming Convention**: Use descriptive test names that clearly explain what is being tested
+5. **Stay Focused**: Each test should verify one specific behavior
 
-### 模块大小原则
+### Module Size Principles
 
-- ✅ 每个模块文件应 ≤ 500 行
-- ✅ 如果模块增长过大，考虑进一步拆分
-- ✅ 共享工具应始终放在 `common` 模块中
+- ✅ Each module file should be ≤ 500 lines
+- ✅ If a module grows too large, consider splitting it further
+- ✅ Shared utilities should always be in the `common` module
 
-### 测试结构
+### Test Structure
 
-每个测试应遵循以下结构：
+Each test should follow this structure:
 
 ```rust
 #[test]
 #[ignore = "requires Docker"]
 fn test_example() {
-    // 1. 测试目的说明
-    // 2. 预期行为说明
+    // 1. Test purpose explanation
+    // 2. Expected behavior explanation
     
     if !ensure_container_running() {
         eprintln!("Failed to start container. Skipping test.");
         return;
     }
     
-    // 3. 执行测试
-    // 4. 验证结果
-    // 5. 输出成功消息
+    // 3. Execute test
+    // 4. Verify results
+    // 5. Output success message
 }
 ```
 
-## 🔍 测试覆盖范围
+## 🔍 Test Coverage
 
-### 功能覆盖
+### Functional Coverage
 
-- ✅ Docker 容器管理
-- ✅ 基本支付要求响应（402）
-- ✅ HTTP 方法处理（GET、POST、OPTIONS、HEAD、TRACE）
-- ✅ 代理和支付验证交互
-- ✅ WebSocket 升级
-- ✅ 子请求检测
-- ✅ 响应格式检测（JSON/HTML）
-- ✅ 配置选项（asset、network、network_id）
+- ✅ Docker container management
+- ✅ Basic payment required response (402)
+- ✅ HTTP method handling (GET, POST, OPTIONS, HEAD, TRACE)
+- ✅ Proxy and payment verification interaction
+- ✅ WebSocket upgrade
+- ✅ Subrequest detection
+- ✅ Response format detection (JSON/HTML)
+- ✅ Configuration options (asset, network, network_id)
 
-### 边界情况
+### Edge Cases
 
-- ✅ 无支付头
-- ✅ 无效支付头
-- ✅ 容器未运行
-- ✅ Nginx 未就绪
-- ✅ 网络错误
+- ✅ No payment header
+- ✅ Invalid payment header
+- ✅ Container not running
+- ✅ Nginx not ready
+- ✅ Network errors
 
-## 🐛 故障排除
+## 🐛 Troubleshooting
 
-### Docker 相关问题
+### Docker-Related Issues
 
-如果测试失败，检查：
+If tests fail, check:
 
-1. **Docker 是否运行**：`docker ps`
-2. **容器状态**：`docker ps -a | grep nginx-x402-test-container`
-3. **容器日志**：`docker logs nginx-x402-test-container`
-4. **清理容器**：`docker stop nginx-x402-test-container && docker rm nginx-x402-test-container`
+1. **Is Docker running**: `docker ps`
+2. **Container status**: `docker ps -a | grep nginx-x402-test-container`
+3. **Container logs**: `docker logs nginx-x402-test-container`
+4. **Clean up container**: `docker stop nginx-x402-test-container && docker rm nginx-x402-test-container`
 
-### Nginx 相关问题
+### Nginx-Related Issues
 
-如果 nginx 未就绪：
+If nginx is not ready:
 
-1. 检查容器是否运行：`docker ps`
-2. 检查 nginx 日志：`docker logs nginx-x402-test-container`
-3. 手动测试健康端点：`curl http://localhost:8080/health`
+1. Check if container is running: `docker ps`
+2. Check nginx logs: `docker logs nginx-x402-test-container`
+3. Manually test health endpoint: `curl http://localhost:8080/health`
 
-### 测试超时
+### Test Timeouts
 
-如果测试超时：
+If tests timeout:
 
-1. 增加重试次数或超时时间
-2. 检查系统资源（CPU、内存）
-3. 检查网络连接
+1. Increase retry count or timeout duration
+2. Check system resources (CPU, memory)
+3. Check network connectivity
 
-## 📚 相关文档
+## 📚 Related Documentation
 
-- [主测试目录 README](../README.md)
-- [集成测试状态](../INTEGRATION_TEST_STATUS.md)
-- [测试总结](../TEST_SUMMARY.md)
+- [Main Test Directory README](../README.md)
+- [Integration Test Status](../INTEGRATION_TEST_STATUS.md)
+- [Test Summary](../TEST_SUMMARY.md)
 
-## 🤝 贡献
+## 🤝 Contributing
 
-添加新测试时，请：
+When adding new tests:
 
-1. 遵循现有的代码风格和结构
-2. 添加详细的注释和文档
-3. 确保测试在正确的模块中
-4. 验证文件大小不超过 500 行
-5. 运行所有测试确保没有破坏现有功能
-
+1. Follow existing code style and structure
+2. Add detailed comments and documentation
+3. Ensure tests are in the correct module
+4. Verify file size does not exceed 500 lines
+5. Run all tests to ensure no existing functionality is broken
