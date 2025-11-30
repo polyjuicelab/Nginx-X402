@@ -69,10 +69,11 @@ fn test_create_requirements_mime_type_default() {
     let config = TestConfig::new();
     let requirements = create_requirements_test_with_mime(&config, "/test", None).unwrap();
 
-    // When mimeType is not provided, it should be None
+    // When mimeType is not provided, it should default to "application/json"
     assert_eq!(
-        requirements.mime_type, None,
-        "mimeType should be None when not provided"
+        requirements.mime_type,
+        Some("application/json".to_string()),
+        "mimeType should default to 'application/json' when not provided"
     );
 }
 
@@ -157,4 +158,52 @@ fn test_create_requirements_all_fields_present() {
         "max_timeout_seconds must be positive"
     );
     assert!(requirements.extra.is_some(), "extra must be set");
+    // mimeType must always be set (should never be None)
+    assert!(
+        requirements.mime_type.is_some(),
+        "mimeType must always be set (should never be None)"
+    );
+    assert!(
+        !requirements.mime_type.as_ref().unwrap().is_empty(),
+        "mimeType must not be empty"
+    );
+}
+
+#[test]
+fn test_create_requirements_mime_type_always_set() {
+    use super::common::create_requirements_test_with_mime;
+    let config = TestConfig::new();
+
+    // Test with None - should default to application/json
+    let requirements = create_requirements_test_with_mime(&config, "/test", None).unwrap();
+    assert_eq!(
+        requirements.mime_type,
+        Some("application/json".to_string()),
+        "mimeType should default to 'application/json' when None is provided"
+    );
+
+    // Test with empty string - should default to application/json
+    let requirements = create_requirements_test_with_mime(&config, "/test", Some("")).unwrap();
+    assert_eq!(
+        requirements.mime_type,
+        Some("application/json".to_string()),
+        "mimeType should default to 'application/json' when empty string is provided"
+    );
+
+    // Test with whitespace-only string - should default to application/json
+    let requirements = create_requirements_test_with_mime(&config, "/test", Some("   ")).unwrap();
+    assert_eq!(
+        requirements.mime_type,
+        Some("application/json".to_string()),
+        "mimeType should default to 'application/json' when whitespace-only string is provided"
+    );
+
+    // Test with valid mime type - should use provided value
+    let requirements =
+        create_requirements_test_with_mime(&config, "/test", Some("text/html")).unwrap();
+    assert_eq!(
+        requirements.mime_type,
+        Some("text/html".to_string()),
+        "mimeType should use provided value when valid"
+    );
 }
