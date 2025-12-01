@@ -166,7 +166,27 @@ mod tests {
         }
 
         // Request without payment should return 402, not reach backend
-        let status = http_request("/api/protected-proxy").expect("Failed to make HTTP request");
+        // Retry logic: sometimes nginx needs a moment to be fully ready, especially under concurrent test execution
+        let mut status = String::new();
+        let mut retries = 5;
+        while retries > 0 {
+            match http_request("/api/protected-proxy") {
+                Some(s) if s != "000" => {
+                    status = s;
+                    break;
+                }
+                Some(s) => {
+                    status = s;
+                    retries -= 1;
+                    thread::sleep(Duration::from_millis(500));
+                }
+                None => {
+                    status = "000".to_string();
+                    retries -= 1;
+                    thread::sleep(Duration::from_millis(500));
+                }
+            }
+        }
 
         assert_eq!(
             status, "402",
