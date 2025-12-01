@@ -1,3 +1,10 @@
+nginx-x402 (1.3.1-1) unstable; urgency=medium
+
+  * Version bump to 1.3.1
+  * Add retry logic to integration tests for better stability
+  * Configure CI to use single-threaded test execution
+  * Fix race conditions in concurrent test execution
+
 nginx-x402 (1.3.0-1) unstable; urgency=medium
 
   * Version bump to 1.3.0
