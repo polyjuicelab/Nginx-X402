@@ -26,6 +26,8 @@
 mod tests {
     use crate::docker_integration::common::*;
     use std::process::Command;
+    use std::thread;
+    use std::time::Duration;
 
     /// Extract header value from curl output (-i flag includes headers)
     fn get_header_value(response: &str, header_name: &str) -> Option<String> {
@@ -42,25 +44,6 @@ mod tests {
             }
         }
         None
-    }
-
-    /// Make HTTP request and return all headers
-    fn http_request_with_headers_output(path: &str, headers: &[(&str, &str)]) -> Option<String> {
-        let url = format!("http://localhost:{NGINX_PORT}{path}");
-        let header_strings: Vec<String> = headers
-            .iter()
-            .map(|(name, value)| format!("{}: {}", name, value))
-            .collect();
-        let mut args = vec!["-s", "-i", &url]; // -i includes headers in output
-        for header in &header_strings {
-            args.push("-H");
-            args.push(header);
-        }
-        Command::new("curl")
-            .args(args)
-            .output()
-            .ok()
-            .map(|output| String::from_utf8_lossy(&output.stdout).to_string())
     }
 
     #[test]
@@ -89,14 +72,13 @@ mod tests {
 
         // Use OPTIONS method which skips payment verification
         // Make OPTIONS request with proper headers to get full response
+        let url = format!("http://localhost:{NGINX_PORT}/api/protected-proxy");
         let mut args = vec!["-s", "-i", "-X", "OPTIONS"];
         args.push("-H");
         args.push("Origin: https://example.com");
         args.push("-H");
         args.push("Access-Control-Request-Method: GET");
-        args.push(&format!(
-            "http://localhost:{NGINX_PORT}/api/protected-proxy"
-        ));
+        args.push(&url);
 
         let output = Command::new("curl")
             .args(args)
@@ -189,6 +171,7 @@ mod tests {
         }
 
         // Make OPTIONS request (CORS preflight) with proper headers
+        let url = format!("http://localhost:{NGINX_PORT}/api/protected-proxy");
         let mut args = vec!["-s", "-i", "-X", "OPTIONS"];
         args.push("-H");
         args.push("Origin: https://example.com");
@@ -196,9 +179,7 @@ mod tests {
         args.push("Access-Control-Request-Method: GET");
         args.push("-H");
         args.push("Access-Control-Request-Headers: X-PAYMENT");
-        args.push(&format!(
-            "http://localhost:{NGINX_PORT}/api/protected-proxy"
-        ));
+        args.push(&url);
 
         let output = Command::new("curl")
             .args(args)
@@ -284,20 +265,41 @@ mod tests {
         }
 
         // Make HEAD request with proper headers
-        let mut args = vec!["-s", "-i", "-X", "HEAD"];
-        args.push("-H");
-        args.push("Origin: https://example.com");
-        args.push(&format!(
-            "http://localhost:{NGINX_PORT}/api/protected-proxy"
-        ));
+        // Retry logic: sometimes nginx needs a moment to be fully ready, especially under concurrent test execution
+        let url = format!("http://localhost:{NGINX_PORT}/api/protected-proxy");
+        let mut response_text_opt = None;
+        let mut retries = 5;
 
-        let output = Command::new("curl")
-            .args(args)
-            .output()
-            .ok()
-            .map(|output| String::from_utf8_lossy(&output.stdout).to_string());
+        while retries > 0 {
+            let mut args = vec!["-s", "-i", "-X", "HEAD"];
+            args.push("-H");
+            args.push("Origin: https://example.com");
+            args.push(&url);
 
-        if let Some(response_text) = output {
+            let output = Command::new("curl")
+                .args(args)
+                .output()
+                .ok()
+                .map(|output| String::from_utf8_lossy(&output.stdout).to_string());
+
+            if let Some(text) = output {
+                let status_line = text.lines().next().unwrap_or("");
+                // Check if we got a valid response (not empty)
+                if !status_line.is_empty()
+                    && (status_line.contains("HTTP")
+                        || status_line.contains("200")
+                        || status_line.contains("204")
+                        || status_line.contains("402"))
+                {
+                    response_text_opt = Some(text);
+                    break;
+                }
+            }
+            retries -= 1;
+            thread::sleep(Duration::from_millis(500));
+        }
+
+        if let Some(response_text) = response_text_opt {
             // Extract status code
             let status_line = response_text.lines().next().unwrap_or("");
             let status = if status_line.contains("200") {
@@ -370,12 +372,11 @@ mod tests {
         }
 
         // Use OPTIONS method which skips payment verification
+        let url = format!("http://localhost:{NGINX_PORT}/api/protected-proxy");
         let mut args = vec!["-s", "-i", "-X", "OPTIONS"];
         args.push("-H");
         args.push("Origin: https://example.com");
-        args.push(&format!(
-            "http://localhost:{NGINX_PORT}/api/protected-proxy"
-        ));
+        args.push(&url);
 
         let output = Command::new("curl")
             .args(args)
@@ -471,14 +472,13 @@ mod tests {
         }
 
         // Make OPTIONS request which skips payment verification
+        let url = format!("http://localhost:{NGINX_PORT}/api/protected-proxy");
         let mut args = vec!["-s", "-i", "-X", "OPTIONS"];
         args.push("-H");
         args.push("Origin: https://example.com");
         args.push("-H");
         args.push("Access-Control-Request-Method: GET");
-        args.push(&format!(
-            "http://localhost:{NGINX_PORT}/api/protected-proxy"
-        ));
+        args.push(&url);
 
         let output = Command::new("curl")
             .args(args)
@@ -591,20 +591,41 @@ mod tests {
         }
 
         // Use OPTIONS method which skips payment verification
-        let mut args = vec!["-s", "-i", "-X", "OPTIONS"];
-        args.push("-H");
-        args.push("Origin: https://example.com");
-        args.push(&format!(
-            "http://localhost:{NGINX_PORT}/api/protected-proxy"
-        ));
+        // Retry logic: sometimes nginx needs a moment to be fully ready, especially under concurrent test execution
+        let url = format!("http://localhost:{NGINX_PORT}/api/protected-proxy");
+        let mut response_text_opt = None;
+        let mut retries = 5;
 
-        let output = Command::new("curl")
-            .args(args)
-            .output()
-            .ok()
-            .map(|output| String::from_utf8_lossy(&output.stdout).to_string());
+        while retries > 0 {
+            let mut args = vec!["-s", "-i", "-X", "OPTIONS"];
+            args.push("-H");
+            args.push("Origin: https://example.com");
+            args.push(&url);
 
-        if let Some(response_text) = output {
+            let output = Command::new("curl")
+                .args(args)
+                .output()
+                .ok()
+                .map(|output| String::from_utf8_lossy(&output.stdout).to_string());
+
+            if let Some(text) = output {
+                let status_line = text.lines().next().unwrap_or("");
+                // Check if we got a valid response (not empty)
+                if !status_line.is_empty()
+                    && (status_line.contains("HTTP")
+                        || status_line.contains("200")
+                        || status_line.contains("204")
+                        || status_line.contains("402"))
+                {
+                    response_text_opt = Some(text);
+                    break;
+                }
+            }
+            retries -= 1;
+            thread::sleep(Duration::from_millis(500));
+        }
+
+        if let Some(response_text) = response_text_opt {
             // Extract status code
             let status_line = response_text.lines().next().unwrap_or("");
             let status = if status_line.contains("200") {
@@ -704,20 +725,41 @@ mod tests {
         }
 
         // Use HEAD method which skips payment verification
-        let mut args = vec!["-s", "-i", "-X", "HEAD"];
-        args.push("-H");
-        args.push("Origin: https://example.com");
-        args.push(&format!(
-            "http://localhost:{NGINX_PORT}/api/protected-proxy"
-        ));
+        // Retry logic: sometimes nginx needs a moment to be fully ready, especially under concurrent test execution
+        let url = format!("http://localhost:{NGINX_PORT}/api/protected-proxy");
+        let mut response_text_opt = None;
+        let mut retries = 5;
 
-        let output = Command::new("curl")
-            .args(args)
-            .output()
-            .ok()
-            .map(|output| String::from_utf8_lossy(&output.stdout).to_string());
+        while retries > 0 {
+            let mut args = vec!["-s", "-i", "-X", "HEAD"];
+            args.push("-H");
+            args.push("Origin: https://example.com");
+            args.push(&url);
 
-        if let Some(response_text) = output {
+            let output = Command::new("curl")
+                .args(args)
+                .output()
+                .ok()
+                .map(|output| String::from_utf8_lossy(&output.stdout).to_string());
+
+            if let Some(text) = output {
+                let status_line = text.lines().next().unwrap_or("");
+                // Check if we got a valid response (not empty)
+                if !status_line.is_empty()
+                    && (status_line.contains("HTTP")
+                        || status_line.contains("200")
+                        || status_line.contains("204")
+                        || status_line.contains("402"))
+                {
+                    response_text_opt = Some(text);
+                    break;
+                }
+            }
+            retries -= 1;
+            thread::sleep(Duration::from_millis(500));
+        }
+
+        if let Some(response_text) = response_text_opt {
             // Extract status code
             let status_line = response_text.lines().next().unwrap_or("");
             let status = if status_line.contains("200") {
