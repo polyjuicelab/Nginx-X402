@@ -1,3 +1,11 @@
+nginx-x402 (1.3.2-1) unstable; urgency=medium
+
+  * Fix critical memory safety issue causing SIGSEGV crashes with OPTIONS requests
+  * Replace unsafe mem::transmute with ngx-rust official API Request::from_ngx_http_request
+  * Add null pointer checks before creating Request objects
+  * Fix crash in ngx_http_update_location_config when processing CORS preflight requests
+  * Improve code safety by using official ngx-rust APIs instead of unsafe transmute
+
 nginx-x402 (1.3.1-1) unstable; urgency=medium
 
   * Version bump to 1.3.1

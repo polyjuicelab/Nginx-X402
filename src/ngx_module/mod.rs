@@ -69,9 +69,11 @@ pub use runtime::{
 pub unsafe extern "C" fn x402_metrics_handler(
     r: *mut ngx::ffi::ngx_http_request_t,
 ) -> ngx::ffi::ngx_int_t {
-    use std::mem;
-    let req_ptr: *mut ngx::http::Request = mem::transmute(r);
-    let req_mut = &mut *req_ptr;
+    if r.is_null() {
+        return ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t;
+    }
+
+    let req_mut = ngx::http::Request::from_ngx_http_request(r);
 
     match x402_metrics_handler_impl(req_mut) {
         ngx::core::Status::NGX_OK => ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t,
@@ -91,11 +93,7 @@ pub unsafe extern "C" fn x402_metrics_handler(
 /// # Safety
 ///
 /// The caller must ensure that `r` is a valid pointer to a `ngx_http_request_t`.
-unsafe fn clear_x402_content_handler(
-    r: *mut ngx::ffi::ngx_http_request_t,
-    req_mut: &mut ngx::http::Request,
-    reason: &str,
-) {
+unsafe fn clear_x402_content_handler(r: *mut ngx::ffi::ngx_http_request_t, reason: &str) {
     use ngx::ffi::ngx_http_request_t;
     let r_raw = r.cast::<ngx_http_request_t>();
     if r_raw.is_null() {
@@ -120,7 +118,7 @@ unsafe fn clear_x402_content_handler(
         (*r_raw).content_handler = None;
         use crate::ngx_module::logging::log_debug;
         log_debug(
-            Some(req_mut),
+            None,
             &format!(
                 "[x402] Phase handler: Cleared x402 content handler {}",
                 reason
@@ -149,9 +147,14 @@ unsafe fn clear_x402_content_handler(
 pub unsafe extern "C" fn x402_phase_handler(
     r: *mut ngx::ffi::ngx_http_request_t,
 ) -> ngx::ffi::ngx_int_t {
-    use std::mem;
-    let req_ptr: *mut ngx::http::Request = mem::transmute(r);
-    let req_mut = &mut *req_ptr;
+    // Validate pointer
+    if r.is_null() {
+        return ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t;
+    }
+
+    // Create Request object safely using ngx-rust's API
+    // Request is a zero-cost wrapper (repr(transparent)), so we can safely create it from the raw pointer
+    let req_mut = ngx::http::Request::from_ngx_http_request(r);
 
     use crate::ngx_module::logging::log_debug;
     use crate::ngx_module::module::get_module_config;
@@ -178,7 +181,6 @@ pub unsafe extern "C" fn x402_phase_handler(
     let method_id = request_struct.method;
     let detected_method = unsafe { get_http_method(r) };
 
-    // Debug: Log method ID and detected method for troubleshooting
     log_debug(
         Some(req_mut),
         &format!(
@@ -202,7 +204,6 @@ pub unsafe extern "C" fn x402_phase_handler(
         unsafe {
             clear_x402_content_handler(
                 r,
-                req_mut,
                 &format!("for {} request to prevent payment verification", method),
             );
         }
@@ -217,11 +218,7 @@ pub unsafe extern "C" fn x402_phase_handler(
         );
         // Clear content handler if it's x402_ngx_handler to prevent payment verification in CONTENT_PHASE
         unsafe {
-            clear_x402_content_handler(
-                r,
-                req_mut,
-                "for WebSocket request to prevent payment verification",
-            );
+            clear_x402_content_handler(r, "for WebSocket request to prevent payment verification");
         }
         return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
     }
@@ -299,7 +296,6 @@ pub unsafe extern "C" fn x402_phase_handler(
             unsafe {
                 clear_x402_content_handler(
                     r,
-                    req_mut,
                     "after payment verification to prevent duplicate verification",
                 );
             }
@@ -348,9 +344,11 @@ pub unsafe extern "C" fn x402_phase_handler(
 pub unsafe extern "C" fn x402_ngx_handler(
     r: *mut ngx::ffi::ngx_http_request_t,
 ) -> ngx::ffi::ngx_int_t {
-    use std::mem;
-    let req_ptr: *mut ngx::http::Request = mem::transmute(r);
-    let req_mut = &mut *req_ptr;
+    if r.is_null() {
+        return ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t;
+    }
+
+    let req_mut = ngx::http::Request::from_ngx_http_request(r);
 
     let (status, _result) = x402_ngx_handler_impl(req_mut);
     match status {
