@@ -292,6 +292,14 @@ jobs:
           fi
           echo "NGINX_SOURCE_DIR=/tmp/nginx-$NGX_VERSION" >> $GITHUB_ENV
 
+      - name: Update Debian changelog version
+        run: |
+          VERSION=$(grep '^version' Cargo.toml | cut -d'"' -f2)
+          echo "Detected version from Cargo.toml: $VERSION"
+          # Update debian/changelog version to match Cargo.toml
+          # Format: nginx-x402 (VERSION-1) unstable; urgency=medium
+          sed -i "1s/(.*)/(${VERSION}-1)/" debian/changelog
+
       - name: Build Debian package
         env:
           NGINX_SOURCE_DIR: ${{ env.NGINX_SOURCE_DIR }}
