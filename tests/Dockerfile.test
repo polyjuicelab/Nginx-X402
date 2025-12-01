@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
     wget \
     python3 \
+    python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Rust toolchain (cached separately from system packages)
@@ -99,6 +100,9 @@ COPY tests/nginx.test.conf /etc/nginx/nginx.conf
 
 # Create test directories
 RUN mkdir -p /var/www/html /var/log/nginx
+
+# Install Flask for mock backend
+RUN pip3 install --no-cache-dir flask
 
 # Copy mock backend server script
 COPY tests/mock-backend.py /usr/local/bin/mock-backend.py
