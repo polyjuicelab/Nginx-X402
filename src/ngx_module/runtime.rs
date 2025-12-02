@@ -145,10 +145,10 @@ pub async fn verify_payment(
             log_debug(
                 None,
                 &format!(
-                    "Facilitator verify response: is_valid={}, error={:?}",
+                    "Facilitator verify response: is_valid={}, invalid_reason={:?}",
                     response.is_valid,
                     response
-                        .error
+                        .invalid_reason
                         .as_ref()
                         .map(|e| e.as_str())
                         .unwrap_or("none")
