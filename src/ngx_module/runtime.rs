@@ -147,11 +147,7 @@ pub async fn verify_payment(
                 &format!(
                     "Facilitator verify response: is_valid={}, invalid_reason={:?}",
                     response.is_valid,
-                    response
-                        .invalid_reason
-                        .as_ref()
-                        .map(|e| e.as_str())
-                        .unwrap_or("none")
+                    response.invalid_reason.as_deref().unwrap_or("none")
                 ),
             );
             Ok(response.is_valid)
