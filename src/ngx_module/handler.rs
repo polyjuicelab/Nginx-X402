@@ -159,7 +159,16 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<H
 
         // Handle verification result with fallback logic
         let is_valid = match verification_result {
-            Ok(valid) => valid,
+            Ok(valid) => {
+                log_debug(
+                    Some(r),
+                    &format!(
+                        "Payment verification result: is_valid={}, duration={:.3}s",
+                        valid, verification_duration
+                    ),
+                );
+                valid
+            }
             Err(e) => {
                 // Facilitator verification failed (network error, timeout, etc.)
                 log_error(Some(r), &format!("Facilitator verification error: {e}"));
@@ -194,7 +203,10 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<H
             Ok(HandlerResult::PaymentValid)
         } else {
             // Payment invalid - send user-facing error message
-            log_warn(Some(r), "Payment verification failed, sending 402 response");
+            log_warn(
+                Some(r),
+                "Payment verification failed (facilitator returned is_valid=false), sending 402 response",
+            );
             metrics.record_verification_failed();
             metrics.record_402_response();
             send_402_response(

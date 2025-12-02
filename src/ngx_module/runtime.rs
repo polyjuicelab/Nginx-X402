@@ -112,7 +112,7 @@ pub async fn verify_payment(
     timeout_duration: Option<Duration>,
 ) -> Result<bool> {
     use crate::ngx_module::error::user_errors;
-    use crate::ngx_module::logging::{log_error, log_warn};
+    use crate::ngx_module::logging::{log_debug, log_error, log_warn};
     use rust_x402::types::PaymentPayload;
 
     // Validate inputs
@@ -140,7 +140,22 @@ pub async fn verify_payment(
     // Verify with timeout
     let verify_future = client.verify(&payment_payload, requirements);
     match timeout(timeout_duration, verify_future).await {
-        Ok(Ok(response)) => Ok(response.is_valid),
+        Ok(Ok(response)) => {
+            // Log facilitator response details for debugging
+            log_debug(
+                None,
+                &format!(
+                    "Facilitator verify response: is_valid={}, error={:?}",
+                    response.is_valid,
+                    response
+                        .error
+                        .as_ref()
+                        .map(|e| e.as_str())
+                        .unwrap_or("none")
+                ),
+            );
+            Ok(response.is_valid)
+        }
         Ok(Err(e)) => {
             // Verification failure - log internal details, user gets generic error
             log_error(None, &format!("Payment verification failed: {e}"));
