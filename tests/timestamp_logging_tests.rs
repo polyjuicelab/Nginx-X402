@@ -137,9 +137,7 @@ mod tests {
         // When invalid_reason is None, it's logged as "none"
         let log_message = format!(
             "Facilitator verify response: is_valid={}, invalid_reason={:?}, current_timestamp={}",
-            is_valid,
-            None::<&str>,
-            current_timestamp
+            is_valid, None::<&str>, current_timestamp
         );
 
         // Verify log message contains timestamp
