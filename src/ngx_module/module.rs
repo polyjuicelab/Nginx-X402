@@ -139,10 +139,12 @@ unsafe extern "C" fn create_loc_conf(cf: *mut ngx::ffi::ngx_conf_t) -> *mut core
 /// We cannot set handler here because it causes segmentation faults.
 /// However, we can verify that handler is still set after merging.
 unsafe extern "C" fn merge_loc_conf(
-    _cf: *mut ngx::ffi::ngx_conf_t,
+    cf: *mut ngx::ffi::ngx_conf_t,
     prev: *mut core::ffi::c_void,
     conf: *mut core::ffi::c_void,
 ) -> *mut c_char {
+    use crate::ngx_module::commands::common::copy_string_to_pool;
+
     let prev = prev.cast::<X402Config>();
     let conf = conf.cast::<X402Config>();
 
@@ -162,42 +164,68 @@ unsafe extern "C" fn merge_loc_conf(
     // CRITICAL: Do NOT access clcf in merge_loc_conf - it causes segmentation faults
     // The handler verification must be done at runtime in the handler itself, not during merge
 
-    // Merge string fields: use current if non-empty, otherwise use previous
-    if conf_mut.amount_str.len == 0 {
-        conf_mut.amount_str = prev_conf.amount_str;
+    // Merge string fields: use current if non-empty, otherwise copy from previous using current pool
+    // IMPORTANT: We must copy strings to the current configuration pool instead of copying pointers
+    // because prev_conf may use a different memory pool that could be freed, causing segfaults
+    if conf_mut.amount_str.len == 0 && prev_conf.amount_str.len > 0 {
+        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.amount_str) {
+            conf_mut.amount_str = copied_str;
+        }
     }
-    if conf_mut.pay_to_str.len == 0 {
-        conf_mut.pay_to_str = prev_conf.pay_to_str;
+    if conf_mut.pay_to_str.len == 0 && prev_conf.pay_to_str.len > 0 {
+        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.pay_to_str) {
+            conf_mut.pay_to_str = copied_str;
+        }
     }
-    if conf_mut.facilitator_url_str.len == 0 {
-        conf_mut.facilitator_url_str = prev_conf.facilitator_url_str;
+    if conf_mut.facilitator_url_str.len == 0 && prev_conf.facilitator_url_str.len > 0 {
+        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.facilitator_url_str) {
+            conf_mut.facilitator_url_str = copied_str;
+        }
     }
-    if conf_mut.description_str.len == 0 {
-        conf_mut.description_str = prev_conf.description_str;
+    if conf_mut.description_str.len == 0 && prev_conf.description_str.len > 0 {
+        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.description_str) {
+            conf_mut.description_str = copied_str;
+        }
     }
-    if conf_mut.network_str.len == 0 {
-        conf_mut.network_str = prev_conf.network_str;
+    if conf_mut.network_str.len == 0 && prev_conf.network_str.len > 0 {
+        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.network_str) {
+            conf_mut.network_str = copied_str;
+        }
     }
-    if conf_mut.network_id_str.len == 0 {
-        conf_mut.network_id_str = prev_conf.network_id_str;
+    if conf_mut.network_id_str.len == 0 && prev_conf.network_id_str.len > 0 {
+        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.network_id_str) {
+            conf_mut.network_id_str = copied_str;
+        }
     }
-    if conf_mut.resource_str.len == 0 {
-        conf_mut.resource_str = prev_conf.resource_str;
+    if conf_mut.resource_str.len == 0 && prev_conf.resource_str.len > 0 {
+        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.resource_str) {
+            conf_mut.resource_str = copied_str;
+        }
     }
-    if conf_mut.asset_str.len == 0 {
-        conf_mut.asset_str = prev_conf.asset_str;
+    if conf_mut.asset_str.len == 0 && prev_conf.asset_str.len > 0 {
+        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.asset_str) {
+            conf_mut.asset_str = copied_str;
+        }
     }
-    if conf_mut.asset_decimals_str.len == 0 {
-        conf_mut.asset_decimals_str = prev_conf.asset_decimals_str;
+    if conf_mut.asset_decimals_str.len == 0 && prev_conf.asset_decimals_str.len > 0 {
+        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.asset_decimals_str) {
+            conf_mut.asset_decimals_str = copied_str;
+        }
     }
-    if conf_mut.timeout_str.len == 0 {
-        conf_mut.timeout_str = prev_conf.timeout_str;
+    if conf_mut.timeout_str.len == 0 && prev_conf.timeout_str.len > 0 {
+        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.timeout_str) {
+            conf_mut.timeout_str = copied_str;
+        }
     }
-    if conf_mut.facilitator_fallback_str.len == 0 {
-        conf_mut.facilitator_fallback_str = prev_conf.facilitator_fallback_str;
+    if conf_mut.facilitator_fallback_str.len == 0 && prev_conf.facilitator_fallback_str.len > 0 {
+        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.facilitator_fallback_str) {
+            conf_mut.facilitator_fallback_str = copied_str;
+        }
     }
-    if conf_mut.ttl_str.len == 0 {
-        conf_mut.ttl_str = prev_conf.ttl_str;
+    if conf_mut.ttl_str.len == 0 && prev_conf.ttl_str.len > 0 {
+        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.ttl_str) {
+            conf_mut.ttl_str = copied_str;
+        }
     }
 
     // Note: Handler is set in ngx_http_x402 command handler when x402 on; is parsed

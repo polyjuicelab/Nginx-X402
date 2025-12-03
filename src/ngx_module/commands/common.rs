@@ -21,7 +21,7 @@ use std::ptr;
 ///
 /// * `Some(ngx_str_t)` - Successfully allocated and copied string
 /// * `None` - Failed to allocate memory
-pub(crate) unsafe fn copy_string_to_pool(cf: *mut ngx_conf_t, src: ngx_str_t) -> Option<ngx_str_t> {
+pub unsafe fn copy_string_to_pool(cf: *mut ngx_conf_t, src: ngx_str_t) -> Option<ngx_str_t> {
     if src.len == 0 {
         return Some(ngx_str_t {
             len: 0,
