@@ -113,9 +113,19 @@ pub fn x402_handler_impl(r: &mut Request, config: &ParsedX402Config) -> Result<H
     let payment_header = get_header_value(r, "X-PAYMENT");
 
     if let Some(payment_b64) = payment_header {
+        // Get current timestamp for debugging time-related issues
+        let current_timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
         log_debug(
             Some(r),
-            "X-PAYMENT header found, validating and verifying payment",
+            &format!(
+                "X-PAYMENT header found, validating and verifying payment, current_timestamp={}, maxTimeoutSeconds={}",
+                current_timestamp,
+                requirements.max_timeout_seconds
+            ),
         );
 
         // Record verification attempt

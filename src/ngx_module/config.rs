@@ -22,6 +22,7 @@ pub struct X402Config {
     pub asset_decimals_str: ngx_str_t, // Token decimals (e.g., "6" for USDC, "18" for most ERC-20)
     pub timeout_str: ngx_str_t, // Timeout in seconds (e.g., "10")
     pub facilitator_fallback_str: ngx_str_t, // Fallback mode: "error" or "pass"
+    pub ttl_str: ngx_str_t,   // TTL for payment authorization validity in seconds (e.g., "60")
 }
 
 /// Facilitator fallback mode
@@ -47,6 +48,7 @@ pub struct ParsedX402Config {
     pub asset_decimals: Option<u8>, // Token decimals (default: 6 for USDC, typically 18 for ERC-20)
     pub timeout: Option<Duration>, // Timeout for facilitator requests
     pub facilitator_fallback: FacilitatorFallback, // Fallback behavior when facilitator fails
+    pub ttl: Option<u32>,      // TTL for payment authorization validity in seconds (default: 60)
 }
 
 impl X402Config {
@@ -249,6 +251,33 @@ impl X402Config {
             }
         };
 
+        // Parse TTL (payment authorization validity time)
+        let ttl = if self.ttl_str.len == 0 {
+            None // Use default (60) from PaymentRequirements
+        } else {
+            let ngx_str = unsafe { NgxStr::from_ngx_str(self.ttl_str) };
+            let ttl_str = ngx_str
+                .to_str()
+                .map_err(|_| ConfigError::from("Invalid ttl string encoding"))?;
+
+            let ttl_value = ttl_str
+                .parse::<u32>()
+                .map_err(|e| ConfigError::from(format!("Invalid ttl format: {e}")))?;
+
+            // Validate TTL range (1 second to 3600 seconds / 1 hour)
+            // This controls the maximum time window for payment authorization validity
+            if ttl_value < 1 {
+                return Err(ConfigError::from("ttl must be at least 1 second"));
+            }
+            if ttl_value > 3600 {
+                return Err(ConfigError::from(
+                    "ttl must be at most 3600 seconds (1 hour)",
+                ));
+            }
+
+            Some(ttl_value)
+        };
+
         Ok(ParsedX402Config {
             enabled: self.enabled != 0,
             amount,
@@ -262,6 +291,7 @@ impl X402Config {
             asset_decimals,
             timeout,
             facilitator_fallback,
+            ttl,
         })
     }
 }

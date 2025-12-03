@@ -39,7 +39,10 @@ use basic::{
     ngx_http_x402_pay_to,
 };
 use network::{ngx_http_x402_network, ngx_http_x402_network_id};
-use other::{ngx_http_x402_facilitator_fallback, ngx_http_x402_metrics, ngx_http_x402_timeout};
+use other::{
+    ngx_http_x402_facilitator_fallback, ngx_http_x402_metrics, ngx_http_x402_timeout,
+    ngx_http_x402_ttl,
+};
 
 /// Configuration commands array
 ///
@@ -52,7 +55,7 @@ use other::{ngx_http_x402_facilitator_fallback, ngx_http_x402_metrics, ngx_http_
 /// - Offset: offset within the config structure
 /// - Post: post-processing function (if any)
 #[no_mangle]
-pub static mut ngx_http_x402_commands: [ngx_command_t; 14] = [
+pub static mut ngx_http_x402_commands: [ngx_command_t; 15] = [
     ngx_command_t {
         name: ngx_string!("x402"),
         type_: (ngx::ffi::NGX_HTTP_MAIN_CONF
@@ -148,6 +151,14 @@ pub static mut ngx_http_x402_commands: [ngx_command_t; 14] = [
         name: ngx_string!("x402_facilitator_fallback"),
         type_: (ngx::ffi::NGX_HTTP_LOC_CONF | ngx::ffi::NGX_CONF_TAKE1) as usize,
         set: Some(ngx_http_x402_facilitator_fallback),
+        conf: ngx::ffi::NGX_HTTP_LOC_CONF_OFFSET,
+        offset: 0,
+        post: ptr::null_mut(),
+    },
+    ngx_command_t {
+        name: ngx_string!("x402_ttl"),
+        type_: (ngx::ffi::NGX_HTTP_LOC_CONF | ngx::ffi::NGX_CONF_TAKE1) as usize,
+        set: Some(ngx_http_x402_ttl),
         conf: ngx::ffi::NGX_HTTP_LOC_CONF_OFFSET,
         offset: 0,
         post: ptr::null_mut(),

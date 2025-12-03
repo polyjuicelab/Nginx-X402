@@ -141,13 +141,21 @@ pub async fn verify_payment(
     let verify_future = client.verify(&payment_payload, requirements);
     match timeout(timeout_duration, verify_future).await {
         Ok(Ok(response)) => {
+            // Get current timestamp for debugging time-related issues
+            let current_timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+
             // Log facilitator response details for debugging
+            // Include current timestamp to help debug time-related validation issues
             log_debug(
                 None,
                 &format!(
-                    "Facilitator verify response: is_valid={}, invalid_reason={:?}",
+                    "Facilitator verify response: is_valid={}, invalid_reason={:?}, current_timestamp={}",
                     response.is_valid,
-                    response.invalid_reason.as_deref().unwrap_or("none")
+                    response.invalid_reason.as_deref().unwrap_or("none"),
+                    current_timestamp
                 ),
             );
             Ok(response.is_valid)

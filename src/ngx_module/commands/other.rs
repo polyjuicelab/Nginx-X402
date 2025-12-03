@@ -3,6 +3,7 @@
 //! This module contains handlers for miscellaneous configuration directives:
 //! - `x402_timeout`
 //! - `x402_facilitator_fallback`
+//! - `x402_ttl`
 //! - `x402_metrics`
 
 use crate::ngx_module::commands::common::copy_string_to_pool;
@@ -42,6 +43,50 @@ pub(crate) unsafe extern "C" fn ngx_http_x402_timeout(
     match copy_string_to_pool(cf, value_str) {
         Some(allocated_str) => {
             (*conf).timeout_str = allocated_str;
+        }
+        None => {
+            return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
+        }
+    }
+
+    ptr::null_mut()
+}
+
+/// Parse `x402_ttl` directive
+///
+/// Sets the time-to-live (TTL) for payment authorization validity.
+/// This controls the maximum time window for payment authorization timestamps.
+///
+/// # Arguments
+/// - `cf`: Nginx configuration context
+/// - `_cmd`: Command structure (unused)
+/// - `conf`: Module configuration structure
+///
+/// # Returns
+/// - `null` on success
+/// - Error pointer on failure
+pub(crate) unsafe extern "C" fn ngx_http_x402_ttl(
+    cf: *mut ngx_conf_t,
+    _cmd: *mut ngx_command_t,
+    conf: *mut core::ffi::c_void,
+) -> *mut c_char {
+    let conf = conf.cast::<X402Config>();
+    if conf.is_null() {
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
+    }
+
+    let args = (*cf).args;
+    if args.is_null() || (*args).nelts < 2 {
+        return ngx::core::NGX_CONF_ERROR.cast::<c_char>();
+    }
+
+    // elts is a pointer to an array of ngx_str_t, not an array of pointers
+    let elts = (*args).elts.cast::<ngx_str_t>();
+    let value_str = *elts.add(1);
+
+    match copy_string_to_pool(cf, value_str) {
+        Some(allocated_str) => {
+            (*conf).ttl_str = allocated_str;
         }
         None => {
             return ngx::core::NGX_CONF_ERROR.cast::<c_char>();

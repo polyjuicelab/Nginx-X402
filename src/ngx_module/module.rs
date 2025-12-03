@@ -196,6 +196,9 @@ unsafe extern "C" fn merge_loc_conf(
     if conf_mut.facilitator_fallback_str.len == 0 {
         conf_mut.facilitator_fallback_str = prev_conf.facilitator_fallback_str;
     }
+    if conf_mut.ttl_str.len == 0 {
+        conf_mut.ttl_str = prev_conf.ttl_str;
+    }
 
     // Note: Handler is set in ngx_http_x402 command handler when x402 on; is parsed
     // We cannot set handler here in merge_loc_conf because accessing clcf during merging
