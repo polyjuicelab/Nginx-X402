@@ -8,6 +8,26 @@ use ngx::http::Request;
 use std::ffi::c_char;
 use std::ptr;
 
+/// Macro to merge a string field from previous config to current config
+///
+/// This macro safely copies a string field from `prev_conf` to `conf_mut` using
+/// the current configuration pool, preventing segfaults from dangling pointers.
+///
+/// # Usage
+///
+/// ```rust,ignore
+/// merge_string_field!(cf, conf_mut, prev_conf, field_name);
+/// ```
+macro_rules! merge_string_field {
+    ($cf:expr, $conf_mut:expr, $prev_conf:expr, $field:ident) => {
+        if $conf_mut.$field.len == 0 && $prev_conf.$field.len > 0 {
+            if let Some(copied_str) = copy_string_to_pool($cf, $prev_conf.$field) {
+                $conf_mut.$field = copied_str;
+            }
+        }
+    };
+}
+
 /// Helper function to get `ngx_http_core_main_conf_t` from `ngx_conf_t`
 ///
 /// This is equivalent to `ngx_http_conf_get_module_main_conf(cf`, `ngx_http_core_module`)
@@ -167,66 +187,18 @@ unsafe extern "C" fn merge_loc_conf(
     // Merge string fields: use current if non-empty, otherwise copy from previous using current pool
     // IMPORTANT: We must copy strings to the current configuration pool instead of copying pointers
     // because prev_conf may use a different memory pool that could be freed, causing segfaults
-    if conf_mut.amount_str.len == 0 && prev_conf.amount_str.len > 0 {
-        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.amount_str) {
-            conf_mut.amount_str = copied_str;
-        }
-    }
-    if conf_mut.pay_to_str.len == 0 && prev_conf.pay_to_str.len > 0 {
-        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.pay_to_str) {
-            conf_mut.pay_to_str = copied_str;
-        }
-    }
-    if conf_mut.facilitator_url_str.len == 0 && prev_conf.facilitator_url_str.len > 0 {
-        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.facilitator_url_str) {
-            conf_mut.facilitator_url_str = copied_str;
-        }
-    }
-    if conf_mut.description_str.len == 0 && prev_conf.description_str.len > 0 {
-        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.description_str) {
-            conf_mut.description_str = copied_str;
-        }
-    }
-    if conf_mut.network_str.len == 0 && prev_conf.network_str.len > 0 {
-        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.network_str) {
-            conf_mut.network_str = copied_str;
-        }
-    }
-    if conf_mut.network_id_str.len == 0 && prev_conf.network_id_str.len > 0 {
-        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.network_id_str) {
-            conf_mut.network_id_str = copied_str;
-        }
-    }
-    if conf_mut.resource_str.len == 0 && prev_conf.resource_str.len > 0 {
-        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.resource_str) {
-            conf_mut.resource_str = copied_str;
-        }
-    }
-    if conf_mut.asset_str.len == 0 && prev_conf.asset_str.len > 0 {
-        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.asset_str) {
-            conf_mut.asset_str = copied_str;
-        }
-    }
-    if conf_mut.asset_decimals_str.len == 0 && prev_conf.asset_decimals_str.len > 0 {
-        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.asset_decimals_str) {
-            conf_mut.asset_decimals_str = copied_str;
-        }
-    }
-    if conf_mut.timeout_str.len == 0 && prev_conf.timeout_str.len > 0 {
-        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.timeout_str) {
-            conf_mut.timeout_str = copied_str;
-        }
-    }
-    if conf_mut.facilitator_fallback_str.len == 0 && prev_conf.facilitator_fallback_str.len > 0 {
-        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.facilitator_fallback_str) {
-            conf_mut.facilitator_fallback_str = copied_str;
-        }
-    }
-    if conf_mut.ttl_str.len == 0 && prev_conf.ttl_str.len > 0 {
-        if let Some(copied_str) = copy_string_to_pool(cf, prev_conf.ttl_str) {
-            conf_mut.ttl_str = copied_str;
-        }
-    }
+    merge_string_field!(cf, conf_mut, prev_conf, amount_str);
+    merge_string_field!(cf, conf_mut, prev_conf, pay_to_str);
+    merge_string_field!(cf, conf_mut, prev_conf, facilitator_url_str);
+    merge_string_field!(cf, conf_mut, prev_conf, description_str);
+    merge_string_field!(cf, conf_mut, prev_conf, network_str);
+    merge_string_field!(cf, conf_mut, prev_conf, network_id_str);
+    merge_string_field!(cf, conf_mut, prev_conf, resource_str);
+    merge_string_field!(cf, conf_mut, prev_conf, asset_str);
+    merge_string_field!(cf, conf_mut, prev_conf, asset_decimals_str);
+    merge_string_field!(cf, conf_mut, prev_conf, timeout_str);
+    merge_string_field!(cf, conf_mut, prev_conf, facilitator_fallback_str);
+    merge_string_field!(cf, conf_mut, prev_conf, ttl_str);
 
     // Note: Handler is set in ngx_http_x402 command handler when x402 on; is parsed
     // We cannot set handler here in merge_loc_conf because accessing clcf during merging
