@@ -58,17 +58,6 @@ mod tests {
             return;
         }
 
-        // Check Docker logs for segfaults or errors
-        let logs = Command::new("docker")
-            .args(["logs", "--tail", "50", CONTAINER_NAME])
-            .output()
-            .ok()
-            .and_then(|output| {
-                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-                Some(stdout)
-            })
-            .unwrap_or_default();
-
         // Make a request that should trigger TTL usage
         let _ = http_request("/api/protected");
 
