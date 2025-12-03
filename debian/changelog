@@ -1,3 +1,14 @@
+nginx-x402 (1.3.4-1) unstable; urgency=medium
+
+  * Add timestamp logging for payment verification debugging
+  * Log current timestamp when processing X-PAYMENT header
+  * Log current timestamp in facilitator response for time-related issue debugging
+  * Include maxTimeoutSeconds in payment header logs
+  * Add x402_ttl configuration directive for customizing payment authorization TTL (1-3600 seconds, default: 60)
+  * Set PaymentRequirements.max_timeout_seconds from configuration
+  * Add comprehensive unit and integration tests for timestamp logging
+  * Improve code quality: all clippy warnings resolved, formatting applied
+
 nginx-x402 (1.3.3-1) unstable; urgency=medium
 
   * Add detailed logging for facilitator payment verification responses

@@ -2,7 +2,7 @@
 %define moduledir %{_libdir}/nginx/modules
 
 Name:           nginx-x402
-Version:        1.3.1
+Version:        1.3.4
 Release:        1%{?dist}
 Summary:        Pure Rust Nginx module for x402 HTTP micropayment protocol
 License:        AGPL-3.0
@@ -673,6 +673,12 @@ fi
 %{_datadir}/%{name}/
 
 %changelog
+* Wed Dec 03 2025 Ryan Kung <ryan@polyjuice.io> - 1.3.4-1
+- Add timestamp logging for payment verification debugging
+- Add x402_ttl configuration directive for customizing payment authorization TTL
+- Include maxTimeoutSeconds in payment header logs
+- Add comprehensive unit and integration tests for timestamp logging
+
 * Mon Dec 01 2025 Ryan Kung <ryan@polyjuice.io> - 1.3.1-1
 - Version bump to 1.3.1
 - Add retry logic to integration tests for better stability
