@@ -58,3 +58,6 @@ pub mod header_passthrough_tests;
 
 #[cfg(feature = "integration-test")]
 pub mod timestamp_tests;
+
+#[cfg(feature = "integration-test")]
+pub mod ttl_config_tests;
