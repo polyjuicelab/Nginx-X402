@@ -27,6 +27,7 @@ mod tests {
             asset_decimals_str: ngx::ffi::ngx_str_t::default(),
             timeout_str: ngx::ffi::ngx_str_t::default(),
             facilitator_fallback_str: ngx::ffi::ngx_str_t::default(),
+            ttl_str: ngx::ffi::ngx_str_t::default(),
         }
     }
 

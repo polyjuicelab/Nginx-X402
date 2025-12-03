@@ -152,6 +152,13 @@ pub fn create_requirements(
         config.description.as_deref().unwrap_or(""),
     );
 
+    // Set max_timeout_seconds if configured, otherwise use default (60 seconds)
+    // This field controls the maximum time window for payment authorization validity.
+    // The TTL is used by the facilitator service to validate payment authorization timestamps.
+    if let Some(ttl_value) = config.ttl {
+        requirements.max_timeout_seconds = ttl_value;
+    }
+
     // Set MIME type - always set a value (use provided or default to application/json)
     // PaymentRequirements has a public mime_type field that can be set directly
     let final_mime_type = if let Some(mime) = mime_type {

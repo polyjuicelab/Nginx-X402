@@ -133,6 +133,7 @@ http {
 **Advanced Configuration:**
 - `x402_resource <path>` - Resource path or full URL (default: automatically builds full URL from request: `scheme://host/path`)
 - `x402_timeout <seconds>` - Facilitator API timeout (1-300, default: 10)
+- `x402_ttl <seconds>` - Time-to-live for payment authorization validity (1-3600, default: 60). Controls the maximum time window for payment authorization timestamps.
 - `x402_facilitator_fallback <mode>` - Fallback on error: `error` (500) or `pass` (default: `error`)
 - `x402_metrics on|off` - Enable Prometheus metrics endpoint
 

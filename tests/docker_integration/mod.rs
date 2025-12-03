@@ -55,3 +55,6 @@ pub mod config_tests;
 
 #[cfg(feature = "integration-test")]
 pub mod header_passthrough_tests;
+
+#[cfg(feature = "integration-test")]
+pub mod timestamp_tests;

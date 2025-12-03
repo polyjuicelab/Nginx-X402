@@ -28,3 +28,4 @@ build/
 # Generated files
 signatures.json
 scripts
+.env.build
