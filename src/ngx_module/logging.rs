@@ -32,6 +32,9 @@ static INIT: Once = Once::new();
 /// Initialize the logger
 pub fn init() {
     INIT.call_once(|| {
+        // Initialize panic handler for FFI safety
+        crate::ngx_module::panic_handler::init_panic_hook();
+
         log::set_logger(&LOGGER)
             .map(|()| log::set_max_level(log::LevelFilter::Debug))
             .expect("Failed to initialize logger");
