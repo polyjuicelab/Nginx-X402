@@ -31,6 +31,7 @@ pub mod handler;
 pub mod logging;
 pub mod metrics;
 pub mod module;
+pub mod panic_handler;
 pub mod request;
 pub mod requirements;
 pub mod response;
@@ -69,18 +70,25 @@ pub use runtime::{
 pub unsafe extern "C" fn x402_metrics_handler(
     r: *mut ngx::ffi::ngx_http_request_t,
 ) -> ngx::ffi::ngx_int_t {
+    use crate::ngx_module::panic_handler::catch_panic_or_default;
+
     if r.is_null() {
         return ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t;
     }
 
-    let req_mut = ngx::http::Request::from_ngx_http_request(r);
-
-    match x402_metrics_handler_impl(req_mut) {
-        ngx::core::Status::NGX_OK => ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t,
-        ngx::core::Status::NGX_ERROR => ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t,
-        ngx::core::Status::NGX_DECLINED => ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t,
-        _ => ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t,
-    }
+    catch_panic_or_default(
+        || {
+            let req_mut = ngx::http::Request::from_ngx_http_request(r);
+            match x402_metrics_handler_impl(req_mut) {
+                ngx::core::Status::NGX_OK => ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t,
+                ngx::core::Status::NGX_ERROR => ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t,
+                ngx::core::Status::NGX_DECLINED => ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t,
+                _ => ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t,
+            }
+        },
+        "x402_metrics_handler",
+        ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t,
+    )
 }
 
 /// Clear x402 content handler if it's set
@@ -147,180 +155,193 @@ unsafe fn clear_x402_content_handler(r: *mut ngx::ffi::ngx_http_request_t, reaso
 pub unsafe extern "C" fn x402_phase_handler(
     r: *mut ngx::ffi::ngx_http_request_t,
 ) -> ngx::ffi::ngx_int_t {
+    use crate::ngx_module::panic_handler::catch_panic_or_default;
+
     // Validate pointer
     if r.is_null() {
         return ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t;
     }
 
-    // Create Request object safely using ngx-rust's API
-    // Request is a zero-cost wrapper (repr(transparent)), so we can safely create it from the raw pointer
-    let req_mut = ngx::http::Request::from_ngx_http_request(r);
+    // Wrap the entire handler in panic protection
+    catch_panic_or_default(
+        || {
+            // Create Request object safely using ngx-rust's API
+            // Request is a zero-cost wrapper (repr(transparent)), so we can safely create it from the raw pointer
+            let req_mut = ngx::http::Request::from_ngx_http_request(r);
 
-    use crate::ngx_module::logging::log_debug;
-    use crate::ngx_module::module::get_module_config;
-    use crate::ngx_module::request::{
-        get_http_method, is_websocket_request, should_skip_payment_for_method,
-    };
+            use crate::ngx_module::logging::log_debug;
+            use crate::ngx_module::module::get_module_config;
+            use crate::ngx_module::request::{
+                get_http_method, is_websocket_request, should_skip_payment_for_method,
+            };
 
-    // Skip payment verification for special request types
-    // These requests should bypass payment verification:
-    // 1. Certain HTTP methods (OPTIONS, HEAD, TRACE) - used for protocol-level operations
-    //    - OPTIONS: CORS preflight requests sent by browsers before cross-origin requests
-    //    - HEAD: Used to check resource existence without retrieving body
-    //    - TRACE: Used for diagnostic and debugging purposes
-    // 2. WebSocket upgrades - long-lived connections that use special HTTP Upgrade mechanism.
-    //    Payment verification would interfere with WebSocket handshake, and subsequent
-    //    WebSocket frames are not HTTP requests, so payment verification is not applicable.
-    //    Payment should be handled at application layer for WebSocket connections.
-    // 3. Subrequests (auth_request, etc.) - detected via raw request pointer
-    // 4. Internal redirects - detected via raw request pointer
+            // Skip payment verification for special request types
+            // These requests should bypass payment verification:
+            // 1. Certain HTTP methods (OPTIONS, HEAD, TRACE) - used for protocol-level operations
+            //    - OPTIONS: CORS preflight requests sent by browsers before cross-origin requests
+            //    - HEAD: Used to check resource existence without retrieving body
+            //    - TRACE: Used for diagnostic and debugging purposes
+            // 2. WebSocket upgrades - long-lived connections that use special HTTP Upgrade mechanism.
+            //    Payment verification would interfere with WebSocket handshake, and subsequent
+            //    WebSocket frames are not HTTP requests, so payment verification is not applicable.
+            //    Payment should be handled at application layer for WebSocket connections.
+            // 3. Subrequests (auth_request, etc.) - detected via raw request pointer
+            // 4. Internal redirects - detected via raw request pointer
 
-    // Check if HTTP method should skip payment verification
-    // This check happens early to avoid unnecessary processing
-    let request_struct = unsafe { &*r };
-    let method_id = request_struct.method;
-    let detected_method = unsafe { get_http_method(r) };
+            // Check if HTTP method should skip payment verification
+            // This check happens early to avoid unnecessary processing
+            let request_struct = unsafe { &*r };
+            let method_id = request_struct.method;
+            let detected_method = unsafe { get_http_method(r) };
 
-    log_debug(
-        Some(req_mut),
-        &format!(
-            "[x402] Phase handler: method_id=0x{:08x}, detected_method={:?}",
-            method_id, detected_method
-        ),
-    );
-
-    if unsafe { should_skip_payment_for_method(r) } {
-        let method = detected_method.unwrap_or("UNKNOWN");
-        log_debug(
-            Some(req_mut),
-            &format!(
-                "[x402] Phase handler: {} request detected (method_id=0x{:08x}), skipping payment verification",
-                method, method_id
-            ),
-        );
-        // Clear content handler if it's x402_ngx_handler to prevent payment verification in CONTENT_PHASE
-        // When returning NGX_DECLINED, nginx will still proceed to CONTENT_PHASE, so we need to clear
-        // the content handler to prevent duplicate payment verification
-        unsafe {
-            clear_x402_content_handler(
-                r,
-                &format!("for {} request to prevent payment verification", method),
+            log_debug(
+                Some(req_mut),
+                &format!(
+                    "[x402] Phase handler: method_id=0x{:08x}, detected_method={:?}",
+                    method_id, detected_method
+                ),
             );
-        }
-        return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
-    }
 
-    // Check for WebSocket upgrade (can be detected via headers)
-    if is_websocket_request(req_mut) {
-        log_debug(
-            Some(req_mut),
-            "[x402] Phase handler: WebSocket upgrade detected, skipping payment verification",
-        );
-        // Clear content handler if it's x402_ngx_handler to prevent payment verification in CONTENT_PHASE
-        unsafe {
-            clear_x402_content_handler(r, "for WebSocket request to prevent payment verification");
-        }
-        return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
-    }
-
-    // Check for subrequest using raw request pointer
-    // Subrequests have r->parent != NULL
-    unsafe {
-        let r_raw = r.cast_const();
-        if !r_raw.is_null() {
-            let parent = (*r_raw).parent;
-            if !parent.is_null() {
+            if unsafe { should_skip_payment_for_method(r) } {
+                let method = detected_method.unwrap_or("UNKNOWN");
                 log_debug(
                     Some(req_mut),
-                    "[x402] Phase handler: Subrequest detected (parent != NULL), skipping payment verification",
+                    &format!(
+                        "[x402] Phase handler: {} request detected (method_id=0x{:08x}), skipping payment verification",
+                        method, method_id
+                    ),
                 );
+                // Clear content handler if it's x402_ngx_handler to prevent payment verification in CONTENT_PHASE
+                // When returning NGX_DECLINED, nginx will still proceed to CONTENT_PHASE, so we need to clear
+                // the content handler to prevent duplicate payment verification
+                unsafe {
+                    clear_x402_content_handler(
+                        r,
+                        &format!("for {} request to prevent payment verification", method),
+                    );
+                }
                 return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
             }
-        }
-    }
 
-    // Check for internal redirect using raw request pointer
-    // Internal redirects have r->internal = 1 (unsigned flag)
-    // In nginx C code, internal is a field in ngx_http_request_t structure
-    unsafe {
-        let r_raw = r.cast_const();
-        if !r_raw.is_null() {
-            // Access internal field directly from C structure
-            // internal is an unsigned integer field in ngx_http_request_t
-            // We need to access it via pointer dereference
-            // Note: This is accessing the raw C structure, so we need to be careful
-            let request_struct = &*r_raw;
-            // Try to access internal field - it should be a field, not a method
-            // If this doesn't compile, we may need to use offset_of! macro or other approach
-            // For now, we'll use a workaround: check if uri.data starts with @ (named locations)
-            // Named locations (like @fallback) are always internal redirects
-            let uri = request_struct.uri;
-            if !uri.data.is_null() && uri.len > 0 {
-                // Check if URI starts with '@' which indicates named location (always internal)
-                let uri_slice = std::slice::from_raw_parts(uri.data.cast_const(), uri.len.min(1));
-                if uri_slice[0] == b'@' {
-                    log_debug(
-                        Some(req_mut),
-                        "[x402] Phase handler: Internal redirect detected (named location @), skipping payment verification",
+            // Check for WebSocket upgrade (can be detected via headers)
+            if is_websocket_request(req_mut) {
+                log_debug(
+                    Some(req_mut),
+                    "[x402] Phase handler: WebSocket upgrade detected, skipping payment verification",
+                );
+                // Clear content handler if it's x402_ngx_handler to prevent payment verification in CONTENT_PHASE
+                unsafe {
+                    clear_x402_content_handler(
+                        r,
+                        "for WebSocket request to prevent payment verification",
                     );
-                    return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
+                }
+                return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
+            }
+
+            // Check for subrequest using raw request pointer
+            // Subrequests have r->parent != NULL
+            unsafe {
+                let r_raw = r.cast_const();
+                if !r_raw.is_null() {
+                    let parent = (*r_raw).parent;
+                    if !parent.is_null() {
+                        log_debug(
+                        Some(req_mut),
+                        "[x402] Phase handler: Subrequest detected (parent != NULL), skipping payment verification",
+                    );
+                        return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
+                    }
                 }
             }
-        }
-    }
 
-    // Check if module is enabled for this location
-    let conf = match get_module_config(req_mut) {
-        Ok(c) => c,
-        Err(_) => {
-            // Module not configured for this location, decline to let other handlers process
-            return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
-        }
-    };
-
-    // Check if module is enabled
-    if conf.enabled == 0 {
-        return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
-    }
-
-    // Module is enabled - perform payment verification
-    // This will verify payment and send 402 if needed, or allow request to proceed
-    use crate::ngx_module::handler::HandlerResult;
-    let (status, result) = x402_ngx_handler_impl(req_mut);
-    match (status, result) {
-        (ngx::core::Status::NGX_OK, HandlerResult::PaymentValid) => {
-            // Payment verified - allow request to continue
-            // If content handler is x402_ngx_handler (no proxy_pass), clear it to prevent
-            // duplicate payment verification in CONTENT_PHASE. If content handler is something
-            // else (like proxy_pass), keep it so it runs in CONTENT_PHASE.
+            // Check for internal redirect using raw request pointer
+            // Internal redirects have r->internal = 1 (unsigned flag)
+            // In nginx C code, internal is a field in ngx_http_request_t structure
             unsafe {
-                clear_x402_content_handler(
-                    r,
-                    "after payment verification to prevent duplicate verification",
-                );
+                let r_raw = r.cast_const();
+                if !r_raw.is_null() {
+                    // Access internal field directly from C structure
+                    // internal is an unsigned integer field in ngx_http_request_t
+                    // We need to access it via pointer dereference
+                    // Note: This is accessing the raw C structure, so we need to be careful
+                    let request_struct = &*r_raw;
+                    // Try to access internal field - it should be a field, not a method
+                    // If this doesn't compile, we may need to use offset_of! macro or other approach
+                    // For now, we'll use a workaround: check if uri.data starts with @ (named locations)
+                    // Named locations (like @fallback) are always internal redirects
+                    let uri = request_struct.uri;
+                    if !uri.data.is_null() && uri.len > 0 {
+                        // Check if URI starts with '@' which indicates named location (always internal)
+                        let uri_slice =
+                            std::slice::from_raw_parts(uri.data.cast_const(), uri.len.min(1));
+                        if uri_slice[0] == b'@' {
+                            log_debug(
+                                Some(req_mut),
+                                "[x402] Phase handler: Internal redirect detected (named location @), skipping payment verification",
+                            );
+                            return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
+                        }
+                    }
+                }
             }
-            // This will proceed to CONTENT_PHASE where proxy_pass handler will run (if set)
-            ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t
-        }
-        (ngx::core::Status::NGX_DECLINED, HandlerResult::ResponseSent) => {
-            // Response was sent (402 or error) - stop processing
-            // Return OK to indicate we handled the request and prevent further processing
-            // This prevents proxy_pass from executing
-            // Note: In nginx, when a response is sent in ACCESS_PHASE, returning NGX_OK
-            // tells nginx that we've handled the request and it should not proceed to CONTENT_PHASE
-            ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t
-        }
-        (ngx::core::Status::NGX_ERROR, _) => {
-            // Error occurred during payment verification
-            // The handler should have sent an appropriate response (402 or 500)
-            // Return OK to indicate we handled the request and prevent further processing
-            ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t
-        }
-        _ => {
-            // Unexpected status - return OK to prevent further processing
-            ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t
-        }
-    }
+
+            // Check if module is enabled for this location
+            let conf = match get_module_config(req_mut) {
+                Ok(c) => c,
+                Err(_) => {
+                    // Module not configured for this location, decline to let other handlers process
+                    return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
+                }
+            };
+
+            // Check if module is enabled
+            if conf.enabled == 0 {
+                return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
+            }
+
+            // Module is enabled - perform payment verification
+            // This will verify payment and send 402 if needed, or allow request to proceed
+            use crate::ngx_module::handler::HandlerResult;
+            let (status, result) = x402_ngx_handler_impl(req_mut);
+            match (status, result) {
+                (ngx::core::Status::NGX_OK, HandlerResult::PaymentValid) => {
+                    // Payment verified - allow request to continue
+                    // If content handler is x402_ngx_handler (no proxy_pass), clear it to prevent
+                    // duplicate payment verification in CONTENT_PHASE. If content handler is something
+                    // else (like proxy_pass), keep it so it runs in CONTENT_PHASE.
+                    unsafe {
+                        clear_x402_content_handler(
+                            r,
+                            "after payment verification to prevent duplicate verification",
+                        );
+                    }
+                    // This will proceed to CONTENT_PHASE where proxy_pass handler will run (if set)
+                    ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t
+                }
+                (ngx::core::Status::NGX_DECLINED, HandlerResult::ResponseSent) => {
+                    // Response was sent (402 or error) - stop processing
+                    // Return OK to indicate we handled the request and prevent further processing
+                    // This prevents proxy_pass from executing
+                    // Note: In nginx, when a response is sent in ACCESS_PHASE, returning NGX_OK
+                    // tells nginx that we've handled the request and it should not proceed to CONTENT_PHASE
+                    ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t
+                }
+                (ngx::core::Status::NGX_ERROR, _) => {
+                    // Error occurred during payment verification
+                    // The handler should have sent an appropriate response (402 or 500)
+                    // Return OK to indicate we handled the request and prevent further processing
+                    ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t
+                }
+                _ => {
+                    // Unexpected status - return OK to prevent further processing
+                    ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t
+                }
+            }
+        },
+        "x402_phase_handler",
+        ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t,
+    )
 }
 
 /// Main content handler C export
@@ -344,17 +365,24 @@ pub unsafe extern "C" fn x402_phase_handler(
 pub unsafe extern "C" fn x402_ngx_handler(
     r: *mut ngx::ffi::ngx_http_request_t,
 ) -> ngx::ffi::ngx_int_t {
+    use crate::ngx_module::panic_handler::catch_panic_or_default;
+
     if r.is_null() {
         return ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t;
     }
 
-    let req_mut = ngx::http::Request::from_ngx_http_request(r);
-
-    let (status, _result) = x402_ngx_handler_impl(req_mut);
-    match status {
-        ngx::core::Status::NGX_OK => ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t,
-        ngx::core::Status::NGX_ERROR => ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t,
-        ngx::core::Status::NGX_DECLINED => ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t,
-        _ => ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t,
-    }
+    catch_panic_or_default(
+        || {
+            let req_mut = ngx::http::Request::from_ngx_http_request(r);
+            let (status, _result) = x402_ngx_handler_impl(req_mut);
+            match status {
+                ngx::core::Status::NGX_OK => ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t,
+                ngx::core::Status::NGX_ERROR => ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t,
+                ngx::core::Status::NGX_DECLINED => ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t,
+                _ => ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t,
+            }
+        },
+        "x402_ngx_handler",
+        ngx::ffi::NGX_ERROR as ngx::ffi::ngx_int_t,
+    )
 }

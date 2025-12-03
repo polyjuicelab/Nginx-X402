@@ -21,6 +21,13 @@ use std::ptr;
 ///
 /// * `Some(ngx_str_t)` - Successfully allocated and copied string
 /// * `None` - Failed to allocate memory
+///
+/// # Safety
+///
+/// The caller must ensure that:
+/// * `cf` is a valid pointer to a `ngx_conf_t` structure
+/// * `src.data` points to valid memory if `src.len > 0`
+/// * The source string is valid UTF-8 if it will be converted to a Rust string
 pub unsafe fn copy_string_to_pool(cf: *mut ngx_conf_t, src: ngx_str_t) -> Option<ngx_str_t> {
     if src.len == 0 {
         return Some(ngx_str_t {
