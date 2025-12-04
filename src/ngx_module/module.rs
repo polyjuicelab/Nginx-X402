@@ -3,7 +3,8 @@
 use crate::ngx_module::commands::ngx_http_x402_commands;
 use crate::ngx_module::config::X402Config;
 use crate::ngx_module::error::{ConfigError, Result};
-use ngx::ffi::ngx_http_core_main_conf_t;
+use ngx::core::{NgxStr, Pool};
+use ngx::ffi::{ngx_http_core_main_conf_t, ngx_http_request_t, ngx_str_t};
 use ngx::http::Request;
 use std::ffi::c_char;
 use std::ptr;
@@ -26,6 +27,89 @@ macro_rules! merge_string_field {
             }
         }
     };
+}
+
+/// Helper function to copy a string from config to request pool
+///
+/// This function safely copies a string field from configuration to the request's
+/// memory pool, ensuring the string lives as long as the request.
+///
+/// # Safety
+///
+/// The caller must ensure that:
+/// * `r` is a valid pointer to a `ngx_http_request_t` structure
+/// * `src.data` points to valid memory if `src.len > 0`
+unsafe fn copy_string_to_request_pool(
+    r: *const ngx_http_request_t,
+    src: ngx_str_t,
+) -> Option<ngx_str_t> {
+    if src.len == 0 {
+        return Some(ngx_str_t {
+            len: 0,
+            data: ptr::null_mut(),
+        });
+    }
+
+    let pool = Pool::from_ngx_pool((*r).pool);
+    let ngx_str = NgxStr::from_ngx_str(src);
+
+    match ngx_str.to_str() {
+        Ok(s) => {
+            let len = s.len();
+            let data = pool.alloc(len).cast::<u8>();
+            if data.is_null() {
+                return None;
+            }
+            ptr::copy_nonoverlapping(s.as_ptr(), data, len);
+            Some(ngx_str_t { len, data })
+        }
+        Err(_) => None,
+    }
+}
+
+/// Safely clone configuration, copying all strings to request pool
+///
+/// This function creates a new configuration with all string fields copied
+/// to the request's memory pool, preventing segfaults from dangling pointers.
+///
+/// # Safety
+///
+/// The caller must ensure that `r` is a valid pointer to a `ngx_http_request_t`.
+unsafe fn clone_config_to_request_pool(
+    r: *const ngx_http_request_t,
+    src: &X402Config,
+) -> Result<X402Config> {
+    Ok(X402Config {
+        enabled: src.enabled,
+        amount_str: copy_string_to_request_pool(r, src.amount_str)
+            .ok_or_else(|| ConfigError::from("Failed to copy amount_str to request pool"))?,
+        pay_to_str: copy_string_to_request_pool(r, src.pay_to_str)
+            .ok_or_else(|| ConfigError::from("Failed to copy pay_to_str to request pool"))?,
+        facilitator_url_str: copy_string_to_request_pool(r, src.facilitator_url_str).ok_or_else(
+            || ConfigError::from("Failed to copy facilitator_url_str to request pool"),
+        )?,
+        description_str: copy_string_to_request_pool(r, src.description_str)
+            .ok_or_else(|| ConfigError::from("Failed to copy description_str to request pool"))?,
+        network_str: copy_string_to_request_pool(r, src.network_str)
+            .ok_or_else(|| ConfigError::from("Failed to copy network_str to request pool"))?,
+        network_id_str: copy_string_to_request_pool(r, src.network_id_str)
+            .ok_or_else(|| ConfigError::from("Failed to copy network_id_str to request pool"))?,
+        resource_str: copy_string_to_request_pool(r, src.resource_str)
+            .ok_or_else(|| ConfigError::from("Failed to copy resource_str to request pool"))?,
+        asset_str: copy_string_to_request_pool(r, src.asset_str)
+            .ok_or_else(|| ConfigError::from("Failed to copy asset_str to request pool"))?,
+        asset_decimals_str: copy_string_to_request_pool(r, src.asset_decimals_str).ok_or_else(
+            || ConfigError::from("Failed to copy asset_decimals_str to request pool"),
+        )?,
+        timeout_str: copy_string_to_request_pool(r, src.timeout_str)
+            .ok_or_else(|| ConfigError::from("Failed to copy timeout_str to request pool"))?,
+        facilitator_fallback_str: copy_string_to_request_pool(r, src.facilitator_fallback_str)
+            .ok_or_else(|| {
+                ConfigError::from("Failed to copy facilitator_fallback_str to request pool")
+            })?,
+        ttl_str: copy_string_to_request_pool(r, src.ttl_str)
+            .ok_or_else(|| ConfigError::from("Failed to copy ttl_str to request pool"))?,
+    })
 }
 
 /// Helper function to get `ngx_http_core_main_conf_t` from `ngx_conf_t`
@@ -379,8 +463,11 @@ pub fn get_module_config(req: &Request) -> Result<X402Config> {
         // but we can at least ensure the pointer is aligned and accessible
         let _ = std::ptr::read_volatile(&raw const (*conf_ptr).enabled);
 
-        // Clone the configuration
+        // Clone the configuration, copying all strings to request pool
+        // CRITICAL: We must copy strings to the request pool instead of cloning pointers
+        // because the configuration may use a different memory pool that could be freed,
+        // causing segfaults when accessing strings later in parse()
         // Safety: We've validated that conf_ptr is non-null and points to valid memory
-        Ok((*conf_ptr).clone())
+        clone_config_to_request_pool(r, &*conf_ptr)
     }
 }
