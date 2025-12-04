@@ -104,7 +104,7 @@ pub unsafe extern "C" fn x402_metrics_handler(
 /// Clear x402 content handler if it's set
 ///
 /// Uses ngx-rust's safe `Request` API instead of raw pointers.
-fn clear_x402_content_handler(mut req: &mut ngx::http::Request, reason: &str) {
+fn clear_x402_content_handler(req: &mut ngx::http::Request, reason: &str) {
     use crate::ngx_module::logging::log_debug;
 
     extern "C" {
