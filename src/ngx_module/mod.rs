@@ -222,7 +222,7 @@ pub unsafe extern "C" fn x402_phase_handler(
             }
 
             // Check for WebSocket upgrade (can be detected via headers)
-            if is_websocket_request(&req_mut) {
+            if is_websocket_request(req_mut) {
                 log_debug(
                     Some(req_mut),
                     "[x402] Phase handler: WebSocket upgrade detected, skipping payment verification",
