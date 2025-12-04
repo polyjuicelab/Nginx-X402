@@ -195,7 +195,7 @@ pub unsafe extern "C" fn x402_phase_handler(
             let detected_method = crate::ngx_module::request::get_http_method(&*req_mut);
 
             log_debug(
-                Some(&mut req_mut),
+                Some(&*req_mut),
                 &format!(
                     "[x402] Phase handler: method_id=0x{:08x}, detected_method={:?}",
                     method_id, detected_method
@@ -205,7 +205,7 @@ pub unsafe extern "C" fn x402_phase_handler(
             if crate::ngx_module::request::should_skip_payment_for_method(&*req_mut) {
                 let method = detected_method.unwrap_or("UNKNOWN");
                 log_debug(
-                    Some(&mut req_mut),
+                    Some(&*req_mut),
                     &format!(
                         "[x402] Phase handler: {} request detected (method_id=0x{:08x}), skipping payment verification",
                         method, method_id
@@ -222,9 +222,9 @@ pub unsafe extern "C" fn x402_phase_handler(
             }
 
             // Check for WebSocket upgrade (can be detected via headers)
-            if is_websocket_request(req_mut) {
+            if is_websocket_request(&*req_mut) {
                 log_debug(
-                    Some(&mut req_mut),
+                    Some(&*req_mut),
                     "[x402] Phase handler: WebSocket upgrade detected, skipping payment verification",
                 );
                 // Clear content handler if it's x402_ngx_handler to prevent payment verification in CONTENT_PHASE
@@ -243,7 +243,7 @@ pub unsafe extern "C" fn x402_phase_handler(
                     let parent = (*r_raw).parent;
                     if !parent.is_null() {
                         log_debug(
-                        Some(&mut req_mut),
+                        Some(&*req_mut),
                         "[x402] Phase handler: Subrequest detected (parent != NULL), skipping payment verification",
                     );
                         return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
@@ -273,7 +273,7 @@ pub unsafe extern "C" fn x402_phase_handler(
                             std::slice::from_raw_parts(uri.data.cast_const(), uri.len.min(1));
                         if uri_slice[0] == b'@' {
                             log_debug(
-                                Some(&mut req_mut),
+                                Some(&*req_mut),
                                 "[x402] Phase handler: Internal redirect detected (named location @), skipping payment verification",
                             );
                             return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
