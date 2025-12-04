@@ -531,7 +531,17 @@ pub fn get_module_config(req: &Request) -> Result<X402Config> {
         // This is a basic sanity check - if the pointer is invalid, this might fail
         // Note: We can't easily validate the structure without knowing its layout,
         // but we can at least ensure the pointer is aligned and accessible
-        let _ = std::ptr::read_volatile(&raw const (*conf_ptr).enabled);
+        // Use panic protection to catch any invalid memory access
+        use crate::ngx_module::panic_handler::catch_panic;
+        let _enabled_check = catch_panic(
+            || unsafe { std::ptr::read_volatile(&raw const (*conf_ptr).enabled) },
+            "read_volatile enabled field",
+        );
+        if _enabled_check.is_none() {
+            return Err(ConfigError::from(
+                "Configuration pointer is invalid (cannot read enabled field). This may indicate memory corruption or invalid pointer."
+            ));
+        }
 
         // CRITICAL: We cannot safely clone the configuration because accessing its fields
         // may cause segfaults if the configuration's memory pool was freed.
