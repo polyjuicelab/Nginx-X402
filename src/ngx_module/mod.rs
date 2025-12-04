@@ -224,7 +224,7 @@ pub unsafe extern "C" fn x402_phase_handler(
             // Check for WebSocket upgrade (can be detected via headers)
             if is_websocket_request(&req_mut) {
                 log_debug(
-                    Some(&req_mut),
+                    Some(req_mut),
                     "[x402] Phase handler: WebSocket upgrade detected, skipping payment verification",
                 );
                 // Clear content handler if it's x402_ngx_handler to prevent payment verification in CONTENT_PHASE
@@ -257,7 +257,7 @@ pub unsafe extern "C" fn x402_phase_handler(
 
             if is_subrequest {
                 log_debug(
-                    Some(&req_mut),
+                    Some(req_mut),
                     "[x402] Phase handler: Subrequest detected (parent != NULL), skipping payment verification",
                 );
                 return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
@@ -270,7 +270,7 @@ pub unsafe extern "C" fn x402_phase_handler(
             if let Ok(path) = req_mut.path().to_str() {
                 if path.starts_with('@') {
                     log_debug(
-                        Some(&req_mut),
+                        Some(req_mut),
                         "[x402] Phase handler: Internal redirect detected (named location @), skipping payment verification",
                     );
                     return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
