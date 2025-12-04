@@ -229,7 +229,7 @@ pub unsafe extern "C" fn x402_phase_handler(
                 );
                 // Clear content handler if it's x402_ngx_handler to prevent payment verification in CONTENT_PHASE
                 clear_x402_content_handler(
-                    req_mut,
+                    &mut req_mut,
                     "for WebSocket request to prevent payment verification",
                 );
                 return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
@@ -302,7 +302,7 @@ pub unsafe extern "C" fn x402_phase_handler(
                     // duplicate payment verification in CONTENT_PHASE. If content handler is something
                     // else (like proxy_pass), keep it so it runs in CONTENT_PHASE.
                     clear_x402_content_handler(
-                        req_mut,
+                        &mut req_mut,
                         "after payment verification to prevent duplicate verification",
                     );
                     // This will proceed to CONTENT_PHASE where proxy_pass handler will run (if set)
