@@ -533,8 +533,9 @@ pub fn get_module_config(req: &Request) -> Result<X402Config> {
         // but we can at least ensure the pointer is aligned and accessible
         // Use panic protection to catch any invalid memory access
         use crate::ngx_module::panic_handler::catch_panic;
+        // We're already inside an unsafe block, so read_volatile doesn't need its own unsafe
         let _enabled_check = catch_panic(
-            || unsafe { std::ptr::read_volatile(&raw const (*conf_ptr).enabled) },
+            || std::ptr::read_volatile(&raw const (*conf_ptr).enabled),
             "read_volatile enabled field",
         );
         if _enabled_check.is_none() {
