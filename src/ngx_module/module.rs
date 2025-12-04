@@ -195,10 +195,9 @@ unsafe fn get_core_main_conf(
         return None;
     }
 
-    Some(core::mem::transmute::<
-        *mut core::ffi::c_void,
-        *mut ngx_http_core_main_conf_t,
-    >(cmcf_void))
+    // Use cast() instead of transmute for better type safety
+    // cast() is slightly safer than transmute as it's more explicit
+    Some(cmcf_void.cast::<ngx_http_core_main_conf_t>())
 }
 
 /// Postconfiguration hook

@@ -251,43 +251,17 @@ pub unsafe extern "C" fn x402_phase_handler(
                 }
             }
 
-            // Check for internal redirect using raw request pointer
-            // Internal redirects have r->internal = 1 (unsigned flag)
-            // In nginx C code, internal is a field in ngx_http_request_t structure
-            unsafe {
-                let r_raw = r.cast_const();
-                if !r_raw.is_null() {
-                    // Access internal field directly from C structure
-                    // internal is an unsigned integer field in ngx_http_request_t
-                    // We need to access it via pointer dereference
-                    // Note: This is accessing the raw C structure, so we need to be careful
-                    let request_struct = &*r_raw;
-                    // Try to access internal field - it should be a field, not a method
-                    // If this doesn't compile, we may need to use offset_of! macro or other approach
-                    // For now, we'll use a workaround: check if uri.data starts with @ (named locations)
-                    // Named locations (like @fallback) are always internal redirects
-                    let uri = request_struct.uri;
-                    if !uri.data.is_null() && uri.len > 0 {
-                        // Validate URI length before creating slice
-                        // Use min(1) to only check first byte, but validate len is reasonable
-                        let check_len = uri.len.min(1);
-                        if check_len == 0 {
-                            return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
-                        }
-
-                        // Check if URI starts with '@' which indicates named location (always internal)
-                        // Safe: We've validated uri.data is not null and check_len > 0
-                        // We're already inside an unsafe block, so from_raw_parts doesn't need its own unsafe
-                        let uri_slice =
-                            std::slice::from_raw_parts(uri.data.cast_const(), check_len);
-                        if uri_slice[0] == b'@' {
-                            log_debug(
-                                Some(&req_mut),
-                                "[x402] Phase handler: Internal redirect detected (named location @), skipping payment verification",
-                            );
-                            return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
-                        }
-                    }
+            // Check for internal redirect using safe Request API
+            // Internal redirects in nginx are typically named locations (starting with @)
+            // We can detect this by checking the request path using Request::path()
+            // This is safer than accessing raw C structure fields
+            if let Ok(path) = req_mut.path().to_str() {
+                if path.starts_with('@') {
+                    log_debug(
+                        Some(&req_mut),
+                        "[x402] Phase handler: Internal redirect detected (named location @), skipping payment verification",
+                    );
+                    return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
                 }
             }
 

@@ -4,7 +4,7 @@ use crate::ngx_module::error::{ConfigError, Result};
 use rust_x402::facilitator::FacilitatorClient;
 use rust_x402::types::FacilitatorConfig;
 use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 use tokio::time::timeout;
 
@@ -15,7 +15,10 @@ pub static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 ///
 /// Stores facilitator clients keyed by URL to enable reuse across requests.
 /// Each URL gets its own client instance with connection pooling.
-pub static FACILITATOR_CLIENTS: OnceLock<Mutex<HashMap<String, FacilitatorClient>>> =
+///
+/// Uses `Arc<FacilitatorClient>` to avoid unsafe pointer conversions.
+/// This allows safe sharing of clients across requests without unsafe code.
+pub static FACILITATOR_CLIENTS: OnceLock<Mutex<HashMap<String, Arc<FacilitatorClient>>>> =
     OnceLock::new();
 
 /// Default timeout for facilitator requests (10 seconds)
@@ -47,13 +50,15 @@ pub fn get_runtime() -> Result<&'static tokio::runtime::Runtime> {
 /// Uses a global pool to reuse clients across requests, improving performance
 /// by avoiding repeated client creation and connection setup.
 ///
+/// Uses `Arc` to safely share clients without unsafe pointer conversions.
+///
 /// # Arguments
 /// - `url`: Facilitator service URL
 ///
 /// # Returns
-/// - `Ok(&'static FacilitatorClient)` if client is available
+/// - `Ok(Arc<FacilitatorClient>)` if client is available
 /// - `Err` if client cannot be created or retrieved
-pub fn get_facilitator_client(url: &str) -> Result<&'static FacilitatorClient> {
+pub fn get_facilitator_client(url: &str) -> Result<Arc<FacilitatorClient>> {
     let clients = FACILITATOR_CLIENTS.get_or_init(|| Mutex::new(HashMap::new()));
 
     // Check if client already exists
@@ -62,11 +67,9 @@ pub fn get_facilitator_client(url: &str) -> Result<&'static FacilitatorClient> {
             .lock()
             .map_err(|_| ConfigError::from("Lock poisoned"))?;
         if let Some(client) = guard.get(url) {
-            // Return a reference to the existing client
-            // SAFETY: The client is stored in a static OnceLock, so it lives for 'static
-            // We need to use unsafe to convert the reference, but the client is guaranteed
-            // to live as long as the program runs.
-            return unsafe { Ok(&*std::ptr::from_ref::<FacilitatorClient>(client)) };
+            // Return a clone of the Arc - this is safe and doesn't require unsafe
+            // Arc::clone only increments the reference count, it doesn't clone the data
+            return Ok(Arc::clone(client));
         }
     }
 
@@ -75,22 +78,19 @@ pub fn get_facilitator_client(url: &str) -> Result<&'static FacilitatorClient> {
     let client = FacilitatorClient::new(config)
         .map_err(|e| ConfigError::from(format!("Failed to create facilitator client: {e}")))?;
 
+    // Wrap in Arc for safe sharing
+    let client_arc = Arc::new(client);
+
     // Store in pool
     {
         let mut guard = clients
             .lock()
             .map_err(|_| ConfigError::from("Lock poisoned"))?;
-        guard.insert(url.to_string(), client);
+        guard.insert(url.to_string(), Arc::clone(&client_arc));
     }
 
-    // Retrieve the stored client
-    let guard = clients
-        .lock()
-        .map_err(|_| ConfigError::from("Lock poisoned"))?;
-    guard
-        .get(url)
-        .map(|client| unsafe { &*std::ptr::from_ref::<FacilitatorClient>(client) })
-        .ok_or_else(|| ConfigError::from("Failed to retrieve facilitator client"))
+    // Return the Arc - no unsafe needed!
+    Ok(client_arc)
 }
 
 /// Verify payment with facilitator service
