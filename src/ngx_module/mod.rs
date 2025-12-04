@@ -283,7 +283,7 @@ pub unsafe extern "C" fn x402_phase_handler(
             }
 
             // Check if module is enabled for this location
-            let conf = match get_module_config(&*req_mut) {
+            let conf = match get_module_config(&req_mut) {
                 Ok(c) => c,
                 Err(_) => {
                     // Module not configured for this location, decline to let other handlers process
