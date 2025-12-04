@@ -282,6 +282,7 @@ pub unsafe extern "C" fn x402_phase_handler(
             }
 
             // Check if module is enabled for this location
+            #[allow(clippy::question_mark)] // Need to return NGX_DECLINED on error, can't use ?
             let conf = match get_module_config(req_mut) {
                 Ok(c) => c,
                 Err(_) => {
