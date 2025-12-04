@@ -181,23 +181,19 @@ pub fn is_websocket_request(r: &Request) -> bool {
 /// Uses the `method` field (integer ID) for reliable detection, falling back to
 /// `method_name` (string) if the method ID is not recognized.
 ///
-/// # Safety
-/// This function accesses the raw request pointer to check the HTTP method.
-/// The caller must ensure the request pointer is valid.
+/// Uses ngx-rust's safe `Request` API instead of raw pointers.
 ///
 /// # Arguments
-/// - `r`: Raw nginx request pointer
+/// - `r`: Nginx request object
 ///
 /// # Returns
 /// - `Some(&str)` with the HTTP method name (uppercase) if available
-/// - `None` if request pointer is null or method cannot be determined
+/// - `None` if method cannot be determined
 #[must_use]
-pub unsafe fn get_http_method(r: *const ngx::ffi::ngx_http_request_t) -> Option<&'static str> {
-    if r.is_null() {
-        return None;
-    }
-
-    let request_struct = &*r;
+pub fn get_http_method(r: &Request) -> Option<&'static str> {
+    // Use Request's as_ref() to access the underlying structure
+    // Safe: Request is a zero-cost wrapper, as_ref() returns a valid reference
+    let request_struct = r.as_ref();
 
     // Use method ID (integer) for reliable detection
     // Nginx method IDs:
@@ -230,7 +226,9 @@ pub unsafe fn get_http_method(r: *const ngx::ffi::ngx_http_request_t) -> Option<
                 return None;
             }
 
-            let method_slice = std::slice::from_raw_parts(method_name.data, method_name.len);
+            // Safe: We've validated method_name.data is not null and len > 0
+            let method_slice =
+                unsafe { std::slice::from_raw_parts(method_name.data, method_name.len) };
             match method_slice {
                 b"GET" | b"get" => Some("GET"),
                 b"POST" | b"post" => Some("POST"),
@@ -245,6 +243,23 @@ pub unsafe fn get_http_method(r: *const ngx::ffi::ngx_http_request_t) -> Option<
             }
         }
     }
+}
+
+/// Get HTTP method ID from request
+///
+/// Returns the HTTP method as an integer ID (nginx's internal representation).
+///
+/// Uses ngx-rust's safe `Request` API instead of raw pointers.
+///
+/// # Arguments
+/// - `r`: Nginx request object
+///
+/// # Returns
+/// - Method ID as usize (e.g., 0x00000002 for GET)
+#[must_use]
+pub fn get_http_method_id(r: &Request) -> usize {
+    let request_struct = r.as_ref();
+    request_struct.method
 }
 
 /// Build full URL from request
@@ -374,18 +389,16 @@ pub fn infer_mime_type(r: &Request) -> String {
 /// These methods are typically used for infrastructure/checking purposes rather than
 /// actual resource access, so payment verification should be skipped.
 ///
-/// # Safety
-/// This function accesses the raw request pointer to check the HTTP method.
-/// The caller must ensure the request pointer is valid.
+/// Uses ngx-rust's safe `Request` API instead of raw pointers.
 ///
 /// # Arguments
-/// - `r`: Raw nginx request pointer
+/// - `r`: Nginx request object
 ///
 /// # Returns
 /// - `true` if the HTTP method should skip payment verification
 /// - `false` otherwise
 #[must_use]
-pub unsafe fn should_skip_payment_for_method(r: *const ngx::ffi::ngx_http_request_t) -> bool {
+pub fn should_skip_payment_for_method(r: &Request) -> bool {
     matches!(
         get_http_method(r),
         Some("OPTIONS") | Some("HEAD") | Some("TRACE")

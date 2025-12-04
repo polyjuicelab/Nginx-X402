@@ -101,18 +101,21 @@ pub unsafe extern "C" fn x402_metrics_handler(
 /// # Safety
 ///
 /// The caller must ensure that `r` is a valid pointer to a `ngx_http_request_t`.
-unsafe fn clear_x402_content_handler(r: *mut ngx::ffi::ngx_http_request_t, reason: &str) {
-    use ngx::ffi::ngx_http_request_t;
-    let r_raw = r.cast::<ngx_http_request_t>();
-    if r_raw.is_null() {
-        return;
-    }
+/// Clear x402 content handler if it's set
+///
+/// Uses ngx-rust's safe `Request` API instead of raw pointers.
+fn clear_x402_content_handler(req: &mut ngx::http::Request, reason: &str) {
+    use crate::ngx_module::logging::log_debug;
 
     extern "C" {
         fn x402_ngx_handler(r: *mut ngx::ffi::ngx_http_request_t) -> ngx::ffi::ngx_int_t;
     }
+
+    // Use Request's as_mut() to access the underlying structure
+    // Safe: Request is a zero-cost wrapper, as_mut() returns a valid mutable reference
+    let r_raw = req.as_mut();
     let x402_handler_fn: ngx::ffi::ngx_http_handler_pt = Some(x402_ngx_handler);
-    let current_handler = (*r_raw).content_handler;
+    let current_handler = r_raw.content_handler;
 
     // Check if content handler is x402_ngx_handler
     let is_x402_handler = if let (Some(current), Some(x402)) = (current_handler, x402_handler_fn) {
@@ -123,8 +126,7 @@ unsafe fn clear_x402_content_handler(r: *mut ngx::ffi::ngx_http_request_t, reaso
 
     if is_x402_handler {
         // Clear content handler to prevent payment verification in CONTENT_PHASE
-        (*r_raw).content_handler = None;
-        use crate::ngx_module::logging::log_debug;
+        r_raw.content_handler = None;
         log_debug(
             None,
             &format!(
@@ -172,7 +174,8 @@ pub unsafe extern "C" fn x402_phase_handler(
             use crate::ngx_module::logging::log_debug;
             use crate::ngx_module::module::get_module_config;
             use crate::ngx_module::request::{
-                get_http_method, is_websocket_request, should_skip_payment_for_method,
+                get_http_method, get_http_method_id, is_websocket_request,
+                should_skip_payment_for_method,
             };
 
             // Skip payment verification for special request types
@@ -190,9 +193,9 @@ pub unsafe extern "C" fn x402_phase_handler(
 
             // Check if HTTP method should skip payment verification
             // This check happens early to avoid unnecessary processing
-            let request_struct = unsafe { &*r };
-            let method_id = request_struct.method;
-            let detected_method = unsafe { get_http_method(r) };
+            // Use safe Request API instead of raw pointer access
+            let method_id = crate::ngx_module::request::get_http_method_id(&req_mut);
+            let detected_method = crate::ngx_module::request::get_http_method(&req_mut);
 
             log_debug(
                 Some(req_mut),
@@ -202,7 +205,7 @@ pub unsafe extern "C" fn x402_phase_handler(
                 ),
             );
 
-            if unsafe { should_skip_payment_for_method(r) } {
+            if crate::ngx_module::request::should_skip_payment_for_method(&req_mut) {
                 let method = detected_method.unwrap_or("UNKNOWN");
                 log_debug(
                     Some(req_mut),
@@ -214,12 +217,10 @@ pub unsafe extern "C" fn x402_phase_handler(
                 // Clear content handler if it's x402_ngx_handler to prevent payment verification in CONTENT_PHASE
                 // When returning NGX_DECLINED, nginx will still proceed to CONTENT_PHASE, so we need to clear
                 // the content handler to prevent duplicate payment verification
-                unsafe {
-                    clear_x402_content_handler(
-                        r,
-                        &format!("for {} request to prevent payment verification", method),
-                    );
-                }
+                clear_x402_content_handler(
+                    &mut req_mut,
+                    &format!("for {} request to prevent payment verification", method),
+                );
                 return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
             }
 
@@ -230,12 +231,10 @@ pub unsafe extern "C" fn x402_phase_handler(
                     "[x402] Phase handler: WebSocket upgrade detected, skipping payment verification",
                 );
                 // Clear content handler if it's x402_ngx_handler to prevent payment verification in CONTENT_PHASE
-                unsafe {
-                    clear_x402_content_handler(
-                        r,
-                        "for WebSocket request to prevent payment verification",
-                    );
-                }
+                clear_x402_content_handler(
+                    &mut req_mut,
+                    "for WebSocket request to prevent payment verification",
+                );
                 return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
             }
 
@@ -310,12 +309,10 @@ pub unsafe extern "C" fn x402_phase_handler(
                     // If content handler is x402_ngx_handler (no proxy_pass), clear it to prevent
                     // duplicate payment verification in CONTENT_PHASE. If content handler is something
                     // else (like proxy_pass), keep it so it runs in CONTENT_PHASE.
-                    unsafe {
-                        clear_x402_content_handler(
-                            r,
-                            "after payment verification to prevent duplicate verification",
-                        );
-                    }
+                    clear_x402_content_handler(
+                        &mut req_mut,
+                        "after payment verification to prevent duplicate verification",
+                    );
                     // This will proceed to CONTENT_PHASE where proxy_pass handler will run (if set)
                     ngx::ffi::NGX_OK as ngx::ffi::ngx_int_t
                 }
