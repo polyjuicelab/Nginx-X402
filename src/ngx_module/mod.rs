@@ -205,7 +205,7 @@ pub unsafe extern "C" fn x402_phase_handler(
             if crate::ngx_module::request::should_skip_payment_for_method(req_mut) {
                 let method = detected_method.unwrap_or("UNKNOWN");
                 log_debug(
-                    Some(&*req_mut),
+                    Some(req_mut),
                     &format!(
                         "[x402] Phase handler: {} request detected (method_id=0x{:08x}), skipping payment verification",
                         method, method_id
@@ -215,7 +215,7 @@ pub unsafe extern "C" fn x402_phase_handler(
                 // When returning NGX_DECLINED, nginx will still proceed to CONTENT_PHASE, so we need to clear
                 // the content handler to prevent duplicate payment verification
                 clear_x402_content_handler(
-                    &mut req_mut,
+                    req_mut,
                     &format!("for {} request to prevent payment verification", method),
                 );
                 return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
