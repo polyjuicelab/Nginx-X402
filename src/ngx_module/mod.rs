@@ -228,6 +228,8 @@ pub unsafe extern "C" fn x402_phase_handler(
                     "[x402] Phase handler: WebSocket upgrade detected, skipping payment verification",
                 );
                 // Clear content handler if it's x402_ngx_handler to prevent payment verification in CONTENT_PHASE
+                #[allow(clippy::needless_borrow)]
+                // req_mut is Request, not &mut Request, so &mut is needed
                 clear_x402_content_handler(
                     &mut req_mut,
                     "for WebSocket request to prevent payment verification",
@@ -301,6 +303,8 @@ pub unsafe extern "C" fn x402_phase_handler(
                     // If content handler is x402_ngx_handler (no proxy_pass), clear it to prevent
                     // duplicate payment verification in CONTENT_PHASE. If content handler is something
                     // else (like proxy_pass), keep it so it runs in CONTENT_PHASE.
+                    #[allow(clippy::needless_borrow)]
+                    // req_mut is Request, not &mut Request, so &mut is needed
                     clear_x402_content_handler(
                         &mut req_mut,
                         "after payment verification to prevent duplicate verification",
