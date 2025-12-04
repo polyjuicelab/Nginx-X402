@@ -277,8 +277,9 @@ pub unsafe extern "C" fn x402_phase_handler(
 
                         // Check if URI starts with '@' which indicates named location (always internal)
                         // Safe: We've validated uri.data is not null and check_len > 0
+                        // We're already inside an unsafe block, so from_raw_parts doesn't need its own unsafe
                         let uri_slice =
-                            unsafe { std::slice::from_raw_parts(uri.data.cast_const(), check_len) };
+                            std::slice::from_raw_parts(uri.data.cast_const(), check_len);
                         if uri_slice[0] == b'@' {
                             log_debug(
                                 Some(&req_mut),
