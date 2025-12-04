@@ -237,18 +237,30 @@ pub unsafe extern "C" fn x402_phase_handler(
 
             // Check for subrequest using raw request pointer
             // Subrequests have r->parent != NULL
-            unsafe {
-                let r_raw = r.cast_const();
-                if !r_raw.is_null() {
-                    let parent = (*r_raw).parent;
-                    if !parent.is_null() {
-                        log_debug(
-                        Some(&req_mut),
-                        "[x402] Phase handler: Subrequest detected (parent != NULL), skipping payment verification",
-                    );
-                        return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
+            // Use panic protection to catch any invalid memory access
+            use crate::ngx_module::panic_handler::catch_panic;
+            let is_subrequest = catch_panic(
+                || {
+                    unsafe {
+                        let r_raw = r.cast_const();
+                        if r_raw.is_null() {
+                            return false;
+                        }
+                        // Access parent field - this may cause segfault if memory is invalid
+                        let parent = (*r_raw).parent;
+                        !parent.is_null()
                     }
-                }
+                },
+                "check subrequest (parent field)",
+            )
+            .unwrap_or(false);
+
+            if is_subrequest {
+                log_debug(
+                    Some(&req_mut),
+                    "[x402] Phase handler: Subrequest detected (parent != NULL), skipping payment verification",
+                );
+                return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
             }
 
             // Check for internal redirect using safe Request API
