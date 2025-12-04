@@ -214,10 +214,8 @@ pub unsafe extern "C" fn x402_phase_handler(
                 // Clear content handler if it's x402_ngx_handler to prevent payment verification in CONTENT_PHASE
                 // When returning NGX_DECLINED, nginx will still proceed to CONTENT_PHASE, so we need to clear
                 // the content handler to prevent duplicate payment verification
-                #[allow(clippy::needless_borrow)]
-                // req_mut is Request, not &mut Request, so &mut is needed
                 clear_x402_content_handler(
-                    &mut req_mut,
+                    req_mut,
                     &format!("for {} request to prevent payment verification", method),
                 );
                 return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
@@ -231,7 +229,7 @@ pub unsafe extern "C" fn x402_phase_handler(
                 );
                 // Clear content handler if it's x402_ngx_handler to prevent payment verification in CONTENT_PHASE
                 clear_x402_content_handler(
-                    &mut req_mut,
+                    req_mut,
                     "for WebSocket request to prevent payment verification",
                 );
                 return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
