@@ -170,7 +170,7 @@ pub unsafe extern "C" fn x402_phase_handler(
             // Create Request object safely using ngx-rust's API
             // Request is a zero-cost wrapper (repr(transparent)), so we can safely create it from the raw pointer
             // Request implements DerefMut, so we can pass req_mut directly to functions expecting &mut Request
-            let mut req_mut = ngx::http::Request::from_ngx_http_request(r);
+            let req_mut = ngx::http::Request::from_ngx_http_request(r);
 
             use crate::ngx_module::logging::log_debug;
             use crate::ngx_module::module::get_module_config;
