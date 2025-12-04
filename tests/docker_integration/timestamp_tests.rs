@@ -67,31 +67,6 @@ mod tests {
     ///
     /// * `lines` - Number of lines to retrieve
     ///
-    /// # Returns
-    ///
-    /// Returns `Some(logs)` if logs were retrieved successfully, `None` otherwise.
-    fn get_recent_docker_logs(lines: usize) -> Option<String> {
-        // Docker logs command outputs all logs (both stdout and stderr) to stdout by default
-        let output = Command::new("docker")
-            .args(["logs", "--tail", &lines.to_string(), CONTAINER_NAME])
-            .output()
-            .ok()?;
-
-        // Docker logs outputs everything to stdout (including stderr from container)
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-        // Combine both outputs (docker logs command output goes to stdout, errors to stderr)
-        if stdout.is_empty() && stderr.is_empty() {
-            None
-        } else if stdout.is_empty() {
-            Some(stderr)
-        } else if stderr.is_empty() {
-            Some(stdout)
-        } else {
-            Some(format!("{}\n{}", stdout, stderr))
-        }
-    }
 
     #[test]
     #[ignore = "requires Docker"]

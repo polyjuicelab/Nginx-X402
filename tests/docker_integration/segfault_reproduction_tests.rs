@@ -11,8 +11,6 @@
 #[cfg(feature = "integration-test")]
 mod tests {
     use crate::docker_integration::common::*;
-    use std::process::Command;
-    use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
 
