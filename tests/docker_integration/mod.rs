@@ -57,6 +57,9 @@ pub mod config_tests;
 pub mod header_passthrough_tests;
 
 #[cfg(feature = "integration-test")]
+pub mod segfault_reproduction_tests;
+
+#[cfg(feature = "integration-test")]
 pub mod timestamp_tests;
 
 #[cfg(feature = "integration-test")]

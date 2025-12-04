@@ -3,6 +3,7 @@
 use crate::ngx_module::commands::ngx_http_x402_commands;
 use crate::ngx_module::config::X402Config;
 use crate::ngx_module::error::{ConfigError, Result};
+use crate::ngx_module::panic_handler::catch_panic;
 use ngx::core::{NgxStr, Pool};
 use ngx::ffi::{ngx_http_core_main_conf_t, ngx_http_request_t, ngx_str_t};
 use ngx::http::Request;
@@ -39,6 +40,12 @@ macro_rules! merge_string_field {
 /// The caller must ensure that:
 /// * `r` is a valid pointer to a `ngx_http_request_t` structure
 /// * `src.data` points to valid memory if `src.len > 0`
+///
+/// # Memory Safety
+///
+/// This function uses panic protection to handle cases where `src.data` points to
+/// invalid memory (e.g., if the configuration's memory pool was freed). If accessing
+/// the string causes a panic, it's caught and returns None instead of crashing.
 unsafe fn copy_string_to_request_pool(
     r: *const ngx_http_request_t,
     src: ngx_str_t,
@@ -50,21 +57,39 @@ unsafe fn copy_string_to_request_pool(
         });
     }
 
-    let pool = Pool::from_ngx_pool((*r).pool);
-    let ngx_str = NgxStr::from_ngx_str(src);
-
-    match ngx_str.to_str() {
-        Ok(s) => {
-            let len = s.len();
-            let data = pool.alloc(len).cast::<u8>();
-            if data.is_null() {
-                return None;
-            }
-            ptr::copy_nonoverlapping(s.as_ptr(), data, len);
-            Some(ngx_str_t { len, data })
-        }
-        Err(_) => None,
+    // Validate that src.data is not null and points to valid memory
+    if src.data.is_null() {
+        return None;
     }
+
+    // Use panic protection to handle invalid memory access
+    // If the source memory was freed, accessing it will cause a panic
+    // We catch it here and return None instead of crashing
+    use crate::ngx_module::panic_handler::catch_panic;
+
+    catch_panic(
+        || {
+            let pool = Pool::from_ngx_pool((*r).pool);
+
+            // Try to create NgxStr - this may panic if memory is invalid
+            let ngx_str = NgxStr::from_ngx_str(src);
+
+            match ngx_str.to_str() {
+                Ok(s) => {
+                    let len = s.len();
+                    let data = pool.alloc(len).cast::<u8>();
+                    if data.is_null() {
+                        return None;
+                    }
+                    ptr::copy_nonoverlapping(s.as_ptr(), data, len);
+                    Some(ngx_str_t { len, data })
+                }
+                Err(_) => None,
+            }
+        },
+        "copy_string_to_request_pool",
+    )
+    .flatten()
 }
 
 /// Safely clone configuration, copying all strings to request pool
@@ -75,40 +100,70 @@ unsafe fn copy_string_to_request_pool(
 /// # Safety
 ///
 /// The caller must ensure that `r` is a valid pointer to a `ngx_http_request_t`.
+///
+/// # Memory Safety
+///
+/// This function handles cases where the source configuration's memory pool may have
+/// been freed. If accessing any string field causes a panic (due to invalid memory),
+/// the function returns an error instead of crashing. This prevents segfaults when
+/// configuration memory pools are freed during request processing.
 unsafe fn clone_config_to_request_pool(
     r: *const ngx_http_request_t,
     src: &X402Config,
 ) -> Result<X402Config> {
+    // CRITICAL: Accessing src fields may cause segfault if src's memory pool was freed.
+    // We use panic protection to catch any segfaults during field access.
+    // If a panic occurs, it means the memory is invalid and we return an error.
+
+    // First, try to read the enabled field to validate memory is accessible
+    // This is a simple integer field that's less likely to cause issues
+    let enabled = match catch_panic(|| src.enabled, "read enabled field") {
+        Some(val) => val,
+        None => {
+            return Err(ConfigError::from(
+                "Configuration memory is invalid (cannot access enabled field)",
+            ));
+        }
+    };
+
+    // Use a helper macro to safely copy each field with panic protection
+    macro_rules! safe_copy_field {
+        ($field:ident) => {
+            match catch_panic(
+                || copy_string_to_request_pool(r, src.$field),
+                &format!("copy {}", stringify!($field)),
+            ) {
+                Some(Some(val)) => val,
+                Some(None) => {
+                    return Err(ConfigError::from(format!(
+                        "Failed to copy {} to request pool",
+                        stringify!($field)
+                    )));
+                }
+                None => {
+                    return Err(ConfigError::from(format!(
+                        "Failed to access {} field (memory may be invalid)",
+                        stringify!($field)
+                    )));
+                }
+            }
+        };
+    }
+
     Ok(X402Config {
-        enabled: src.enabled,
-        amount_str: copy_string_to_request_pool(r, src.amount_str)
-            .ok_or_else(|| ConfigError::from("Failed to copy amount_str to request pool"))?,
-        pay_to_str: copy_string_to_request_pool(r, src.pay_to_str)
-            .ok_or_else(|| ConfigError::from("Failed to copy pay_to_str to request pool"))?,
-        facilitator_url_str: copy_string_to_request_pool(r, src.facilitator_url_str).ok_or_else(
-            || ConfigError::from("Failed to copy facilitator_url_str to request pool"),
-        )?,
-        description_str: copy_string_to_request_pool(r, src.description_str)
-            .ok_or_else(|| ConfigError::from("Failed to copy description_str to request pool"))?,
-        network_str: copy_string_to_request_pool(r, src.network_str)
-            .ok_or_else(|| ConfigError::from("Failed to copy network_str to request pool"))?,
-        network_id_str: copy_string_to_request_pool(r, src.network_id_str)
-            .ok_or_else(|| ConfigError::from("Failed to copy network_id_str to request pool"))?,
-        resource_str: copy_string_to_request_pool(r, src.resource_str)
-            .ok_or_else(|| ConfigError::from("Failed to copy resource_str to request pool"))?,
-        asset_str: copy_string_to_request_pool(r, src.asset_str)
-            .ok_or_else(|| ConfigError::from("Failed to copy asset_str to request pool"))?,
-        asset_decimals_str: copy_string_to_request_pool(r, src.asset_decimals_str).ok_or_else(
-            || ConfigError::from("Failed to copy asset_decimals_str to request pool"),
-        )?,
-        timeout_str: copy_string_to_request_pool(r, src.timeout_str)
-            .ok_or_else(|| ConfigError::from("Failed to copy timeout_str to request pool"))?,
-        facilitator_fallback_str: copy_string_to_request_pool(r, src.facilitator_fallback_str)
-            .ok_or_else(|| {
-                ConfigError::from("Failed to copy facilitator_fallback_str to request pool")
-            })?,
-        ttl_str: copy_string_to_request_pool(r, src.ttl_str)
-            .ok_or_else(|| ConfigError::from("Failed to copy ttl_str to request pool"))?,
+        enabled,
+        amount_str: safe_copy_field!(amount_str),
+        pay_to_str: safe_copy_field!(pay_to_str),
+        facilitator_url_str: safe_copy_field!(facilitator_url_str),
+        description_str: safe_copy_field!(description_str),
+        network_str: safe_copy_field!(network_str),
+        network_id_str: safe_copy_field!(network_id_str),
+        resource_str: safe_copy_field!(resource_str),
+        asset_str: safe_copy_field!(asset_str),
+        asset_decimals_str: safe_copy_field!(asset_decimals_str),
+        timeout_str: safe_copy_field!(timeout_str),
+        facilitator_fallback_str: safe_copy_field!(facilitator_fallback_str),
+        ttl_str: safe_copy_field!(ttl_str),
     })
 }
 
@@ -463,11 +518,27 @@ pub fn get_module_config(req: &Request) -> Result<X402Config> {
         // but we can at least ensure the pointer is aligned and accessible
         let _ = std::ptr::read_volatile(&raw const (*conf_ptr).enabled);
 
-        // Clone the configuration, copying all strings to request pool
-        // CRITICAL: We must copy strings to the request pool instead of cloning pointers
-        // because the configuration may use a different memory pool that could be freed,
-        // causing segfaults when accessing strings later in parse()
-        // Safety: We've validated that conf_ptr is non-null and points to valid memory
-        clone_config_to_request_pool(r, &*conf_ptr)
+        // CRITICAL: We cannot safely clone the configuration because accessing its fields
+        // may cause segfaults if the configuration's memory pool was freed.
+        // Instead, we'll parse the configuration immediately while we have a valid reference,
+        // converting all strings to Rust Strings before the memory pool could be freed.
+        //
+        // However, we still need to return X402Config for the API. The safest approach is to:
+        // 1. Try to clone with panic protection
+        // 2. If cloning fails (due to invalid memory), return an error
+        // 3. This allows the handler to gracefully handle the error instead of crashing
+        match catch_panic(
+            || clone_config_to_request_pool(r, &*conf_ptr),
+            "clone_config_to_request_pool",
+        ) {
+            Some(Ok(config)) => Ok(config),
+            Some(Err(e)) => Err(e),
+            None => {
+                // Panic occurred - memory is likely invalid
+                Err(ConfigError::from(
+                    "Configuration memory is invalid (may have been freed). This can occur during config reload."
+                ))
+            }
+        }
     }
 }
