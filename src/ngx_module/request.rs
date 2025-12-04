@@ -249,10 +249,7 @@ pub fn get_http_method(r: &Request) -> Option<&'static str> {
             )
             .flatten();
 
-            let method_slice = match method_slice {
-                Some(slice) => slice,
-                None => return None,
-            };
+            let method_slice = method_slice?;
             match method_slice {
                 b"GET" | b"get" => Some("GET"),
                 b"POST" | b"post" => Some("POST"),
