@@ -173,10 +173,7 @@ pub unsafe extern "C" fn x402_phase_handler(
 
             use crate::ngx_module::logging::log_debug;
             use crate::ngx_module::module::get_module_config;
-            use crate::ngx_module::request::{
-                get_http_method, get_http_method_id, is_websocket_request,
-                should_skip_payment_for_method,
-            };
+            use crate::ngx_module::request::is_websocket_request;
 
             // Skip payment verification for special request types
             // These requests should bypass payment verification:
