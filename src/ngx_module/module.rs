@@ -4,8 +4,8 @@ use crate::ngx_module::commands::ngx_http_x402_commands;
 use crate::ngx_module::config::X402Config;
 use crate::ngx_module::error::{ConfigError, Result};
 use crate::ngx_module::panic_handler::catch_panic;
-use ngx::core::{NgxStr, Pool};
-use ngx::ffi::{ngx_http_core_main_conf_t, ngx_http_request_t, ngx_str_t};
+use ngx::core::NgxStr;
+use ngx::ffi::{ngx_http_core_main_conf_t, ngx_str_t};
 use ngx::http::Request;
 use std::ffi::c_char;
 use std::ptr;
@@ -35,21 +35,14 @@ macro_rules! merge_string_field {
 /// This function safely copies a string field from configuration to the request's
 /// memory pool, ensuring the string lives as long as the request.
 ///
-/// # Safety
-///
-/// The caller must ensure that:
-/// * `r` is a valid pointer to a `ngx_http_request_t` structure
-/// * `src.data` points to valid memory if `src.len > 0`
+/// Uses ngx-rust's safe `Request::pool()` method instead of accessing raw pointers.
 ///
 /// # Memory Safety
 ///
 /// This function uses panic protection to handle cases where `src.data` points to
 /// invalid memory (e.g., if the configuration's memory pool was freed). If accessing
 /// the string causes a panic, it's caught and returns None instead of crashing.
-unsafe fn copy_string_to_request_pool(
-    r: *const ngx_http_request_t,
-    src: ngx_str_t,
-) -> Option<ngx_str_t> {
+fn copy_string_to_request_pool(req: &Request, src: ngx_str_t) -> Option<ngx_str_t> {
     if src.len == 0 {
         return Some(ngx_str_t {
             len: 0,
@@ -69,10 +62,12 @@ unsafe fn copy_string_to_request_pool(
 
     catch_panic(
         || {
-            let pool = Pool::from_ngx_pool((*r).pool);
+            // Use ngx-rust's safe pool() method instead of accessing raw pointer
+            let pool = req.pool();
 
             // Try to create NgxStr - this may panic if memory is invalid
-            let ngx_str = NgxStr::from_ngx_str(src);
+            // Safe: NgxStr::from_ngx_str validates the string data
+            let ngx_str = unsafe { NgxStr::from_ngx_str(src) };
 
             match ngx_str.to_str() {
                 Ok(s) => {
@@ -81,7 +76,10 @@ unsafe fn copy_string_to_request_pool(
                     if data.is_null() {
                         return None;
                     }
-                    ptr::copy_nonoverlapping(s.as_ptr(), data, len);
+                    // Safe: We've validated data is not null and len is correct
+                    unsafe {
+                        ptr::copy_nonoverlapping(s.as_ptr(), data, len);
+                    }
                     Some(ngx_str_t { len, data })
                 }
                 Err(_) => None,
@@ -97,9 +95,7 @@ unsafe fn copy_string_to_request_pool(
 /// This function creates a new configuration with all string fields copied
 /// to the request's memory pool, preventing segfaults from dangling pointers.
 ///
-/// # Safety
-///
-/// The caller must ensure that `r` is a valid pointer to a `ngx_http_request_t`.
+/// Uses ngx-rust's safe `Request` API instead of raw pointers.
 ///
 /// # Memory Safety
 ///
@@ -107,10 +103,7 @@ unsafe fn copy_string_to_request_pool(
 /// been freed. If accessing any string field causes a panic (due to invalid memory),
 /// the function returns an error instead of crashing. This prevents segfaults when
 /// configuration memory pools are freed during request processing.
-unsafe fn clone_config_to_request_pool(
-    r: *const ngx_http_request_t,
-    src: &X402Config,
-) -> Result<X402Config> {
+fn clone_config_to_request_pool(req: &Request, src: &X402Config) -> Result<X402Config> {
     // CRITICAL: Accessing src fields may cause segfault if src's memory pool was freed.
     // We use panic protection to catch any segfaults during field access.
     // If a panic occurs, it means the memory is invalid and we return an error.
@@ -130,7 +123,7 @@ unsafe fn clone_config_to_request_pool(
     macro_rules! safe_copy_field {
         ($field:ident) => {
             match catch_panic(
-                || copy_string_to_request_pool(r, src.$field),
+                || copy_string_to_request_pool(req, src.$field),
                 &format!("copy {}", stringify!($field)),
             ) {
                 Some(Some(val)) => val,
@@ -527,8 +520,10 @@ pub fn get_module_config(req: &Request) -> Result<X402Config> {
         // 1. Try to clone with panic protection
         // 2. If cloning fails (due to invalid memory), return an error
         // 3. This allows the handler to gracefully handle the error instead of crashing
+        //
+        // Use ngx-rust's safe Request API instead of raw pointer
         match catch_panic(
-            || clone_config_to_request_pool(r, &*conf_ptr),
+            || clone_config_to_request_pool(req, &*conf_ptr),
             "clone_config_to_request_pool",
         ) {
             Some(Ok(config)) => Ok(config),
