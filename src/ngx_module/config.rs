@@ -8,6 +8,15 @@ use std::str::FromStr;
 use std::time::Duration;
 
 /// Module configuration (raw strings from Nginx config)
+///
+/// # Memory Layout
+///
+/// This struct must use C-compatible memory layout (`#[repr(C)]`) because:
+/// 1. It's allocated by nginx using `ngx_pcalloc` (C memory allocator)
+/// 2. It's accessed via raw pointers from nginx's configuration system
+/// 3. Field order and padding must match what nginx expects
+/// 4. Adding new fields (like `ttl_str`) must not break existing memory layout
+#[repr(C)]
 #[derive(Clone, Default)]
 pub struct X402Config {
     pub enabled: ngx::ffi::ngx_flag_t,
