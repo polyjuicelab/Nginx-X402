@@ -191,21 +191,21 @@ pub unsafe extern "C" fn x402_phase_handler(
             // Check if HTTP method should skip payment verification
             // This check happens early to avoid unnecessary processing
             // Use safe Request API instead of raw pointer access
-            let method_id = crate::ngx_module::request::get_http_method_id(&req_mut);
-            let detected_method = crate::ngx_module::request::get_http_method(&req_mut);
+            let method_id = crate::ngx_module::request::get_http_method_id(&*req_mut);
+            let detected_method = crate::ngx_module::request::get_http_method(&*req_mut);
 
             log_debug(
-                Some(req_mut),
+                Some(&mut req_mut),
                 &format!(
                     "[x402] Phase handler: method_id=0x{:08x}, detected_method={:?}",
                     method_id, detected_method
                 ),
             );
 
-            if crate::ngx_module::request::should_skip_payment_for_method(&req_mut) {
+            if crate::ngx_module::request::should_skip_payment_for_method(&*req_mut) {
                 let method = detected_method.unwrap_or("UNKNOWN");
                 log_debug(
-                    Some(req_mut),
+                    Some(&mut req_mut),
                     &format!(
                         "[x402] Phase handler: {} request detected (method_id=0x{:08x}), skipping payment verification",
                         method, method_id
