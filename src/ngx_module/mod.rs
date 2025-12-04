@@ -195,7 +195,7 @@ pub unsafe extern "C" fn x402_phase_handler(
             let detected_method = crate::ngx_module::request::get_http_method(req_mut);
 
             log_debug(
-                Some(&req_mut),
+                Some(req_mut),
                 &format!(
                     "[x402] Phase handler: method_id=0x{:08x}, detected_method={:?}",
                     method_id, detected_method
@@ -229,7 +229,7 @@ pub unsafe extern "C" fn x402_phase_handler(
                 );
                 // Clear content handler if it's x402_ngx_handler to prevent payment verification in CONTENT_PHASE
                 clear_x402_content_handler(
-                    &mut req_mut,
+                    req_mut,
                     "for WebSocket request to prevent payment verification",
                 );
                 return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
@@ -302,7 +302,7 @@ pub unsafe extern "C" fn x402_phase_handler(
                     // duplicate payment verification in CONTENT_PHASE. If content handler is something
                     // else (like proxy_pass), keep it so it runs in CONTENT_PHASE.
                     clear_x402_content_handler(
-                        &mut req_mut,
+                        req_mut,
                         "after payment verification to prevent duplicate verification",
                     );
                     // This will proceed to CONTENT_PHASE where proxy_pass handler will run (if set)
