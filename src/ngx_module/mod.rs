@@ -191,8 +191,8 @@ pub unsafe extern "C" fn x402_phase_handler(
             // Check if HTTP method should skip payment verification
             // This check happens early to avoid unnecessary processing
             // Use safe Request API instead of raw pointer access
-            let method_id = crate::ngx_module::request::get_http_method_id(&req_mut);
-            let detected_method = crate::ngx_module::request::get_http_method(&req_mut);
+            let method_id = crate::ngx_module::request::get_http_method_id(req_mut);
+            let detected_method = crate::ngx_module::request::get_http_method(req_mut);
 
             log_debug(
                 Some(&req_mut),
@@ -202,7 +202,7 @@ pub unsafe extern "C" fn x402_phase_handler(
                 ),
             );
 
-            if crate::ngx_module::request::should_skip_payment_for_method(&req_mut) {
+            if crate::ngx_module::request::should_skip_payment_for_method(req_mut) {
                 let method = detected_method.unwrap_or("UNKNOWN");
                 log_debug(
                     Some(&*req_mut),
@@ -222,7 +222,7 @@ pub unsafe extern "C" fn x402_phase_handler(
             }
 
             // Check for WebSocket upgrade (can be detected via headers)
-            if is_websocket_request(&req_mut) {
+            if is_websocket_request(req_mut) {
                 log_debug(
                     Some(&req_mut),
                     "[x402] Phase handler: WebSocket upgrade detected, skipping payment verification",
@@ -283,7 +283,7 @@ pub unsafe extern "C" fn x402_phase_handler(
             }
 
             // Check if module is enabled for this location
-            let conf = match get_module_config(&req_mut) {
+            let conf = match get_module_config(req_mut) {
                 Ok(c) => c,
                 Err(_) => {
                     // Module not configured for this location, decline to let other handlers process
