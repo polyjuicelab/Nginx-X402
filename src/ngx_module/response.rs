@@ -100,13 +100,53 @@ pub fn send_response_body(r: &mut Request, body: &[u8]) -> Result<()> {
         return Err(ConfigError::from("Failed to allocate buffer"));
     }
 
-    // Copy body data to buffer
+    // Copy body data to buffer with bounds checking
     unsafe {
-        let buf_slice = core::slice::from_raw_parts_mut((*buf).pos, body_len);
+        // Validate buffer pointer and fields
+        let buf_ptr = &mut *buf;
+
+        // Verify pos is not null
+        if buf_ptr.pos.is_null() {
+            return Err(ConfigError::from("Buffer pos pointer is null"));
+        }
+
+        // Verify buffer capacity: end - pos should be >= body_len
+        // ngx_create_temp_buf allocates exactly body_len bytes, so end - pos == body_len
+        // But we check anyway to be safe
+        let pos_ptr = buf_ptr.pos as usize;
+        let end_ptr = buf_ptr.end as usize;
+
+        if end_ptr < pos_ptr {
+            return Err(ConfigError::from("Buffer end is before buffer pos"));
+        }
+
+        let buf_capacity = end_ptr - pos_ptr;
+        if buf_capacity < body_len {
+            return Err(ConfigError::from(format!(
+                "Buffer capacity ({}) is less than body length ({})",
+                buf_capacity, body_len
+            )));
+        }
+
+        // Use checked_add to prevent integer overflow
+        let new_last_ptr = pos_ptr
+            .checked_add(body_len)
+            .ok_or_else(|| ConfigError::from("Buffer pointer addition overflow"))?;
+
+        // Verify new_last doesn't exceed buffer end
+        if new_last_ptr > end_ptr {
+            return Err(ConfigError::from("Buffer pointer would exceed buffer end"));
+        }
+
+        // Safe to create slice: we've validated pos is not null and body_len is within bounds
+        let buf_slice = core::slice::from_raw_parts_mut(buf_ptr.pos, body_len);
         buf_slice.copy_from_slice(body);
-        (*buf).last = (*buf).pos.add(body_len);
-        (*buf).set_last_buf(1);
-        (*buf).set_last_in_chain(1);
+
+        // Safe to set last: we've validated the addition doesn't overflow
+        // last is a *mut u8, so we can directly assign the pointer
+        buf_ptr.last = new_last_ptr as *mut u8;
+        buf_ptr.set_last_buf(1);
+        buf_ptr.set_last_in_chain(1);
     }
 
     // Allocate chain link

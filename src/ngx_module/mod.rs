@@ -268,9 +268,17 @@ pub unsafe extern "C" fn x402_phase_handler(
                     // Named locations (like @fallback) are always internal redirects
                     let uri = request_struct.uri;
                     if !uri.data.is_null() && uri.len > 0 {
+                        // Validate URI length before creating slice
+                        // Use min(1) to only check first byte, but validate len is reasonable
+                        let check_len = uri.len.min(1);
+                        if check_len == 0 {
+                            return ngx::ffi::NGX_DECLINED as ngx::ffi::ngx_int_t;
+                        }
+
                         // Check if URI starts with '@' which indicates named location (always internal)
+                        // Safe: We've validated uri.data is not null and check_len > 0
                         let uri_slice =
-                            std::slice::from_raw_parts(uri.data.cast_const(), uri.len.min(1));
+                            unsafe { std::slice::from_raw_parts(uri.data.cast_const(), check_len) };
                         if uri_slice[0] == b'@' {
                             log_debug(
                                 Some(&req_mut),
