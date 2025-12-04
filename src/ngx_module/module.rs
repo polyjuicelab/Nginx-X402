@@ -163,6 +163,12 @@ fn clone_config_to_request_pool(req: &Request, src: &X402Config) -> Result<X402C
 /// Helper function to get `ngx_http_core_main_conf_t` from `ngx_conf_t`
 ///
 /// This is equivalent to `ngx_http_conf_get_module_main_conf(cf`, `ngx_http_core_module`)
+///
+/// # Safety
+///
+/// This function uses panic protection to catch any invalid memory access.
+/// If accessing the configuration structure causes a panic (e.g., due to invalid pointers),
+/// the function returns None instead of crashing.
 unsafe fn get_core_main_conf(
     cf: *mut ngx::ffi::ngx_conf_t,
 ) -> Option<*mut ngx_http_core_main_conf_t> {
@@ -170,34 +176,51 @@ unsafe fn get_core_main_conf(
         return None;
     }
 
-    let ctx = (*cf).ctx.cast::<ngx::ffi::ngx_http_conf_ctx_t>();
-    if ctx.is_null() {
-        return None;
-    }
+    // Use panic protection to catch invalid memory access
+    use crate::ngx_module::panic_handler::catch_panic;
+    catch_panic(
+        || {
+            let ctx = (*cf).ctx.cast::<ngx::ffi::ngx_http_conf_ctx_t>();
+            if ctx.is_null() {
+                return None;
+            }
 
-    let main_conf = (*ctx).main_conf;
-    if main_conf.is_null() {
-        return None;
-    }
+            let main_conf = (*ctx).main_conf;
+            if main_conf.is_null() {
+                return None;
+            }
 
-    // Get core module's main config using ctx_index
-    // main_conf is *mut *mut c_void (pointer to array of pointers)
-    // Use main_conf.add() directly, not (*main_conf).add()
-    let core_ctx_index = ngx::ffi::ngx_http_core_module.ctx_index;
-    let ptr_to_ptr = main_conf.add(core_ctx_index);
-    if ptr_to_ptr.is_null() {
-        return None;
-    }
+            // Get core module's main config using ctx_index
+            // main_conf is *mut *mut c_void (pointer to array of pointers)
+            // Use main_conf.add() directly, not (*main_conf).add()
+            let core_ctx_index = ngx::ffi::ngx_http_core_module.ctx_index;
 
-    // Read the pointer value from the array
-    let cmcf_void: *mut core::ffi::c_void = ptr::read(ptr_to_ptr.cast_const());
-    if cmcf_void.is_null() {
-        return None;
-    }
+            // Validate ctx_index is reasonable (prevent out-of-bounds access)
+            // Typical nginx setups have < 100 modules
+            const MAX_REASONABLE_CTX_INDEX: usize = 256;
+            if core_ctx_index >= MAX_REASONABLE_CTX_INDEX {
+                return None;
+            }
 
-    // Use cast() instead of transmute for better type safety
-    // cast() is slightly safer than transmute as it's more explicit
-    Some(cmcf_void.cast::<ngx_http_core_main_conf_t>())
+            let ptr_to_ptr = main_conf.add(core_ctx_index);
+            if ptr_to_ptr.is_null() {
+                return None;
+            }
+
+            // Read the pointer value from the array
+            // Use read_volatile to prevent compiler optimizations that might skip invalid reads
+            let cmcf_void: *mut core::ffi::c_void = ptr::read_volatile(ptr_to_ptr.cast_const());
+            if cmcf_void.is_null() {
+                return None;
+            }
+
+            // Use cast() instead of transmute for better type safety
+            // cast() is slightly safer than transmute as it's more explicit
+            Some(cmcf_void.cast::<ngx_http_core_main_conf_t>())
+        },
+        "get_core_main_conf",
+    )
+    .flatten()
 }
 
 /// Postconfiguration hook

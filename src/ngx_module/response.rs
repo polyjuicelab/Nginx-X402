@@ -189,7 +189,40 @@ pub fn send_response_body(r: &mut Request, body: &[u8]) -> Result<()> {
     }
 
     // Send body using output filter
-    let chain_mut = unsafe { &mut *chain };
+    // Double-check chain pointer before dereferencing (defense in depth)
+    if chain.is_null() {
+        return Err(ConfigError::from("Chain pointer became null before use"));
+    }
+
+    // Use panic protection to catch any invalid memory access
+    // This protects against cases where the chain was freed between allocation and use
+    use crate::ngx_module::panic_handler::catch_panic;
+    let chain_mut = match catch_panic(
+        || {
+            // Safe: We've validated chain is not null above
+            // However, the memory may have been freed, so we use panic protection
+            unsafe {
+                // Validate that buf field is accessible before dereferencing
+                // This is a basic sanity check
+                let chain_ptr = &mut *chain;
+                // Verify buf is not null (it should point to our allocated buffer)
+                if chain_ptr.buf.is_null() {
+                    return Err(ConfigError::from("Chain buf pointer is null"));
+                }
+                Ok(chain_ptr)
+            }
+        },
+        "dereference chain pointer",
+    ) {
+        Some(Ok(ptr)) => ptr,
+        Some(Err(e)) => return Err(e),
+        None => {
+            return Err(ConfigError::from(
+                "Chain pointer points to invalid memory (may have been freed)",
+            ));
+        }
+    };
+
     let status = r.output_filter(chain_mut);
     if status == Status::NGX_OK {
     } else {

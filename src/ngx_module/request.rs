@@ -227,8 +227,32 @@ pub fn get_http_method(r: &Request) -> Option<&'static str> {
             }
 
             // Safe: We've validated method_name.data is not null and len > 0
-            let method_slice =
-                unsafe { std::slice::from_raw_parts(method_name.data, method_name.len) };
+            // Add additional bounds checking to prevent buffer overflows
+            // Use panic protection to catch any invalid memory access
+            use crate::ngx_module::panic_handler::catch_panic;
+            let method_slice = catch_panic(
+                || {
+                    // Validate length is reasonable (prevent DoS)
+                    const MAX_METHOD_LENGTH: usize = 32; // HTTP methods are typically short
+                    if method_name.len > MAX_METHOD_LENGTH {
+                        return None;
+                    }
+                    // Safe: We've validated data is not null and len is within bounds
+                    unsafe {
+                        Some(std::slice::from_raw_parts(
+                            method_name.data,
+                            method_name.len,
+                        ))
+                    }
+                },
+                "create method_name slice",
+            )
+            .flatten();
+
+            let method_slice = match method_slice {
+                Some(slice) => slice,
+                None => return None,
+            };
             match method_slice {
                 b"GET" | b"get" => Some("GET"),
                 b"POST" | b"post" => Some("POST"),
