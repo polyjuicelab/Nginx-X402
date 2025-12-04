@@ -197,7 +197,7 @@ pub fn send_response_body(r: &mut Request, body: &[u8]) -> Result<()> {
     // Use panic protection to catch any invalid memory access
     // This protects against cases where the chain was freed between allocation and use
     use crate::ngx_module::panic_handler::catch_panic;
-    let chain_mut = match catch_panic(
+    let chain_mut = catch_panic(
         || {
             // Safe: We've validated chain is not null above
             // However, the memory may have been freed, so we use panic protection
@@ -213,15 +213,10 @@ pub fn send_response_body(r: &mut Request, body: &[u8]) -> Result<()> {
             }
         },
         "dereference chain pointer",
-    ) {
-        Some(Ok(ptr)) => ptr,
-        Some(Err(e)) => return Err(e),
-        None => {
-            return Err(ConfigError::from(
-                "Chain pointer points to invalid memory (may have been freed)",
-            ));
-        }
-    };
+    )
+    .ok_or_else(|| {
+        ConfigError::from("Chain pointer points to invalid memory (may have been freed)")
+    })??;
 
     let status = r.output_filter(chain_mut);
     if status == Status::NGX_OK {
